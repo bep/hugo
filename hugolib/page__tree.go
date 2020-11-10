@@ -14,22 +14,26 @@
 package hugolib
 
 import (
-	"path"
 	"strings"
 
-	"github.com/gohugoio/hugo/common/types"
+	"github.com/gohugoio/hugo/common/paths"
 	"github.com/gohugoio/hugo/resources/page"
 )
 
+// pageTree holds the treen navigational method for a Page.
 type pageTree struct {
 	p *pageState
 }
 
+<<<<<<< HEAD
 func (pt pageTree) IsAncestor(other any) (bool, error) {
 	if pt.p == nil {
 		return false, nil
 	}
 
+=======
+func (pt pageTree) IsAncestor(other interface{}) (bool, error) {
+>>>>>>> cb30cc82b (Improve content map, memory cache and dependency resolution)
 	tp, ok := other.(treeRefProvider)
 	if !ok {
 		return false, nil
@@ -40,10 +44,11 @@ func (pt pageTree) IsAncestor(other any) (bool, error) {
 		return false, nil
 	}
 
-	if ref1 != nil && ref1.key == "/" {
+	if ref1.Key() == "" {
 		return true, nil
 	}
 
+<<<<<<< HEAD
 	if ref1 == nil || ref2 == nil {
 		if ref1 == nil {
 			// A 404 or other similar standalone page.
@@ -58,23 +63,29 @@ func (pt pageTree) IsAncestor(other any) (bool, error) {
 	}
 
 	return strings.HasPrefix(ref2.key, ref1.key+cmBranchSeparator), nil
-}
-
-func (pt pageTree) CurrentSection() page.Page {
-	p := pt.p
-
-	if p.IsHome() || p.IsSection() {
-		return p
+=======
+	if ref1.Key() == ref2.Key() {
+		return true, nil
 	}
 
-	return p.Parent()
+	return strings.HasPrefix(ref2.Key(), ref1.Key()+"/"), nil
+>>>>>>> cb30cc82b (Improve content map, memory cache and dependency resolution)
 }
 
+// 2 TODO1 create issue: CurrentSection should navigate sideways for all branch nodes.
+func (pt pageTree) CurrentSection() page.Page {
+	return pt.p.m.treeRef.GetBranch().n.p
+}
+
+<<<<<<< HEAD
 func (pt pageTree) IsDescendant(other any) (bool, error) {
 	if pt.p == nil {
 		return false, nil
 	}
 
+=======
+func (pt pageTree) IsDescendant(other interface{}) (bool, error) {
+>>>>>>> cb30cc82b (Improve content map, memory cache and dependency resolution)
 	tp, ok := other.(treeRefProvider)
 	if !ok {
 		return false, nil
@@ -85,10 +96,11 @@ func (pt pageTree) IsDescendant(other any) (bool, error) {
 		return false, nil
 	}
 
-	if ref2 != nil && ref2.key == "/" {
+	if ref2.Key() == "" {
 		return true, nil
 	}
 
+<<<<<<< HEAD
 	if ref1 == nil || ref2 == nil {
 		if ref2 == nil {
 			// A 404 or other similar standalone page.
@@ -103,31 +115,40 @@ func (pt pageTree) IsDescendant(other any) (bool, error) {
 	}
 
 	return strings.HasPrefix(ref1.key, ref2.key+cmBranchSeparator), nil
+=======
+	if ref1.Key() == ref2.Key() {
+		return true, nil
+	}
+
+	return strings.HasPrefix(ref1.Key(), ref2.Key()+"/"), nil
+>>>>>>> cb30cc82b (Improve content map, memory cache and dependency resolution)
 }
 
 func (pt pageTree) FirstSection() page.Page {
 	ref := pt.p.getTreeRef()
-	if ref == nil {
-		return pt.p.s.home
-	}
-	key := ref.key
+	key := ref.Key()
+	n := ref.GetNode()
+	branch := ref.GetBranch()
 
-	if !ref.isSection() {
-		key = path.Dir(key)
+	if branch.n != n {
+		key = paths.Dir(key)
 	}
-
-	_, b := ref.m.getFirstSection(key)
+	_, b := pt.p.s.pageMap.GetFirstSection(key)
 	if b == nil {
 		return nil
 	}
 	return b.p
 }
 
+<<<<<<< HEAD
 func (pt pageTree) InSection(other any) (bool, error) {
 	if pt.p == nil || types.IsNil(other) {
 		return false, nil
 	}
 
+=======
+func (pt pageTree) InSection(other interface{}) (bool, error) {
+>>>>>>> cb30cc82b (Improve content map, memory cache and dependency resolution)
 	tp, ok := other.(treeRefProvider)
 	if !ok {
 		return false, nil
@@ -135,53 +156,21 @@ func (pt pageTree) InSection(other any) (bool, error) {
 
 	ref1, ref2 := pt.p.getTreeRef(), tp.getTreeRef()
 
-	if ref1 == nil || ref2 == nil {
-		if ref1 == nil {
-			// A 404 or other similar standalone page.
-			return false, nil
-		}
-		return ref1.n.p.IsHome(), nil
+	return ref1.GetBranch() == ref2.GetBranch(), nil
+}
+
+func (pt pageTree) Parent() page.Page {
+	owner := pt.p.getTreeRef().GetContainerNode()
+	if owner == nil {
+		return nil
 	}
+	return owner.p
+}
 
-	s1, _ := ref1.getCurrentSection()
-	s2, _ := ref2.getCurrentSection()
-
-	return s1 == s2, nil
+func (pt pageTree) Sections() page.Pages {
+	return pt.p.bucket.getSections()
 }
 
 func (pt pageTree) Page() page.Page {
 	return pt.p
-}
-
-func (pt pageTree) Parent() page.Page {
-	p := pt.p
-
-	if p.parent != nil {
-		return p.parent
-	}
-
-	if pt.p.IsHome() {
-		return nil
-	}
-
-	tree := p.getTreeRef()
-
-	if tree == nil || pt.p.Kind() == page.KindTaxonomy {
-		return pt.p.s.home
-	}
-
-	_, b := tree.getSection()
-	if b == nil {
-		return nil
-	}
-
-	return b.p
-}
-
-func (pt pageTree) Sections() page.Pages {
-	if pt.p.bucket == nil {
-		return nil
-	}
-
-	return pt.p.bucket.getSections()
 }

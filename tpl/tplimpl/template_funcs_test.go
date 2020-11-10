@@ -14,6 +14,11 @@
 package tplimpl_test
 
 import (
+<<<<<<< HEAD
+=======
+	"bytes"
+	"context"
+>>>>>>> cb30cc82b (Improve content map, memory cache and dependency resolution)
 	"fmt"
 	"strings"
 	"testing"
@@ -70,6 +75,7 @@ title: "**BatMan**"
 			}
 		}
 	}
+<<<<<<< HEAD
 
 	files += fmt.Sprintf("-- layouts/_default/single.html --\n%s\n", strings.Join(templates, "\n"))
 	b = hugolib.NewIntegrationTestBuilder(
@@ -81,4 +87,105 @@ title: "**BatMan**"
 	).Build()
 
 	b.AssertFileContent("public/blog/hugo-rocks/index.html", expected...)
+=======
+}
+
+// TODO(bep) it would be dandy to put this one into the partials package, but
+// we have some package cycle issues to solve first.
+func TestPartialCached(t *testing.T) {
+	t.Parallel()
+
+	c := qt.New(t)
+
+	partial := `Now: {{ now.UnixNano }}`
+	name := "testing"
+
+	var data struct {
+	}
+
+	v := newTestConfig()
+
+	config := newDepsConfig(v)
+
+	config.WithTemplate = func(templ tpl.TemplateManager) error {
+		err := templ.AddTemplate("partials/"+name, partial)
+		if err != nil {
+			return err
+		}
+
+		return nil
+	}
+
+	de, err := deps.New(config)
+	c.Assert(err, qt.IsNil)
+	defer de.Close()
+	c.Assert(de.LoadResources(), qt.IsNil)
+
+	ns := partials.New(de)
+
+	res1, err := ns.IncludeCached(context.Background(), name, &data)
+	c.Assert(err, qt.IsNil)
+
+	for j := 0; j < 10; j++ {
+		time.Sleep(2 * time.Nanosecond)
+		res2, err := ns.IncludeCached(context.Background(), name, &data)
+		c.Assert(err, qt.IsNil)
+
+		if !reflect.DeepEqual(res1, res2) {
+			t.Fatalf("cache mismatch")
+		}
+
+		res3, err := ns.IncludeCached(context.Background(), name, &data, fmt.Sprintf("variant%d", j))
+		c.Assert(err, qt.IsNil)
+
+		if reflect.DeepEqual(res1, res3) {
+			t.Fatalf("cache mismatch")
+		}
+	}
+}
+
+func BenchmarkPartial(b *testing.B) {
+	ctx := context.Background()
+	doBenchmarkPartial(b, func(ns *partials.Namespace) error {
+		_, err := ns.Include(ctx, "bench1")
+		return err
+	})
+}
+
+func BenchmarkPartialCached(b *testing.B) {
+	ctx := context.Background()
+	doBenchmarkPartial(b, func(ns *partials.Namespace) error {
+		_, err := ns.IncludeCached(ctx, "bench1", nil)
+		return err
+	})
+}
+
+func doBenchmarkPartial(b *testing.B, f func(ns *partials.Namespace) error) {
+	c := qt.New(b)
+	config := newDepsConfig(config.New())
+	config.WithTemplate = func(templ tpl.TemplateManager) error {
+		err := templ.AddTemplate("partials/bench1", `{{ shuffle (seq 1 10) }}`)
+		if err != nil {
+			return err
+		}
+
+		return nil
+	}
+
+	de, err := deps.New(config)
+	c.Assert(err, qt.IsNil)
+	defer de.Close()
+	c.Assert(de.LoadResources(), qt.IsNil)
+
+	ns := partials.New(de)
+
+	b.ResetTimer()
+	b.RunParallel(func(pb *testing.PB) {
+		for pb.Next() {
+			if err := f(ns); err != nil {
+				b.Fatalf("error executing template: %s", err)
+			}
+		}
+	})
+>>>>>>> cb30cc82b (Improve content map, memory cache and dependency resolution)
 }

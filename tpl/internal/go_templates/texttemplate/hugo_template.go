@@ -39,6 +39,7 @@ type Preparer interface {
 }
 
 // ExecHelper allows some custom eval hooks.
+// Note that the dot passed to all of the methods is the original data context, e.g. Page.
 type ExecHelper interface {
 	Init(ctx context.Context, tmpl Preparer)
 	GetFunc(ctx context.Context, tmpl Preparer, name string) (reflect.Value, reflect.Value, bool)
@@ -48,7 +49,11 @@ type ExecHelper interface {
 
 // Executer executes a given template.
 type Executer interface {
+<<<<<<< HEAD
 	ExecuteWithContext(ctx context.Context, p Preparer, wr io.Writer, data any) error
+=======
+	ExecuteWithContext(ctx context.Context, p Preparer, wr io.Writer, data interface{}) error
+>>>>>>> cb30cc82b (Improve content map, memory cache and dependency resolution)
 }
 
 type executer struct {
@@ -59,6 +64,7 @@ func NewExecuter(helper ExecHelper) Executer {
 	return &executer{helper: helper}
 }
 
+<<<<<<< HEAD
 type (
 	dataContextKeyType    string
 	hasLockContextKeyType string
@@ -102,9 +108,21 @@ func (t *executer) ExecuteWithContext(ctx context.Context, p Preparer, wr io.Wri
 }
 
 func (t *executer) Execute(p Preparer, wr io.Writer, data any) error {
+=======
+type dataContextKeType string
+
+// The data object passed to Execute or ExecuteWithContext gets stored with this key if not already set.
+const DataContextKey = dataContextKeType("data")
+
+func (t *executer) ExecuteWithContext(ctx context.Context, p Preparer, wr io.Writer, data interface{}) error {
+>>>>>>> cb30cc82b (Improve content map, memory cache and dependency resolution)
 	tmpl, err := p.Prepare()
 	if err != nil {
 		return err
+	}
+
+	if v := ctx.Value(DataContextKey); v == nil {
+		ctx = context.WithValue(ctx, DataContextKey, data)
 	}
 
 	value, ok := data.(reflect.Value)
@@ -113,6 +131,7 @@ func (t *executer) Execute(p Preparer, wr io.Writer, data any) error {
 	}
 
 	state := &state{
+		ctx:    ctx,
 		helper: t.helper,
 		prep:   p,
 		tmpl:   tmpl,
@@ -120,6 +139,11 @@ func (t *executer) Execute(p Preparer, wr io.Writer, data any) error {
 		vars:   []variable{{"$", value}},
 	}
 
+<<<<<<< HEAD
+=======
+	t.helper.Init(ctx, p)
+
+>>>>>>> cb30cc82b (Improve content map, memory cache and dependency resolution)
 	return tmpl.executeWithState(state, value)
 }
 
@@ -163,7 +187,10 @@ func (s *state) evalFunction(dot reflect.Value, node *parse.IdentifierNode, cmd 
 	var ok bool
 	var isBuiltin bool
 	if s.helper != nil {
+<<<<<<< HEAD
 		isBuiltin = name == "and" || name == "or"
+=======
+>>>>>>> cb30cc82b (Improve content map, memory cache and dependency resolution)
 		function, first, ok = s.helper.GetFunc(s.ctx, s.prep, name)
 	}
 
@@ -175,9 +202,15 @@ func (s *state) evalFunction(dot reflect.Value, node *parse.IdentifierNode, cmd 
 		s.errorf("%q is not a defined function", name)
 	}
 	if first != zero {
+<<<<<<< HEAD
 		return s.evalCall(dot, function, isBuiltin, cmd, name, args, final, first)
 	}
 	return s.evalCall(dot, function, isBuiltin, cmd, name, args, final)
+=======
+		return s.evalCall(dot, function, cmd, name, args, final, first)
+	}
+	return s.evalCall(dot, function, cmd, name, args, final)
+>>>>>>> cb30cc82b (Improve content map, memory cache and dependency resolution)
 }
 
 // evalField evaluates an expression like (.Field) or (.Field arg1 arg2).

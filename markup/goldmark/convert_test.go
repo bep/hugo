@@ -277,6 +277,7 @@ func TestConvertAttributes(t *testing.T) {
 				"div class=\"highlight myclass\" id=\"myid\"><div s",
 				"table style",
 			},
+<<<<<<< HEAD
 		},
 		{
 			"Code block, CodeFences=true,lineanchors",
@@ -301,6 +302,8 @@ func TestConvertAttributes(t *testing.T) {
 				"<span class=\"ln\" id=\"hl-0-2\"><a style=\"outline: none; text-decoration:none; color:inherit\" href=\"#hl-0-2\">2</a></span><span class=\"cl\">necho <span class=\"s1\">&#39;bar&#39;</span>",
 				"<span class=\"ln\" id=\"hl-1-2\"><a style=\"outline: none; text-decoration:none; color:inherit\" href=\"#hl-1-2\">2</a></span><span class=\"cl\">necho <span class=\"s1\">&#39;qux&#39;</span>",
 			},
+=======
+>>>>>>> cb30cc82b (Improve content map, memory cache and dependency resolution)
 		},
 		{
 			"Paragraph",

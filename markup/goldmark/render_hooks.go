@@ -17,7 +17,12 @@ import (
 	"bytes"
 	"strings"
 
+<<<<<<< HEAD
 	"github.com/gohugoio/hugo/common/types/hstring"
+=======
+	"github.com/gohugoio/hugo/identity"
+	"github.com/gohugoio/hugo/markup/converter"
+>>>>>>> cb30cc82b (Improve content map, memory cache and dependency resolution)
 	"github.com/gohugoio/hugo/markup/converter/hooks"
 	"github.com/gohugoio/hugo/markup/goldmark/goldmark_config"
 	"github.com/gohugoio/hugo/markup/goldmark/internal/render"
@@ -30,7 +35,10 @@ import (
 	"github.com/yuin/goldmark/util"
 )
 
-var _ renderer.SetOptioner = (*hookedRenderer)(nil)
+var (
+	_ renderer.SetOptioner               = (*hookedRenderer)(nil)
+	_ identity.DependencyManagerProvider = (*linkContext)(nil)
+)
 
 func newLinkRenderer(cfg goldmark_config.Config) renderer.NodeRenderer {
 	r := &hookedRenderer{
@@ -47,7 +55,11 @@ func newLinks(cfg goldmark_config.Config) goldmark.Extender {
 }
 
 type linkContext struct {
+<<<<<<< HEAD
 	page        any
+=======
+	page        identity.DependencyManagerProvider
+>>>>>>> cb30cc82b (Improve content map, memory cache and dependency resolution)
 	destination string
 	title       string
 	text        hstring.RenderedString
@@ -66,7 +78,15 @@ func (ctx linkContext) Page() any {
 	return ctx.page
 }
 
+<<<<<<< HEAD
 func (ctx linkContext) Text() hstring.RenderedString {
+=======
+func (ctx linkContext) GetDependencyManager() identity.Manager {
+	return ctx.page.GetDependencyManager()
+}
+
+func (ctx linkContext) Text() string {
+>>>>>>> cb30cc82b (Improve content map, memory cache and dependency resolution)
 	return ctx.text
 }
 
@@ -124,17 +144,69 @@ func (r *hookedRenderer) RegisterFuncs(reg renderer.NodeRendererFuncRegisterer) 
 	reg.Register(ast.KindHeading, r.renderHeading)
 }
 
+<<<<<<< HEAD
+=======
+func (r *hookedRenderer) renderAttributesForNode(w util.BufWriter, node ast.Node) {
+	renderAttributes(w, false, node.Attributes()...)
+}
+
+// Attributes with special meaning that does not make sense to render in HTML.
+var attributeExcludes = map[string]bool{
+	"hl_lines":    true,
+	"hl_style":    true,
+	"linenos":     true,
+	"linenostart": true,
+}
+
+func renderAttributes(w util.BufWriter, skipClass bool, attributes ...ast.Attribute) {
+	for _, attr := range attributes {
+		if skipClass && bytes.Equal(attr.Name, []byte("class")) {
+			continue
+		}
+
+		if attributeExcludes[string(attr.Name)] {
+			continue
+		}
+
+		_, _ = w.WriteString(" ")
+		_, _ = w.Write(attr.Name)
+		_, _ = w.WriteString(`="`)
+
+		switch v := attr.Value.(type) {
+		case []byte:
+			_, _ = w.Write(util.EscapeHTML(v))
+		default:
+			w.WriteString(cast.ToString(v))
+		}
+
+		_ = w.WriteByte('"')
+	}
+}
+
+>>>>>>> cb30cc82b (Improve content map, memory cache and dependency resolution)
 func (r *hookedRenderer) renderImage(w util.BufWriter, source []byte, node ast.Node, entering bool) (ast.WalkStatus, error) {
 	n := node.(*ast.Image)
 	var lr hooks.LinkRenderer
 
 	ctx, ok := w.(*render.Context)
 	if ok {
+<<<<<<< HEAD
 		h := ctx.RenderContext().GetRenderer(hooks.ImageRendererType, nil)
 		ok = h != nil
 		if ok {
 			lr = h.(hooks.LinkRenderer)
 		}
+=======
+		if entering {
+			doc := ctx.DocumentContext().Document
+			if doc != nil {
+				// Indicate usage of image render hooks. Will be used to handle addition of hook templates in server mode.
+				doc.GetDependencyManager().AddIdentity(converter.FeatureRenderHookImage)
+			}
+		}
+		h = ctx.RenderContext().RenderHooks
+		ok = h.ImageRenderer != nil
+>>>>>>> cb30cc82b (Improve content map, memory cache and dependency resolution)
 	}
 
 	if !ok {
@@ -162,8 +234,11 @@ func (r *hookedRenderer) renderImage(w util.BufWriter, source []byte, node ast.N
 		},
 	)
 
+<<<<<<< HEAD
 	ctx.AddIdentity(lr)
 
+=======
+>>>>>>> cb30cc82b (Improve content map, memory cache and dependency resolution)
 	return ast.WalkContinue, err
 }
 
@@ -200,11 +275,25 @@ func (r *hookedRenderer) renderLink(w util.BufWriter, source []byte, node ast.No
 
 	ctx, ok := w.(*render.Context)
 	if ok {
+<<<<<<< HEAD
 		h := ctx.RenderContext().GetRenderer(hooks.LinkRendererType, nil)
 		ok = h != nil
 		if ok {
 			lr = h.(hooks.LinkRenderer)
 		}
+=======
+		if entering {
+			doc := ctx.DocumentContext().Document
+			if doc != nil {
+				// Indicate usage of link render hooks. Will be used to handle addition of hook templates in server mode.
+				// TODO1 figure out why this allocates when in non-server mode.
+				doc.GetDependencyManager().AddIdentity(converter.FeatureRenderHookLink)
+			}
+		}
+
+		h = ctx.RenderContext().RenderHooks
+		ok = h.LinkRenderer != nil
+>>>>>>> cb30cc82b (Improve content map, memory cache and dependency resolution)
 	}
 
 	if !ok {
@@ -232,11 +321,14 @@ func (r *hookedRenderer) renderLink(w util.BufWriter, source []byte, node ast.No
 		},
 	)
 
+<<<<<<< HEAD
 	// TODO(bep) I have a working branch that fixes these rather confusing identity types,
 	// but for now it's important that it's not .GetIdentity() that's added here,
 	// to make sure we search the entire chain on changes.
 	ctx.AddIdentity(lr)
 
+=======
+>>>>>>> cb30cc82b (Improve content map, memory cache and dependency resolution)
 	return ast.WalkContinue, err
 }
 
@@ -270,6 +362,7 @@ func (r *hookedRenderer) renderAutoLink(w util.BufWriter, source []byte, node as
 	n := node.(*ast.AutoLink)
 	var lr hooks.LinkRenderer
 
+<<<<<<< HEAD
 	ctx, ok := w.(*render.Context)
 	if ok {
 		h := ctx.RenderContext().GetRenderer(hooks.LinkRendererType, nil)
@@ -277,6 +370,18 @@ func (r *hookedRenderer) renderAutoLink(w util.BufWriter, source []byte, node as
 		if ok {
 			lr = h.(hooks.LinkRenderer)
 		}
+=======
+	ctx, ok := w.(*renderContext)
+
+	if ok {
+		doc := ctx.DocumentContext().Document
+		if doc != nil {
+			// Indicate usage of link render hooks. Will be used to handle addition of hook templates in server mode.
+			doc.GetDependencyManager().AddIdentity(converter.FeatureRenderHookLink)
+		}
+		h = ctx.RenderContext().RenderHooks
+		ok = h.LinkRenderer != nil
+>>>>>>> cb30cc82b (Improve content map, memory cache and dependency resolution)
 	}
 
 	if !ok {
@@ -299,11 +404,14 @@ func (r *hookedRenderer) renderAutoLink(w util.BufWriter, source []byte, node as
 		},
 	)
 
+<<<<<<< HEAD
 	// TODO(bep) I have a working branch that fixes these rather confusing identity types,
 	// but for now it's important that it's not .GetIdentity() that's added here,
 	// to make sure we search the entire chain on changes.
 	ctx.AddIdentity(lr)
 
+=======
+>>>>>>> cb30cc82b (Improve content map, memory cache and dependency resolution)
 	return ast.WalkContinue, err
 }
 
@@ -351,11 +459,24 @@ func (r *hookedRenderer) renderHeading(w util.BufWriter, source []byte, node ast
 
 	ctx, ok := w.(*render.Context)
 	if ok {
+<<<<<<< HEAD
 		h := ctx.RenderContext().GetRenderer(hooks.HeadingRendererType, nil)
 		ok = h != nil
 		if ok {
 			hr = h.(hooks.HeadingRenderer)
 		}
+=======
+		if entering {
+			doc := ctx.DocumentContext().Document
+			if doc != nil {
+				// Indicate usage of heading render hooks. Will be used to handle addition of hook templates in server mode.
+				doc.GetDependencyManager().AddIdentity(converter.FeatureRenderHookHeading)
+			}
+		}
+
+		h = ctx.RenderContext().RenderHooks
+		ok = h.HeadingRenderer != nil
+>>>>>>> cb30cc82b (Improve content map, memory cache and dependency resolution)
 	}
 
 	if !ok {
@@ -388,8 +509,11 @@ func (r *hookedRenderer) renderHeading(w util.BufWriter, source []byte, node ast
 		},
 	)
 
+<<<<<<< HEAD
 	ctx.AddIdentity(hr)
 
+=======
+>>>>>>> cb30cc82b (Improve content map, memory cache and dependency resolution)
 	return ast.WalkContinue, err
 }
 
@@ -410,9 +534,13 @@ func (r *hookedRenderer) renderHeadingDefault(w util.BufWriter, source []byte, n
 	return ast.WalkContinue, nil
 }
 
+<<<<<<< HEAD
 type links struct {
 	cfg goldmark_config.Config
 }
+=======
+type links struct{}
+>>>>>>> cb30cc82b (Improve content map, memory cache and dependency resolution)
 
 // Extend implements goldmark.Extender.
 func (e *links) Extend(m goldmark.Markdown) {

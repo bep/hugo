@@ -16,7 +16,11 @@ package create
 import (
 	"bufio"
 	"bytes"
+<<<<<<< HEAD
 	"fmt"
+=======
+	"context"
+>>>>>>> cb30cc82b (Improve content map, memory cache and dependency resolution)
 	"io"
 	"io/ioutil"
 	"mime"
@@ -82,7 +86,7 @@ func (c *Client) FromRemote(uri string, optionsm map[string]any) (resource.Resou
 
 	resourceID := calculateResourceID(uri, optionsm)
 
-	_, httpResponse, err := c.cacheGetResource.GetOrCreate(resourceID, func() (io.ReadCloser, error) {
+	_, httpResponse, err := c.cacheGetResource.GetOrCreate(context.TODO(), resourceID, func() (io.ReadCloser, error) {
 		options, err := decodeRemoteOptions(optionsm)
 		if err != nil {
 			return nil, fmt.Errorf("failed to decode options for resource %s: %w", uri, err)

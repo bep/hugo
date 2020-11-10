@@ -12,6 +12,7 @@
 // limitations under the License.
 
 package hugolib
+<<<<<<< HEAD
 
 import (
 	"fmt"
@@ -113,3 +114,5 @@ func (b bundleDirType) String() string {
 
 	return ""
 }
+=======
+>>>>>>> cb30cc82b (Improve content map, memory cache and dependency resolution)

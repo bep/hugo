@@ -18,6 +18,13 @@ import (
 	"path/filepath"
 	"strings"
 
+<<<<<<< HEAD
+=======
+	"github.com/gohugoio/hugo/resources/page/pagekinds"
+
+	"github.com/pkg/errors"
+
+>>>>>>> cb30cc82b (Improve content map, memory cache and dependency resolution)
 	"github.com/gohugoio/hugo/common/maps"
 	"github.com/gohugoio/hugo/hugofs/glob"
 	"github.com/mitchellh/mapstructure"
@@ -60,8 +67,8 @@ func (m PageMatcher) Matches(p Page) bool {
 
 	if m.Path != "" {
 		g, err := glob.GetGlob(m.Path)
-		// TODO(bep) Path() vs filepath vs leading slash.
-		p := strings.ToLower(filepath.ToSlash(p.Pathc()))
+		// TODO1 vs file.Path.
+		p := strings.ToLower(filepath.ToSlash(p.Path()))
 		if !(strings.HasPrefix(p, "/")) {
 			p = "/" + p
 		}
@@ -123,6 +130,7 @@ func DecodePageMatcher(m any, v *PageMatcher) error {
 
 	v.Kind = strings.ToLower(v.Kind)
 	if v.Kind != "" {
+<<<<<<< HEAD
 		g, _ := glob.GetGlob(v.Kind)
 		found := false
 		for _, k := range kindMap {
@@ -133,6 +141,10 @@ func DecodePageMatcher(m any, v *PageMatcher) error {
 		}
 		if !found {
 			return fmt.Errorf("%q did not match a valid Page Kind", v.Kind)
+=======
+		if pagekinds.Get(v.Kind) == "" {
+			return errors.Errorf("%q is not a valid Page Kind", v.Kind)
+>>>>>>> cb30cc82b (Improve content map, memory cache and dependency resolution)
 		}
 	}
 

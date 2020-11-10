@@ -119,10 +119,18 @@ func (b Bytes) Bytes() []byte {
 
 // DocumentContext holds contextual information about the document to convert.
 type DocumentContext struct {
+<<<<<<< HEAD
 	Document     any // May be nil. Usually a page.Page
 	DocumentID   string
 	DocumentName string
 	Filename     string
+=======
+	Document        identity.DependencyManagerProvider // May be nil. Usually a page.Page
+	DocumentID      string
+	DocumentName    string
+	Filename        string
+	ConfigOverrides map[string]interface{}
+>>>>>>> cb30cc82b (Improve content map, memory cache and dependency resolution)
 }
 
 // RenderContext holds contextual information about the content to render.
@@ -137,4 +145,8 @@ type RenderContext struct {
 	GetRenderer hooks.GetRendererFunc
 }
 
-var FeatureRenderHooks = identity.NewPathIdentity("markup", "renderingHooks")
+const (
+	FeatureRenderHookImage   = identity.StringIdentity("feature/renderHooks/image ")
+	FeatureRenderHookLink    = identity.StringIdentity("feature/renderHooks/link")
+	FeatureRenderHookHeading = identity.StringIdentity("feature/renderHooks/heading ")
+)

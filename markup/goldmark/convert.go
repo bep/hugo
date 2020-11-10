@@ -151,23 +151,64 @@ func newMarkdown(pcfg converter.ProviderConfig) goldmark.Markdown {
 	return md
 }
 
-var _ identity.IdentitiesProvider = (*converterResult)(nil)
-
 type converterResult struct {
 	converter.Result
 	toc tableofcontents.Root
-	ids identity.Identities
 }
 
 func (c converterResult) TableOfContents() tableofcontents.Root {
 	return c.toc
 }
 
+<<<<<<< HEAD
 func (c converterResult) GetIdentities() identity.Identities {
 	return c.ids
 }
 
 var converterIdentity = identity.KeyValueIdentity{Key: "goldmark", Value: "converter"}
+=======
+type bufWriter struct {
+	*bytes.Buffer
+}
+
+const maxInt = 1<<(bits.UintSize-1) - 1
+
+func (b *bufWriter) Available() int {
+	return maxInt
+}
+
+func (b *bufWriter) Buffered() int {
+	return b.Len()
+}
+
+func (b *bufWriter) Flush() error {
+	return nil
+}
+
+type renderContext struct {
+	*bufWriter
+	pos int
+	renderContextData
+}
+
+type renderContextData interface {
+	RenderContext() converter.RenderContext
+	DocumentContext() converter.DocumentContext
+}
+
+type renderContextDataHolder struct {
+	rctx converter.RenderContext
+	dctx converter.DocumentContext
+}
+
+func (ctx *renderContextDataHolder) RenderContext() converter.RenderContext {
+	return ctx.rctx
+}
+
+func (ctx *renderContextDataHolder) DocumentContext() converter.DocumentContext {
+	return ctx.dctx
+}
+>>>>>>> cb30cc82b (Improve content map, memory cache and dependency resolution)
 
 func (c *goldmarkConverter) Convert(ctx converter.RenderContext) (result converter.Result, err error) {
 
@@ -181,10 +222,16 @@ func (c *goldmarkConverter) Convert(ctx converter.RenderContext) (result convert
 		parser.WithContext(pctx),
 	)
 
+<<<<<<< HEAD
 	rcx := &render.RenderContextDataHolder{
 		Rctx: ctx,
 		Dctx: c.ctx,
 		IDs:  identity.NewManager(converterIdentity),
+=======
+	rcx := &renderContextDataHolder{
+		rctx: ctx,
+		dctx: c.ctx,
+>>>>>>> cb30cc82b (Improve content map, memory cache and dependency resolution)
 	}
 
 	w := &render.Context{
@@ -198,17 +245,22 @@ func (c *goldmarkConverter) Convert(ctx converter.RenderContext) (result convert
 
 	return converterResult{
 		Result: buf,
+<<<<<<< HEAD
 		ids:    rcx.IDs.GetIdentities(),
+=======
+>>>>>>> cb30cc82b (Improve content map, memory cache and dependency resolution)
 		toc:    pctx.TableOfContents(),
 	}, nil
 }
 
 var featureSet = map[identity.Identity]bool{
-	converter.FeatureRenderHooks: true,
+	converter.FeatureRenderHookHeading: true,
+	converter.FeatureRenderHookImage:   true,
+	converter.FeatureRenderHookLink:    true,
 }
 
 func (c *goldmarkConverter) Supports(feature identity.Identity) bool {
-	return featureSet[feature.GetIdentity()]
+	return featureSet[feature]
 }
 
 func (c *goldmarkConverter) newParserContext(rctx converter.RenderContext) *parserContext {

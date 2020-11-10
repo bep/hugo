@@ -18,10 +18,19 @@ import (
 	"testing"
 
 	"github.com/gohugoio/hugo/hugolib"
+<<<<<<< HEAD
 )
 
 func TestUnmarshal(t *testing.T) {
 	t.Parallel()
+=======
+
+	qt "github.com/frankban/quicktest"
+)
+
+func TestUnmarshal(t *testing.T) {
+	c := qt.New(t)
+>>>>>>> cb30cc82b (Improve content map, memory cache and dependency resolution)
 
 	files := `
 -- assets/api/myapi.yaml --
@@ -58,7 +67,11 @@ API: {{ $api.Info.Title | safeHTML }}
 
 	b := hugolib.NewIntegrationTestBuilder(
 		hugolib.IntegrationTestConfig{
+<<<<<<< HEAD
 			T:           t,
+=======
+			T:           c,
+>>>>>>> cb30cc82b (Improve content map, memory cache and dependency resolution)
 			Running:     true,
 			TxtarString: files,
 		},

@@ -14,8 +14,11 @@
 package scss_test
 
 import (
+<<<<<<< HEAD
 	"path/filepath"
 	"strings"
+=======
+>>>>>>> cb30cc82b (Improve content map, memory cache and dependency resolution)
 	"testing"
 
 	qt "github.com/frankban/quicktest"
@@ -135,7 +138,11 @@ moo {
 -- config.toml --
 theme = 'mytheme'
 -- layouts/index.html --
+<<<<<<< HEAD
 {{ $cssOpts := (dict "includePaths" (slice "node_modules/foo" ) ) }}
+=======
+{{ $cssOpts := (dict "includePaths" (slice "node_modules/foo" ) "transpiler" "dartsass" ) }}
+>>>>>>> cb30cc82b (Improve content map, memory cache and dependency resolution)
 {{ $r := resources.Get "scss/main.scss" |  toCSS $cssOpts  | minify  }}
 T1: {{ $r.Content }}
 -- themes/mytheme/assets/scss/components/_boo.scss --
@@ -173,6 +180,7 @@ zoo {
 
 	b.AssertFileContent("public/index.html", `T1: moo{color:#ccc}boo{color:green}zoo{color:pink}`)
 }
+<<<<<<< HEAD
 
 func TestTransformErrors(t *testing.T) {
 	if !scss.Supports() {
@@ -245,3 +253,5 @@ T1: {{ $r.Content }}
 	})
 
 }
+=======
+>>>>>>> cb30cc82b (Improve content map, memory cache and dependency resolution)

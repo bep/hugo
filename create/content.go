@@ -102,7 +102,6 @@ func NewContent(h *hugolib.HugoSites, kind, targetPath string) error {
 		}
 
 		return b.buildFile()
-
 	}
 
 	filename, err := withBuildLock()
@@ -115,7 +114,6 @@ func NewContent(h *hugolib.HugoSites, kind, targetPath string) error {
 	}
 
 	return nil
-
 }
 
 type contentBuilder struct {
@@ -168,7 +166,6 @@ func (b *contentBuilder) buildDir() error {
 			}
 			return false
 		})
-
 	}
 
 	if err := b.h.Build(hugolib.BuildCfg{NoBuildLock: true, SkipRender: true, ContentInclusionFilter: contentInclusionFilter}); err != nil {
@@ -267,7 +264,6 @@ func (b *contentBuilder) setArcheTypeFilenameToUse(ext string) {
 			return
 		}
 	}
-
 }
 
 func (b *contentBuilder) applyArcheType(contentFilename, archetypeFilename string) error {
@@ -286,8 +282,12 @@ func (b *contentBuilder) applyArcheType(contentFilename, archetypeFilename strin
 		return b.cf.ApplyArchetypeTemplate(f, p, b.kind, DefaultArchetypeTemplateTemplate)
 	}
 
+<<<<<<< HEAD
 	return b.cf.ApplyArchetypeFilename(f, p, b.kind, archetypeFilename)
 
+=======
+	return b.cf.AppplyArchetypeFilename(f, p, b.kind, archetypeFilename)
+>>>>>>> cb30cc82b (Improve content map, memory cache and dependency resolution)
 }
 
 func (b *contentBuilder) mapArcheTypeDir() error {
@@ -378,7 +378,6 @@ func (b *contentBuilder) usesSiteVar(filename string) (bool, error) {
 	}
 
 	return bytes.Contains(bb, []byte(".Site")) || bytes.Contains(bb, []byte("site.")), nil
-
 }
 
 type archetypeMap struct {

@@ -54,7 +54,7 @@ type AttributesOptionsSliceProvider interface {
 
 type LinkRenderer interface {
 	RenderLink(w io.Writer, ctx LinkContext) error
-	identity.Provider
+	Template() identity.Identity // TODO1 remove this
 }
 
 type CodeBlockRenderer interface {
@@ -88,7 +88,7 @@ type HeadingContext interface {
 type HeadingRenderer interface {
 	// Render writes the rendered content to w using the data in w.
 	RenderHeading(w io.Writer, ctx HeadingContext) error
-	identity.Provider
+	Template() identity.Identity
 }
 
 // ElementPositionResolver provides a way to resolve the start Position
@@ -108,4 +108,38 @@ const (
 	CodeBlockRendererType
 )
 
+<<<<<<< HEAD
 type GetRendererFunc func(t RendererType, id any) any
+=======
+	var b1, b2 bool
+	b1, b2 = r.ImageRenderer == nil, ro.ImageRenderer == nil
+	if (b1 || b2) && (b1 != b2) {
+		return false
+	}
+	if !b1 && r.ImageRenderer.Template() != ro.ImageRenderer.Template() {
+		return false
+	}
+
+	b1, b2 = r.LinkRenderer == nil, ro.LinkRenderer == nil
+	if (b1 || b2) && (b1 != b2) {
+		return false
+	}
+	if !b1 && r.LinkRenderer.Template() != ro.LinkRenderer.Template() {
+		return false
+	}
+
+	b1, b2 = r.HeadingRenderer == nil, ro.HeadingRenderer == nil
+	if (b1 || b2) && (b1 != b2) {
+		return false
+	}
+	if !b1 && r.HeadingRenderer.Template() != ro.HeadingRenderer.Template() {
+		return false
+	}
+
+	return true
+}
+
+func (r Renderers) IsZero() bool {
+	return r.HeadingRenderer == nil && r.LinkRenderer == nil && r.ImageRenderer == nil
+}
+>>>>>>> cb30cc82b (Improve content map, memory cache and dependency resolution)

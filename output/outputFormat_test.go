@@ -83,6 +83,12 @@ func TestGetFormatByName(t *testing.T) {
 	c.Assert(found, qt.Equals, false)
 }
 
+func TestIsZero(t *testing.T) {
+	c := qt.New(t)
+	c.Assert(HTMLFormat.IsZero(), qt.IsFalse)
+	c.Assert(Format{}.IsZero(), qt.IsTrue)
+}
+
 func TestGetFormatByExt(t *testing.T) {
 	c := qt.New(t)
 	formats1 := Formats{AMPFormat, CalendarFormat}

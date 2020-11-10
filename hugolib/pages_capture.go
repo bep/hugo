@@ -1,4 +1,4 @@
-// Copyright 2019 The Hugo Authors. All rights reserved.
+// Copyright 2021 The Hugo Authors. All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -19,13 +19,8 @@ import (
 	"os"
 	pth "path"
 	"path/filepath"
-	"reflect"
 
-	"github.com/gohugoio/hugo/common/maps"
-
-	"github.com/gohugoio/hugo/parser/pageparser"
-
-	"github.com/gohugoio/hugo/hugofs/files"
+	"github.com/gohugoio/hugo/common/paths"
 
 	"github.com/gohugoio/hugo/source"
 
@@ -34,31 +29,21 @@ import (
 	"github.com/spf13/afero"
 )
 
-const (
-	walkIsRootFileMetaKey = "walkIsRootFileMetaKey"
-)
-
 func newPagesCollector(
 	sp *source.SourceSpec,
 	contentMap *pageMaps,
 	logger loggers.Logger,
 	contentTracker *contentChangeMap,
-	proc pagesCollectorProcessorProvider, filenames ...string) *pagesCollector {
+	proc pagesCollectorProcessorProvider, ids paths.PathInfos) *pagesCollector {
 	return &pagesCollector{
 		fs:         sp.SourceFs,
 		contentMap: contentMap,
 		proc:       proc,
 		sp:         sp,
 		logger:     logger,
-		filenames:  filenames,
+		ids:        ids,
 		tracker:    contentTracker,
 	}
-}
-
-type contentDirKey struct {
-	dirname  string
-	filename string
-	tp       bundleDirType
 }
 
 type fileinfoBundle struct {
@@ -86,7 +71,8 @@ type pagesCollector struct {
 	contentMap *pageMaps
 
 	// Ordered list (bundle headers first) used in partial builds.
-	filenames []string
+	// TODO1 check order
+	ids paths.PathInfos
 
 	// Content files tracker used in partial builds.
 	tracker *contentChangeMap
@@ -94,70 +80,9 @@ type pagesCollector struct {
 	proc pagesCollectorProcessorProvider
 }
 
-// isCascadingEdit returns whether the dir represents a cascading edit.
-// That is, if a front matter cascade section is removed, added or edited.
-// If this is the case we must re-evaluate its descendants.
-func (c *pagesCollector) isCascadingEdit(dir contentDirKey) (bool, string) {
-	// This is either a section or a taxonomy node. Find it.
-	prefix := cleanTreeKey(dir.dirname)
-
-	section := "/"
-	var isCascade bool
-
-	c.contentMap.walkBranchesPrefix(prefix, func(s string, n *contentNode) bool {
-		if n.fi == nil || dir.filename != n.fi.Meta().Filename {
-			return false
-		}
-
-		f, err := n.fi.Meta().Open()
-		if err != nil {
-			// File may have been removed, assume a cascading edit.
-			// Some false positives is not too bad.
-			isCascade = true
-			return true
-		}
-
-		pf, err := pageparser.ParseFrontMatterAndContent(f)
-		f.Close()
-		if err != nil {
-			isCascade = true
-			return true
-		}
-
-		if n.p == nil || n.p.bucket == nil {
-			return true
-		}
-
-		section = s
-
-		maps.PrepareParams(pf.FrontMatter)
-		cascade1, ok := pf.FrontMatter["cascade"]
-		hasCascade := n.p.bucket.cascade != nil && len(n.p.bucket.cascade) > 0
-		if !ok {
-			isCascade = hasCascade
-
-			return true
-		}
-
-		if !hasCascade {
-			isCascade = true
-			return true
-		}
-
-		for _, v := range n.p.bucket.cascade {
-			isCascade = !reflect.DeepEqual(cascade1, v)
-			if isCascade {
-				break
-			}
-		}
-
-		return true
-	})
-
-	return isCascade, section
-}
-
-// Collect.
+// Collect collects content by walking the file system and storing
+// it in the content tree.
+// It may be restricted by filenames set on the collector (partial build).
 func (c *pagesCollector) Collect() (collectErr error) {
 	c.proc.Start(context.Background())
 	defer func() {
@@ -167,38 +92,23 @@ func (c *pagesCollector) Collect() (collectErr error) {
 		}
 	}()
 
-	if len(c.filenames) == 0 {
+	if c.ids == nil {
 		// Collect everything.
-		collectErr = c.collectDir("", false, nil)
+		collectErr = c.collectDir(nil, false, nil)
 	} else {
 		for _, pm := range c.contentMap.pmaps {
 			pm.cfg.isRebuild = true
 		}
-		dirs := make(map[contentDirKey]bool)
-		for _, filename := range c.filenames {
-			dir, btype := c.tracker.resolveAndRemove(filename)
-			dirs[contentDirKey{dir, filename, btype}] = true
-		}
 
-		for dir := range dirs {
-			for _, pm := range c.contentMap.pmaps {
-				pm.s.ResourceSpec.DeleteBySubstring(dir.dirname)
-			}
-
-			switch dir.tp {
-			case bundleLeaf:
-				collectErr = c.collectDir(dir.dirname, true, nil)
-			case bundleBranch:
-				isCascading, section := c.isCascadingEdit(dir)
-
-				if isCascading {
-					c.contentMap.deleteSection(section)
-				}
-				collectErr = c.collectDir(dir.dirname, !isCascading, nil)
-			default:
+		for _, id := range c.ids {
+			if id.IsLeafBundle() {
+				collectErr = c.collectDir(id.Path, true, nil)
+			} else if id.IsBranchBundle() {
+				collectErr = c.collectDir(id.Path, true, nil)
+			} else {
 				// We always start from a directory.
-				collectErr = c.collectDir(dir.dirname, true, func(fim hugofs.FileMetaInfo) bool {
-					return dir.filename == fim.Meta().Filename
+				collectErr = c.collectDir(id.Path, true, func(fim hugofs.FileMetaInfo) bool {
+					return id.Filename() == fim.Meta().Filename
 				})
 			}
 
@@ -212,11 +122,6 @@ func (c *pagesCollector) Collect() (collectErr error) {
 	return
 }
 
-func (c *pagesCollector) isBundleHeader(fi hugofs.FileMetaInfo) bool {
-	class := fi.Meta().Classifier
-	return class == files.ContentClassLeaf || class == files.ContentClassBranch
-}
-
 func (c *pagesCollector) getLang(fi hugofs.FileMetaInfo) string {
 	lang := fi.Meta().Lang
 	if lang != "" {
@@ -226,11 +131,7 @@ func (c *pagesCollector) getLang(fi hugofs.FileMetaInfo) string {
 	return c.sp.DefaultContentLanguage
 }
 
-func (c *pagesCollector) addToBundle(info hugofs.FileMetaInfo, btyp bundleDirType, bundles pageBundles) error {
-	getBundle := func(lang string) *fileinfoBundle {
-		return bundles[lang]
-	}
-
+func (c *pagesCollector) addToBundle(info hugofs.FileMetaInfo, btyp paths.PathType, bundles pageBundles) error {
 	cloneBundle := func(lang string) *fileinfoBundle {
 		// Every bundled content file needs a content file header.
 		// Use the default content language if found, else just
@@ -259,23 +160,21 @@ func (c *pagesCollector) addToBundle(info hugofs.FileMetaInfo, btyp bundleDirTyp
 			header: clone,
 		}
 	}
-
+	pi := info.Meta().PathInfo
 	lang := c.getLang(info)
-	bundle := getBundle(lang)
-	isBundleHeader := c.isBundleHeader(info)
+	bundle := bundles[lang]
+	isBundleHeader := pi.IsBundle()
 	if bundle != nil && isBundleHeader {
 		// index.md file inside a bundle, see issue 6208.
-		info.Meta().Classifier = files.ContentClassContent
+		paths.ModifyPathBundleTypeResource(info.Meta().PathInfo)
 		isBundleHeader = false
 	}
-	classifier := info.Meta().Classifier
-	isContent := classifier == files.ContentClassContent
 	if bundle == nil {
 		if isBundleHeader {
 			bundle = &fileinfoBundle{header: info}
 			bundles[lang] = bundle
 		} else {
-			if btyp == bundleBranch {
+			if btyp == paths.PathTypeBranch {
 				// No special logic for branch bundles.
 				// Every language needs its own _index.md file.
 				// Also, we only clone bundle headers for lonesome, bundled,
@@ -283,7 +182,7 @@ func (c *pagesCollector) addToBundle(info hugofs.FileMetaInfo, btyp bundleDirTyp
 				return c.handleFiles(info)
 			}
 
-			if isContent {
+			if pi.IsContent() {
 				bundle = cloneBundle(lang)
 				bundles[lang] = bundle
 			}
@@ -291,15 +190,16 @@ func (c *pagesCollector) addToBundle(info hugofs.FileMetaInfo, btyp bundleDirTyp
 	}
 
 	if !isBundleHeader && bundle != nil {
+		paths.ModifyPathBundleTypeResource(info.Meta().PathInfo)
 		bundle.resources = append(bundle.resources, info)
 	}
 
-	if classifier == files.ContentClassFile {
+	if !(pi.IsBundle() || pi.IsContent()) {
+		// E.g. a data file; make sure it's available in all languages.
 		translations := info.Meta().Translations
 
 		for lang, b := range bundles {
 			if !stringSliceContains(lang, translations...) && !b.containsResource(info.Name()) {
-
 				// Clone and add it to the bundle.
 				clone := c.cloneFileInfo(info)
 				clone.Meta().Lang = lang
@@ -315,7 +215,12 @@ func (c *pagesCollector) cloneFileInfo(fi hugofs.FileMetaInfo) hugofs.FileMetaIn
 	return hugofs.NewFileMetaInfo(fi, hugofs.NewFileMeta())
 }
 
-func (c *pagesCollector) collectDir(dirname string, partial bool, inFilter func(fim hugofs.FileMetaInfo) bool) error {
+func (c *pagesCollector) collectDir(dir *paths.Path, partial bool, inFilter func(fim hugofs.FileMetaInfo) bool) error {
+	var dirname string
+	if dir != nil {
+		dirname = filepath.FromSlash(dir.Dir())
+	}
+
 	fi, err := c.fs.Stat(dirname)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -326,25 +231,26 @@ func (c *pagesCollector) collectDir(dirname string, partial bool, inFilter func(
 	}
 
 	handleDir := func(
-		btype bundleDirType,
+		btype paths.PathType,
 		dir hugofs.FileMetaInfo,
 		path string,
 		readdir []hugofs.FileMetaInfo) error {
-		if btype > bundleNot && c.tracker != nil {
-			c.tracker.add(path, btype)
-		}
 
-		if btype == bundleBranch {
+		/*
+			TODO1
+			if btype > paths.BundleTypeNone && c.tracker != nil {
+				c.tracker.add(path, btype)
+			}*/
+
+		if btype == paths.PathTypeBranch {
 			if err := c.handleBundleBranch(readdir); err != nil {
 				return err
 			}
-			// A branch bundle is only this directory level, so keep walking.
 			return nil
-		} else if btype == bundleLeaf {
+		} else if btype == paths.PathTypeLeaf {
 			if err := c.handleBundleLeaf(dir, path, readdir); err != nil {
 				return err
 			}
-
 			return nil
 		}
 
@@ -371,7 +277,7 @@ func (c *pagesCollector) collectDir(dirname string, partial bool, inFilter func(
 	}
 
 	preHook := func(dir hugofs.FileMetaInfo, path string, readdir []hugofs.FileMetaInfo) ([]hugofs.FileMetaInfo, error) {
-		var btype bundleDirType
+		var btype paths.PathType
 
 		filtered := readdir[:0]
 		for _, fi := range readdir {
@@ -387,10 +293,13 @@ func (c *pagesCollector) collectDir(dirname string, partial bool, inFilter func(
 		walkRoot := dir.Meta().IsRootFile
 		readdir = filtered
 
-		// We merge language directories, so there can be duplicates, but they
-		// will be ordered, most important first.
-		var duplicates []int
-		seen := make(map[string]bool)
+		var (
+			// We merge language directories, so there can be duplicates, but they
+			// will be ordered, most important first.
+			duplicates        []int
+			seen              = make(map[string]bool)
+			bundleFileCounter int
+		)
 
 		for i, fi := range readdir {
 
@@ -398,10 +307,14 @@ func (c *pagesCollector) collectDir(dirname string, partial bool, inFilter func(
 				continue
 			}
 
+			// TODO1 PathInfo vs BundleType vs HTML with not front matter.
+
 			meta := fi.Meta()
+			pi := meta.PathInfo
+
 			meta.IsRootFile = walkRoot
-			class := meta.Classifier
-			translationBase := meta.TranslationBaseNameWithExt
+			// TODO1 remove the classifier class := meta.Classifier
+			translationBase := meta.PathInfo.NameNoLang()
 			key := pth.Join(meta.Lang, translationBase)
 
 			if seen[key] {
@@ -410,26 +323,20 @@ func (c *pagesCollector) collectDir(dirname string, partial bool, inFilter func(
 			}
 			seen[key] = true
 
-			var thisBtype bundleDirType
-
-			switch class {
-			case files.ContentClassLeaf:
-				thisBtype = bundleLeaf
-			case files.ContentClassBranch:
-				thisBtype = bundleBranch
+			if pi.IsBundle() {
+				btype = pi.BundleType()
+				bundleFileCounter++
 			}
 
 			// Folders with both index.md and _index.md type of files have
 			// undefined behaviour and can never work.
 			// The branch variant will win because of sort order, but log
 			// a warning about it.
-			if thisBtype > bundleNot && btype > bundleNot && thisBtype != btype {
+			if bundleFileCounter > 1 {
 				c.logger.Warnf("Content directory %q have both index.* and _index.* files, pick one.", dir.Meta().Filename)
 				// Reclassify it so it will be handled as a content file inside the
 				// section, which is in line with the <= 0.55 behaviour.
-				meta.Classifier = files.ContentClassContent
-			} else if thisBtype > bundleNot {
-				btype = thisBtype
+				// TODO1 create issue, we now make it a bundle. meta.Classifier = files.ContentClassContent
 			}
 
 		}
@@ -446,7 +353,7 @@ func (c *pagesCollector) collectDir(dirname string, partial bool, inFilter func(
 			return nil, err
 		}
 
-		if btype == bundleLeaf || partial {
+		if btype == paths.PathTypeLeaf || partial {
 			return nil, filepath.SkipDir
 		}
 
@@ -456,6 +363,7 @@ func (c *pagesCollector) collectDir(dirname string, partial bool, inFilter func(
 
 	var postHook hugofs.WalkHook
 	if c.tracker != nil {
+		// TODO1 remove
 		postHook = func(dir hugofs.FileMetaInfo, path string, readdir []hugofs.FileMetaInfo) ([]hugofs.FileMetaInfo, error) {
 			if c.tracker == nil {
 				// Nothing to do.
@@ -477,6 +385,7 @@ func (c *pagesCollector) collectDir(dirname string, partial bool, inFilter func(
 	fim := fi.(hugofs.FileMetaInfo)
 	// Make sure the pages in this directory gets re-rendered,
 	// even in fast render mode.
+	// TODO1
 	fim.Meta().IsRootFile = true
 
 	w := hugofs.NewWalkway(hugofs.WalkwayConfig{
@@ -499,22 +408,19 @@ func (c *pagesCollector) handleBundleBranch(readdir []hugofs.FileMetaInfo) error
 	var contentFiles []hugofs.FileMetaInfo
 
 	for _, fim := range readdir {
-
 		if fim.IsDir() {
 			continue
 		}
 
-		meta := fim.Meta()
-
-		switch meta.Classifier {
-		case files.ContentClassContent:
+		pi := fim.Meta().PathInfo
+		if !pi.IsBundle() && pi.IsContent() {
 			contentFiles = append(contentFiles, fim)
-		default:
-			if err := c.addToBundle(fim, bundleBranch, bundles); err != nil {
-				return err
-			}
+			continue
 		}
 
+		if err := c.addToBundle(fim, paths.PathTypeBranch, bundles); err != nil {
+			return err
+		}
 	}
 
 	// Make sure the section is created before its pages.
@@ -537,7 +443,7 @@ func (c *pagesCollector) handleBundleLeaf(dir hugofs.FileMetaInfo, path string, 
 			return nil
 		}
 
-		return c.addToBundle(info, bundleLeaf, bundles)
+		return c.addToBundle(info, paths.PathTypeLeaf, bundles)
 	}
 
 	// Start a new walker from the given path.

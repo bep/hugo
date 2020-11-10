@@ -15,18 +15,32 @@ package page
 
 import (
 	"fmt"
+	"regexp"
 	"testing"
 	"time"
 
+<<<<<<< HEAD
+=======
+	"github.com/google/go-cmp/cmp"
+
+>>>>>>> cb30cc82b (Improve content map, memory cache and dependency resolution)
 	"github.com/gohugoio/hugo/resources/resource"
 	"github.com/google/go-cmp/cmp"
 
 	qt "github.com/frankban/quicktest"
 )
 
+<<<<<<< HEAD
 var eq = qt.CmpEquals(
 	cmp.Comparer(func(p1, p2 testPage) bool {
 		return p1.path == p2.path && p1.weight == p2.weight
+=======
+var cmpPageCmpWhitelist = regexp.MustCompile(`(testPage|source\.File|hugofs\.fileInfoMeta|paths\.Path)`)
+
+var eq = qt.CmpEquals(
+	cmp.Comparer(func(p1, p2 Page) bool {
+		return p1 == p2
+>>>>>>> cb30cc82b (Improve content map, memory cache and dependency resolution)
 	}),
 )
 

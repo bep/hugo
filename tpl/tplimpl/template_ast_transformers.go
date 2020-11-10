@@ -14,10 +14,13 @@
 package tplimpl
 
 import (
+<<<<<<< HEAD
 	"fmt"
 	"regexp"
 	"strings"
 
+=======
+>>>>>>> cb30cc82b (Improve content map, memory cache and dependency resolution)
 	htmltemplate "github.com/gohugoio/hugo/tpl/internal/go_templates/htmltemplate"
 	texttemplate "github.com/gohugoio/hugo/tpl/internal/go_templates/texttemplate"
 
@@ -41,7 +44,6 @@ const (
 type templateContext struct {
 	visited          map[string]bool
 	templateNotFound map[string]bool
-	identityNotFound map[string]bool
 	lookupFn         func(name string) *templateState
 
 	// The last error encountered.
@@ -80,7 +82,6 @@ func newTemplateContext(
 		lookupFn:         lookupFn,
 		visited:          make(map[string]bool),
 		templateNotFound: make(map[string]bool),
-		identityNotFound: make(map[string]bool),
 	}
 }
 
@@ -179,7 +180,6 @@ func (c *templateContext) applyTransformations(n parse.Node) (bool, error) {
 		}
 
 	case *parse.CommandNode:
-		c.collectPartialInfo(x)
 		c.collectInner(x)
 		keep := c.collectReturnNode(x)
 
@@ -275,39 +275,6 @@ func (c *templateContext) collectInner(n *parse.CommandNode) {
 		if c.hasIdent(idents, "Inner") || c.hasIdent(idents, "InnerDeindent") {
 			c.t.parseInfo.IsInner = true
 			break
-		}
-	}
-}
-
-var partialRe = regexp.MustCompile(`^partial(Cached)?$|^partials\.Include(Cached)?$`)
-
-func (c *templateContext) collectPartialInfo(x *parse.CommandNode) {
-	if len(x.Args) < 2 {
-		return
-	}
-
-	first := x.Args[0]
-	var id string
-	switch v := first.(type) {
-	case *parse.IdentifierNode:
-		id = v.Ident
-	case *parse.ChainNode:
-		id = v.String()
-	}
-
-	if partialRe.MatchString(id) {
-		partialName := strings.Trim(x.Args[1].String(), "\"")
-		if !strings.Contains(partialName, ".") {
-			partialName += ".html"
-		}
-		partialName = "partials/" + partialName
-		info := c.lookupFn(partialName)
-
-		if info != nil {
-			c.t.Add(info)
-		} else {
-			// Delay for later
-			c.identityNotFound[partialName] = true
 		}
 	}
 }

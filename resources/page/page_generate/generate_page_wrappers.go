@@ -23,11 +23,11 @@ import (
 	"errors"
 
 	"github.com/gohugoio/hugo/common/maps"
+	"github.com/gohugoio/hugo/source"
 
 	"github.com/gohugoio/hugo/codegen"
 	"github.com/gohugoio/hugo/resources/page"
 	"github.com/gohugoio/hugo/resources/resource"
-	"github.com/gohugoio/hugo/source"
 )
 
 const header = `// Copyright 2019 The Hugo Authors. All rights reserved.
@@ -58,6 +58,7 @@ func Generate(c *codegen.Inspector) error {
 		return fmt.Errorf("failed to generate JSON marshaler: %w", err)
 	}
 
+<<<<<<< HEAD
 	if err := generateDeprecatedWrappers(c); err != nil {
 		return fmt.Errorf("failed to generate deprecate wrappers: %w", err)
 	}
@@ -65,7 +66,17 @@ func Generate(c *codegen.Inspector) error {
 	if err := generateFileIsZeroWrappers(c); err != nil {
 		return fmt.Errorf("failed to generate file wrappers: %w", err)
 	}
+=======
+	/*
+		// Removed in 0.93.0, keep this a little in case we need to re-introduce it.
+		if err := generateDeprecatedWrappers(c); err != nil {
+			return errors.Wrap(err, "failed to generate deprecate wrappers")
+		}
+>>>>>>> cb30cc82b (Improve content map, memory cache and dependency resolution)
 
+		if err := generateFileIsZeroWrappers(c); err != nil {
+			return errors.Wrap(err, "failed to generate file wrappers")
+		}*/
 	return nil
 }
 
@@ -154,7 +165,13 @@ func generateDeprecatedWrappers(c *codegen.Inspector) error {
 	}
 
 	deprecated := func(name string, tp reflect.Type) string {
+<<<<<<< HEAD
 		alternative, found := reasons[name]
+=======
+		var alternative string
+		var found bool
+		alternative, found = reasons[name]
+>>>>>>> cb30cc82b (Improve content map, memory cache and dependency resolution)
 		if !found {
 			panic(fmt.Sprintf("no deprecated reason found for %q", name))
 		}
@@ -218,7 +235,7 @@ func generateFileIsZeroWrappers(c *codegen.Inspector) error {
 
 	var buff bytes.Buffer
 
-	methods := c.MethodsFromTypes([]reflect.Type{reflect.TypeOf((*source.File)(nil)).Elem()}, nil)
+	methods := c.MethodsFromTypes([]reflect.Type{reflect.TypeOf((**source.File)(nil)).Elem()}, nil)
 
 	for _, m := range methods {
 		if m.Name == "IsZero" {

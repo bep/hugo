@@ -22,12 +22,12 @@ import (
 	"regexp"
 	"sort"
 	"strings"
-	"unicode"
 
 	"github.com/gohugoio/hugo/common/text"
 
 	"github.com/gohugoio/hugo/config"
 
+	"github.com/gohugoio/hugo/common/paths"
 	"github.com/gohugoio/hugo/hugofs"
 
 	"github.com/gohugoio/hugo/common/hugio"
@@ -40,7 +40,11 @@ import (
 // whilst preserving the original casing of the string.
 // E.g. Social Media -> Social-Media
 func (p *PathSpec) MakePath(s string) string {
-	return p.UnicodeSanitize(s)
+	s = paths.Sanitize(s)
+	if p.RemovePathAccents {
+		s = text.RemoveAccentsString(s)
+	}
+	return s
 }
 
 // MakePathsSanitized applies MakePathSanitized on every item in the slice
@@ -69,6 +73,7 @@ func MakeTitle(inpath string) string {
 	return strings.Replace(strings.TrimSpace(inpath), "-", " ", -1)
 }
 
+<<<<<<< HEAD
 // From https://golang.org/src/net/url/url.go
 func ishex(c rune) bool {
 	switch {
@@ -126,6 +131,8 @@ func (p *PathSpec) UnicodeSanitize(s string) string {
 	return string(target)
 }
 
+=======
+>>>>>>> cb30cc82b (Improve content map, memory cache and dependency resolution)
 func makePathRelative(inPath string, possibleDirectories ...string) (string, error) {
 	for _, currentPath := range possibleDirectories {
 		if strings.HasPrefix(inPath, currentPath) {
@@ -483,4 +490,19 @@ func AddTrailingSlash(path string) string {
 		path += "/"
 	}
 	return path
+}
+
+// AddLeadingSlash adds a leading Unix styled slash (/) if not already
+// there.
+func AddLeadingSlash(path string) string {
+	if !strings.HasPrefix(path, "/") {
+		path = "/" + path
+	}
+	return path
+}
+
+// AddLeadingAndTrailingSlash adds a leading and trailing Unix styled slash (/)
+// if not already there.
+func AddLeadingAndTrailingSlash(path string) string {
+	return AddTrailingSlash(AddLeadingSlash(path))
 }

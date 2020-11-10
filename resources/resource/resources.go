@@ -21,13 +21,32 @@ import (
 	"github.com/spf13/cast"
 )
 
+<<<<<<< HEAD
 var _ ResourceFinder = (*Resources)(nil)
+=======
+var (
+	_ StaleInfo = Resources{}
+)
+>>>>>>> cb30cc82b (Improve content map, memory cache and dependency resolution)
 
 // Resources represents a slice of resources, which can be a mix of different types.
 // I.e. both pages and images etc.
 type Resources []Resource
 
+<<<<<<< HEAD
 // var _ resource.ResourceFinder = (*Namespace)(nil)
+=======
+// Resources is stale if any of the the elements are stale.
+func (rs Resources) IsStale() bool {
+	for _, r := range rs {
+		if s, ok := r.(StaleInfo); ok && s.IsStale() {
+			return true
+		}
+	}
+	return false
+}
+
+>>>>>>> cb30cc82b (Improve content map, memory cache and dependency resolution)
 // ResourcesConverter converts a given slice of Resource objects to Resources.
 type ResourcesConverter interface {
 	// For internal use.

@@ -69,7 +69,10 @@ func MarshalPageToJSON(p Page) ([]byte, error) {
 	isNode := p.IsNode()
 	isPage := p.IsPage()
 	path := p.Path()
+<<<<<<< HEAD
 	pathc := p.Pathc()
+=======
+>>>>>>> cb30cc82b (Improve content map, memory cache and dependency resolution)
 	slug := p.Slug()
 	lang := p.Lang()
 	isSection := p.IsSection()
@@ -89,7 +92,8 @@ func MarshalPageToJSON(p Page) ([]byte, error) {
 	isTranslated := p.IsTranslated()
 	allTranslations := p.AllTranslations()
 	translations := p.Translations()
-	getIdentity := p.GetIdentity()
+	identifierBase := p.IdentifierBase()
+	getDependencyManager := p.GetDependencyManager()
 
 	s := struct {
 		Content                  any
@@ -138,7 +142,7 @@ func MarshalPageToJSON(p Page) ([]byte, error) {
 		Type                     string
 		Weight                   int
 		Language                 *langs.Language
-		File                     source.File
+		File                     *source.File
 		GitInfo                  *gitmap.GitInfo
 		OutputFormats            OutputFormats
 		AlternativeOutputFormats OutputFormats
@@ -147,7 +151,8 @@ func MarshalPageToJSON(p Page) ([]byte, error) {
 		IsTranslated             bool
 		AllTranslations          Pages
 		Translations             Pages
-		GetIdentity              identity.Identity
+		IdentifierBase           interface{}
+		GetDependencyManager     identity.Manager
 	}{
 		Content:                  content,
 		Plain:                    plain,
@@ -204,7 +209,8 @@ func MarshalPageToJSON(p Page) ([]byte, error) {
 		IsTranslated:             isTranslated,
 		AllTranslations:          allTranslations,
 		Translations:             translations,
-		GetIdentity:              getIdentity,
+		IdentifierBase:           identifierBase,
+		GetDependencyManager:     getDependencyManager,
 	}
 
 	return json.Marshal(&s)

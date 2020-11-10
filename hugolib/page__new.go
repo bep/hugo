@@ -14,6 +14,7 @@
 package hugolib
 
 import (
+<<<<<<< HEAD
 	"html/template"
 	"strings"
 
@@ -24,6 +25,9 @@ import (
 	"github.com/gohugoio/hugo/common/maps"
 
 	"github.com/gohugoio/hugo/output"
+=======
+	"github.com/gohugoio/hugo/common/maps"
+>>>>>>> cb30cc82b (Improve content map, memory cache and dependency resolution)
 
 	"github.com/gohugoio/hugo/lazy"
 
@@ -57,7 +61,6 @@ func newPageBase(metaProvider *pageMeta) (*pageState, error) {
 			RefProvider:             page.NopPage,
 			ShortcodeInfoProvider:   page.NopPage,
 			LanguageProvider:        s,
-			pagePages:               &pagePages{},
 
 			InternalDependencies: s,
 			init:                 lazy.New(),
@@ -87,6 +90,7 @@ func newPageBase(metaProvider *pageMeta) (*pageState, error) {
 	return ps, nil
 }
 
+<<<<<<< HEAD
 func newPageBucket(p *pageState) *pagesMapBucket {
 	return &pagesMapBucket{owner: p, pagesMapBucketPages: &pagesMapBucketPages{}}
 }
@@ -210,4 +214,8 @@ func (p *pageDeprecatedWarning) URL() string {
 	}
 	// Fall back to the relative permalink.
 	return p.p.RelPermalink()
+=======
+func newPageBucket(parent *pagesMapBucket, self *pageState) *pagesMapBucket {
+	return &pagesMapBucket{parent: parent, self: self, pagesMapBucketPages: &pagesMapBucketPages{}}
+>>>>>>> cb30cc82b (Improve content map, memory cache and dependency resolution)
 }

@@ -2,8 +2,12 @@ module github.com/gohugoio/hugo
 
 require (
 	github.com/BurntSushi/locker v0.0.0-20171006230638-a6e239ea1c69
+<<<<<<< HEAD
 	github.com/PuerkitoBio/purell v1.1.1
 	github.com/alecthomas/chroma/v2 v2.2.0
+=======
+	github.com/alecthomas/chroma v0.9.4
+>>>>>>> cb30cc82b (Improve content map, memory cache and dependency resolution)
 	github.com/armon/go-radix v1.0.0
 	github.com/aws/aws-sdk-go v1.43.5
 	github.com/bep/clock v0.3.0
@@ -19,11 +23,18 @@ require (
 	github.com/cli/safeexec v1.0.0
 	github.com/disintegration/gift v1.2.1
 	github.com/dustin/go-humanize v1.0.0
+<<<<<<< HEAD
 	github.com/evanw/esbuild v0.14.43
 	github.com/fortytw2/leaktest v1.3.0
 	github.com/frankban/quicktest v1.14.3
 	github.com/fsnotify/fsnotify v1.5.4
 	github.com/getkin/kin-openapi v0.97.0
+=======
+	github.com/evanw/esbuild v0.14.5
+	github.com/frankban/quicktest v1.14.0
+	github.com/fsnotify/fsnotify v1.5.1
+	github.com/getkin/kin-openapi v0.85.0
+>>>>>>> cb30cc82b (Improve content map, memory cache and dependency resolution)
 	github.com/ghodss/yaml v1.0.0
 	github.com/gobuffalo/flect v0.2.5
 	github.com/gobwas/glob v0.2.3
@@ -35,6 +46,7 @@ require (
 	github.com/gorilla/websocket v1.5.0
 	github.com/hairyhenderson/go-codeowners v0.2.3-0.20201026200250-cdc7c0759690
 	github.com/jdkato/prose v1.2.1
+	github.com/karlseguin/ccache/v2 v2.0.8
 	github.com/kylelemons/godebug v1.1.0
 	github.com/kyokomi/emoji/v2 v2.2.9
 	github.com/magefile/mage v1.13.0
@@ -44,8 +56,16 @@ require (
 	github.com/muesli/smartcrop v0.3.0
 	github.com/niklasfasching/go-org v1.6.5
 	github.com/olekukonko/tablewriter v0.0.5
+<<<<<<< HEAD
 	github.com/pelletier/go-toml/v2 v2.0.2
 	github.com/rogpeppe/go-internal v1.8.1
+=======
+	github.com/pbnjay/memory v0.0.0-20210728143218-7b4eea64cf58
+	github.com/pelletier/go-toml/v2 v2.0.0-beta.3.0.20210727221244-fa0796069526
+	github.com/pkg/errors v0.9.1
+	github.com/rogpeppe/go-internal v1.8.0
+	github.com/russross/blackfriday v1.6.0
+>>>>>>> cb30cc82b (Improve content map, memory cache and dependency resolution)
 	github.com/rwcarlsen/goexif v0.0.0-20190401172101-9e8deecbddbd
 	github.com/sanity-io/litter v1.5.5
 	github.com/spf13/afero v1.8.2
@@ -63,8 +83,14 @@ require (
 	golang.org/x/net v0.0.0-20220607020251-c690dde0001d
 	golang.org/x/sync v0.0.0-20210220032951-036812b2e83c
 	golang.org/x/text v0.3.7
+<<<<<<< HEAD
 	golang.org/x/tools v0.1.11
 	google.golang.org/api v0.76.0
+=======
+	golang.org/x/tools v0.1.5
+	google.golang.org/api v0.63.0
+	gopkg.in/check.v1 v1.0.0-20190902080502-41f04d3bba15 // indirect
+>>>>>>> cb30cc82b (Improve content map, memory cache and dependency resolution)
 	gopkg.in/yaml.v2 v2.4.0
 )
 

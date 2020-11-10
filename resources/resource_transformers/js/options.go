@@ -20,7 +20,13 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/gohugoio/hugo/cache/memcache"
 	"github.com/gohugoio/hugo/common/maps"
+<<<<<<< HEAD
+=======
+	"github.com/gohugoio/hugo/identity"
+	"github.com/pkg/errors"
+>>>>>>> cb30cc82b (Improve content map, memory cache and dependency resolution)
 	"github.com/spf13/afero"
 
 	"github.com/evanw/esbuild/pkg/api"
@@ -84,18 +90,6 @@ type Options struct {
 
 	// What to use instead of React.Fragment.
 	JSXFragment string
-
-	// There is/was a bug in WebKit with severe performance issue with the tracking
-	// of TDZ checks in JavaScriptCore.
-	//
-	// Enabling this flag removes the TDZ and `const` assignment checks and
-	// may improve performance of larger JS codebases until the WebKit fix
-	// is in widespread use.
-	//
-	// See https://bugs.webkit.org/show_bug.cgi?id=199866
-	// Deprecated: This no longer have any effect and will be removed.
-	// TODO(bep) remove. See https://github.com/evanw/esbuild/commit/869e8117b499ca1dbfc5b3021938a53ffe934dba
-	AvoidTDZ bool
 
 	mediaType  media.Type
 	outDir     string
@@ -200,7 +194,7 @@ func resolveComponentInAssets(fs afero.Fs, impPath string) *hugofs.FileMeta {
 	return m
 }
 
-func createBuildPlugins(c *Client, opts Options) ([]api.Plugin, error) {
+func createBuildPlugins(depsManager identity.Manager, c *Client, opts Options) ([]api.Plugin, error) {
 	fs := c.rs.Assets
 
 	resolveImport := func(args api.OnResolveArgs) (api.OnResolveResult, error) {
@@ -235,6 +229,10 @@ func createBuildPlugins(c *Client, opts Options) ([]api.Plugin, error) {
 		m := resolveComponentInAssets(fs.Fs, impPath)
 
 		if m != nil {
+			// TODO1 key
+			importID := identity.StringIdentity("/" + memcache.CleanKey(strings.TrimPrefix(m.PathFile(), m.Component)))
+			depsManager.AddIdentity(importID)
+
 			// Store the source root so we can create a jsconfig.json
 			// to help intellisense when the build is done.
 			// This should be a small number of elements, and when

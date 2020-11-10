@@ -23,6 +23,7 @@ import (
 
 	qt "github.com/frankban/quicktest"
 	"github.com/gohugoio/hugo/htesting"
+<<<<<<< HEAD
 	"github.com/gohugoio/hugo/hugofs"
 	"github.com/gohugoio/hugo/hugolib"
 )
@@ -31,6 +32,20 @@ const postCSSIntegrationTestFiles = `
 -- assets/css/components/a.css --
 /* A comment. */
 /* Another comment. */
+=======
+	"github.com/gohugoio/hugo/hugolib"
+)
+
+func TestTransformPostCSS(t *testing.T) {
+	if !htesting.IsCI() {
+		t.Skip("Skip long running test when running locally")
+	}
+
+	c := qt.New(t)
+
+	files := `
+-- assets/css/components/a.css --
+>>>>>>> cb30cc82b (Improve content map, memory cache and dependency resolution)
 class-in-a {
 	color: blue;
 }
@@ -49,16 +64,23 @@ class-in-b {
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+<<<<<<< HEAD
   @import "components/all.css";
+=======
+@import "components/all.css";
+>>>>>>> cb30cc82b (Improve content map, memory cache and dependency resolution)
 h1 {
 	@apply text-2xl font-bold;
 }
 
 -- config.toml --
 disablekinds = ['taxonomy', 'term', 'page']
+<<<<<<< HEAD
 baseURL = "https://example.com"
 [build]
 useResourceCacheWhen = 'never'
+=======
+>>>>>>> cb30cc82b (Improve content map, memory cache and dependency resolution)
 -- content/p1.md --
 -- data/hugo.toml --
 slogan = "Hugo Rocks!"
@@ -97,6 +119,7 @@ module.exports = {
 
 `
 
+<<<<<<< HEAD
 func TestTransformPostCSS(t *testing.T) {
 	if !htesting.IsCI() {
 		t.Skip("Skip long running test when running locally")
@@ -120,12 +143,16 @@ func TestTransformPostCSS(t *testing.T) {
 
 		fmt.Println("===>", s, files)
 
+=======
+	c.Run("Success", func(c *qt.C) {
+>>>>>>> cb30cc82b (Improve content map, memory cache and dependency resolution)
 		b := hugolib.NewIntegrationTestBuilder(
 			hugolib.IntegrationTestConfig{
 				T:               c,
 				NeedsOsFS:       true,
 				NeedsNpmInstall: true,
 				LogLevel:        jww.LevelInfo,
+<<<<<<< HEAD
 				WorkingDir:      tempDir,
 				TxtarString:     files,
 			}).Build()
@@ -241,4 +268,46 @@ Styles Content: Len: 770917
 
 	}
 
+=======
+				TxtarString:     files,
+			}).Build()
+
+		b.AssertLogContains("Hugo Environment: production")
+		b.AssertLogContains(filepath.FromSlash(fmt.Sprintf("PostCSS Config File: %s/postcss.config.js", b.Cfg.WorkingDir)))
+		b.AssertLogContains(filepath.FromSlash(fmt.Sprintf("package.json: %s/package.json", b.Cfg.WorkingDir)))
+
+		b.AssertFileContent("public/index.html", `
+Styles RelPermalink: /css/styles.css
+Styles Content: Len: 770875|
+`)
+	})
+
+	c.Run("Error", func(c *qt.C) {
+		s, err := hugolib.NewIntegrationTestBuilder(
+			hugolib.IntegrationTestConfig{
+				T:               c,
+				NeedsOsFS:       true,
+				NeedsNpmInstall: true,
+				TxtarString:     strings.ReplaceAll(files, "color: blue;", "@apply foo;"), // Syntax error
+			}).BuildE()
+		s.AssertIsFileError(err)
+	})
+}
+
+// bookmark2
+func TestIntegrationTestTemplate(t *testing.T) {
+	c := qt.New(t)
+
+	files := ``
+
+	b := hugolib.NewIntegrationTestBuilder(
+		hugolib.IntegrationTestConfig{
+			T:               c,
+			NeedsOsFS:       false,
+			NeedsNpmInstall: false,
+			TxtarString:     files,
+		}).Build()
+
+	b.Assert(true, qt.IsTrue)
+>>>>>>> cb30cc82b (Improve content map, memory cache and dependency resolution)
 }

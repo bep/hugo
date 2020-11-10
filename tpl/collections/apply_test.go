@@ -58,6 +58,10 @@ func (templateFinder) ExecuteWithContext(ctx context.Context, t tpl.Template, wr
 	return nil
 }
 
+func (templateFinder) ExecuteWithContext(ctx context.Context, t tpl.Template, wr io.Writer, data interface{}) error {
+	return nil
+}
+
 func (templateFinder) GetFunc(name string) (reflect.Value, bool) {
 	if name == "dobedobedo" {
 		return reflect.Value{}, false

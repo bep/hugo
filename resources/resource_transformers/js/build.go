@@ -27,6 +27,7 @@ import (
 	"github.com/spf13/afero"
 
 	"github.com/gohugoio/hugo/hugofs"
+	"github.com/gohugoio/hugo/identity"
 
 	"github.com/gohugoio/hugo/common/herrors"
 	"github.com/gohugoio/hugo/common/text"
@@ -55,8 +56,14 @@ func New(fs *filesystems.SourceFilesystem, rs *resources.Spec) *Client {
 }
 
 type buildTransformation struct {
+<<<<<<< HEAD
 	optsm map[string]any
 	c     *Client
+=======
+	depsManager identity.Manager
+	optsm       map[string]interface{}
+	c           *Client
+>>>>>>> cb30cc82b (Improve content map, memory cache and dependency resolution)
 }
 
 func (t *buildTransformation) Key() internal.ResourceTransformationKey {
@@ -92,7 +99,7 @@ func (t *buildTransformation) Transform(ctx *resources.ResourceTransformationCtx
 		return err
 	}
 
-	buildOptions.Plugins, err = createBuildPlugins(t.c, opts)
+	buildOptions.Plugins, err = createBuildPlugins(t.depsManager, t.c, opts)
 	if err != nil {
 		return err
 	}
@@ -215,8 +222,17 @@ func (t *buildTransformation) Transform(ctx *resources.ResourceTransformationCtx
 }
 
 // Process process esbuild transform
+<<<<<<< HEAD
 func (c *Client) Process(res resources.ResourceTransformer, opts map[string]any) (resource.Resource, error) {
+=======
+func (c *Client) Process(res resources.ResourceTransformer, opts map[string]interface{}) (resource.Resource, error) {
+	var depsManager identity.Manager = identity.NopManager
+	if dmp, ok := res.(identity.DependencyManagerProvider); ok {
+		depsManager = dmp.GetDependencyManager()
+	}
+
+>>>>>>> cb30cc82b (Improve content map, memory cache and dependency resolution)
 	return res.Transform(
-		&buildTransformation{c: c, optsm: opts},
+		&buildTransformation{c: c, optsm: opts, depsManager: depsManager},
 	)
 }

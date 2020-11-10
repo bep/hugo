@@ -19,12 +19,18 @@ import (
 	"path/filepath"
 
 	"github.com/gohugoio/hugo/config"
+	"github.com/gohugoio/hugo/parser/pageparser"
 	"github.com/gohugoio/hugo/source"
 
+<<<<<<< HEAD
 	"github.com/gohugoio/hugo/hugofs/files"
+=======
+	"github.com/pkg/errors"
+>>>>>>> cb30cc82b (Improve content map, memory cache and dependency resolution)
 	"golang.org/x/sync/errgroup"
 
 	"github.com/gohugoio/hugo/common/herrors"
+	"github.com/gohugoio/hugo/common/paths"
 	"github.com/gohugoio/hugo/hugofs"
 )
 
@@ -157,12 +163,11 @@ func (p *sitePagesProcessor) copyFile(fim hugofs.FileMetaInfo) error {
 	if err != nil {
 		return fmt.Errorf("copyFile: failed to open: %w", err)
 	}
+	defer f.Close()
 
 	s := p.m.s
 
-	target := filepath.Join(s.PathSpec.GetTargetLanguageBasePath(), meta.Path)
-
-	defer f.Close()
+	target := filepath.Join(s.PathSpec.GetTargetLanguageBasePath(), filepath.FromSlash(meta.PathInfo.Path()))
 
 	fs := s.PublishFs
 	if p.renderStaticToDisk {
@@ -184,19 +189,21 @@ func (p *sitePagesProcessor) doProcess(item any) error {
 			return nil
 		}
 		meta := v.Meta()
+		pi := meta.PathInfo
 
-		classifier := meta.Classifier
-		switch classifier {
-		case files.ContentClassContent:
+		switch pi.BundleType() {
+		case paths.PathTypeContentSingle:
 			if err := m.AddFilesBundle(v); err != nil {
+				if errors.Is(err, pageparser.ErrPlainHTMLDocumentsNotSupported) {
+					// Treat it as a plain HTML file instead.
+					return p.copyFile(v)
+				}
 				return err
 			}
-		case files.ContentClassFile:
-			if err := p.copyFile(v); err != nil {
-				return err
-			}
+		case paths.PathTypeFile:
+			return p.copyFile(v)
 		default:
-			panic(fmt.Sprintf("invalid classifier: %q", classifier))
+			panic(fmt.Sprintf("invalid type: %q", pi.BundleType()))
 		}
 	default:
 		panic(fmt.Sprintf("unrecognized item type in Process: %T", item))

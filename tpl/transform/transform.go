@@ -1,4 +1,4 @@
-// Copyright 2017 The Hugo Authors. All rights reserved.
+// Copyright 2021 The Hugo Authors. All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -18,11 +18,15 @@ import (
 	"html"
 	"html/template"
 
+<<<<<<< HEAD
 	"github.com/alecthomas/chroma/v2/lexers"
 	"github.com/gohugoio/hugo/cache/namedmemcache"
 	"github.com/gohugoio/hugo/markup/converter/hooks"
 	"github.com/gohugoio/hugo/markup/highlight"
 	"github.com/gohugoio/hugo/tpl"
+=======
+	"github.com/gohugoio/hugo/cache/memcache"
+>>>>>>> cb30cc82b (Improve content map, memory cache and dependency resolution)
 
 	"github.com/gohugoio/hugo/deps"
 	"github.com/gohugoio/hugo/helpers"
@@ -31,22 +35,19 @@ import (
 
 // New returns a new instance of the transform-namespaced template functions.
 func New(deps *deps.Deps) *Namespace {
-	cache := namedmemcache.New()
-	deps.BuildStartListeners.Add(
-		func() {
-			cache.Clear()
-		})
-
+	if deps.MemCache == nil {
+		panic("must provide MemCache")
+	}
 	return &Namespace{
-		cache: cache,
 		deps:  deps,
+		cache: deps.MemCache.GetOrCreatePartition("tpl/transform", memcache.ClearOnChange),
 	}
 }
 
 // Namespace provides template functions for the "transform" namespace.
 type Namespace struct {
-	cache *namedmemcache.Cache
 	deps  *deps.Deps
+	cache memcache.Getter
 }
 
 // Emojify returns a copy of s with all emoji codes replaced with actual emojis.

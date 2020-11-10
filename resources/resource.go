@@ -22,6 +22,9 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
+
+	"github.com/gohugoio/hugo/identity"
 
 	"github.com/gohugoio/hugo/resources/internal"
 
@@ -29,10 +32,16 @@ import (
 
 	"github.com/gohugoio/hugo/hugofs"
 
+	"github.com/gohugoio/hugo/cache/memcache"
+	"github.com/gohugoio/hugo/common/types"
 	"github.com/gohugoio/hugo/media"
 	"github.com/gohugoio/hugo/source"
+<<<<<<< HEAD
 
 	"errors"
+=======
+	"github.com/pkg/errors"
+>>>>>>> cb30cc82b (Improve content map, memory cache and dependency resolution)
 
 	"github.com/gohugoio/hugo/common/hugio"
 	"github.com/gohugoio/hugo/common/maps"
@@ -44,15 +53,16 @@ import (
 )
 
 var (
-	_ resource.ContentResource         = (*genericResource)(nil)
-	_ resource.ReadSeekCloserResource  = (*genericResource)(nil)
-	_ resource.Resource                = (*genericResource)(nil)
-	_ resource.Source                  = (*genericResource)(nil)
-	_ resource.Cloner                  = (*genericResource)(nil)
-	_ resource.ResourcesLanguageMerger = (*resource.Resources)(nil)
-	_ permalinker                      = (*genericResource)(nil)
-	_ resource.Identifier              = (*genericResource)(nil)
-	_ fileInfo                         = (*genericResource)(nil)
+	_ resource.ContentResource           = (*genericResource)(nil)
+	_ resource.ReadSeekCloserResource    = (*genericResource)(nil)
+	_ resource.Resource                  = (*genericResource)(nil)
+	_ identity.DependencyManagerProvider = (*genericResource)(nil)
+	_ resource.Source                    = (*genericResource)(nil)
+	_ resource.Cloner                    = (*genericResource)(nil)
+	_ resource.ResourcesLanguageMerger   = (*resource.Resources)(nil)
+	_ permalinker                        = (*genericResource)(nil)
+	_ types.Identifier                   = (*genericResource)(nil)
+	_ fileInfo                           = (*genericResource)(nil)
 )
 
 type ResourceSourceDescriptor struct {
@@ -60,7 +70,7 @@ type ResourceSourceDescriptor struct {
 	TargetPaths func() page.TargetPaths
 
 	// Need one of these to load the resource content.
-	SourceFile         source.File
+	SourceFile         *source.File
 	OpenReadSeekCloser resource.OpenReadSeekCloser
 
 	FileInfo os.FileInfo
@@ -85,6 +95,13 @@ type ResourceSourceDescriptor struct {
 
 	// Delay publishing until either Permalink or RelPermalink is called. Maybe never.
 	LazyPublish bool
+
+	// Used to track depenencies (e.g. imports). May be nil if that's of no concern.
+	DependencyManager identity.Manager
+
+	// A shared identity for this resource and all its clones.
+	// If this is not set, an Identity is created.
+	GroupIdentity identity.Identity
 }
 
 func (r ResourceSourceDescriptor) Filename() string {
@@ -139,7 +156,9 @@ type baseResourceResource interface {
 	resourceCopier
 	resource.ContentProvider
 	resource.Resource
-	resource.Identifier
+	types.Identifier
+	identity.IdentityGroupProvider
+	identity.DependencyManagerProvider
 }
 
 type baseResourceInternal interface {
@@ -173,8 +192,7 @@ type baseResource interface {
 	baseResourceInternal
 }
 
-type commonResource struct {
-}
+type commonResource struct{}
 
 // Slice is for internal use.
 // for the template functions. See collections.Slice.
@@ -190,8 +208,7 @@ func (commonResource) Slice(in any) (any, error) {
 				return nil, fmt.Errorf("type %T is not a Resource", v)
 			}
 			groups[i] = g
-			{
-			}
+
 		}
 		return groups, nil
 	default:
@@ -215,15 +232,34 @@ type fileInfo interface {
 	setSourceFilename(string)
 	setSourceFs(afero.Fs)
 	getFileInfo() hugofs.FileMetaInfo
-	hash() (string, error)
 	size() int
+	hashProvider
+}
+
+type hashProvider interface {
+	hash() string
+}
+
+type staler struct {
+	stale uint32
+}
+
+func (s *staler) MarkStale() {
+	atomic.StoreUint32(&s.stale, 1)
+}
+
+func (s *staler) IsStale() bool {
+	return atomic.LoadUint32(&(s.stale)) > 0
 }
 
 // genericResource represents a generic linkable resource.
 type genericResource struct {
 	*resourcePathDescriptor
 	*resourceFileInfo
-	*resourceContent
+	*resourceContent //
+
+	groupIdentity     identity.Identity
+	dependencyManager identity.Manager
 
 	spec *Spec
 
@@ -234,6 +270,14 @@ type genericResource struct {
 
 	resourceType string
 	mediaType    media.Type
+}
+
+func (l *genericResource) GetIdentityGroup() identity.Identity {
+	return l.groupIdentity
+}
+
+func (l *genericResource) GetDependencyManager() identity.Manager {
+	return l.dependencyManager
 }
 
 func (l *genericResource) Clone() resource.Resource {
@@ -271,10 +315,31 @@ func (l *genericResource) Data() any {
 }
 
 func (l *genericResource) Key() string {
+<<<<<<< HEAD
 	if l.spec.BasePath == "" {
 		return l.RelPermalink()
 	}
 	return strings.TrimPrefix(l.RelPermalink(), l.spec.BasePath)
+=======
+	// TODO1 consider repeating the section in the path segment.
+
+	if l.fi != nil {
+		// Create a key that at least shares the base folder with the source,
+		// to facilitate effective cache busting on changes.
+		meta := l.fi.Meta()
+		p := meta.Path
+		if p != "" {
+			d, _ := filepath.Split(p)
+			p = path.Join(d, l.relTargetDirFile.file)
+			key := memcache.CleanKey(p)
+			key = memcache.InsertKeyPathElements(key, meta.Component, meta.Lang)
+
+			return key
+		}
+	}
+
+	return memcache.CleanKey(l.RelPermalink())
+>>>>>>> cb30cc82b (Improve content map, memory cache and dependency resolution)
 }
 
 func (l *genericResource) MediaType() media.Type {
@@ -658,15 +723,18 @@ func (fi *resourceFileInfo) setSourceFs(fs afero.Fs) {
 	fi.sourceFs = fs
 }
 
-func (fi *resourceFileInfo) hash() (string, error) {
-	var err error
+func (fi *resourceFileInfo) hash() string {
 	fi.h.init.Do(func() {
 		var hash string
 		var f hugio.ReadSeekCloser
-		f, err = fi.ReadSeekCloser()
+		f, err := fi.ReadSeekCloser()
 		if err != nil {
+<<<<<<< HEAD
 			err = fmt.Errorf("failed to open source file: %w", err)
 			return
+=======
+			panic(fmt.Sprintf("failed to open source file: %s", err))
+>>>>>>> cb30cc82b (Improve content map, memory cache and dependency resolution)
 		}
 		defer f.Close()
 
@@ -677,7 +745,7 @@ func (fi *resourceFileInfo) hash() (string, error) {
 		fi.h.value = hash
 	})
 
-	return fi.h.value, err
+	return fi.h.value
 }
 
 func (fi *resourceFileInfo) size() int {

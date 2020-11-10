@@ -24,7 +24,12 @@ import (
 )
 
 func TestBuildVariants(t *testing.T) {
+<<<<<<< HEAD
 	c := qt.New(t)
+=======
+	pinnedTestCase := "Edit Import Nested"
+	tt := htesting.NewPinnedRunner(t, pinnedTestCase)
+>>>>>>> cb30cc82b (Improve content map, memory cache and dependency resolution)
 
 	mainWithImport := `
 -- config.toml --
@@ -51,13 +56,21 @@ JS Content:{{ $js.Content }}:End:
 	
 			`
 
+<<<<<<< HEAD
 	c.Run("Basic", func(c *qt.C) {
+=======
+	tt.Run("Basic", func(c *qt.C) {
+>>>>>>> cb30cc82b (Improve content map, memory cache and dependency resolution)
 		b := hugolib.NewIntegrationTestBuilder(hugolib.IntegrationTestConfig{T: c, NeedsOsFS: true, TxtarString: mainWithImport}).Build()
 
 		b.AssertFileContent("public/index.html", `abcd`)
 	})
 
+<<<<<<< HEAD
 	c.Run("Edit Import", func(c *qt.C) {
+=======
+	tt.Run("Edit Import", func(c *qt.C) {
+>>>>>>> cb30cc82b (Improve content map, memory cache and dependency resolution)
 		b := hugolib.NewIntegrationTestBuilder(hugolib.IntegrationTestConfig{T: c, Running: true, NeedsOsFS: true, TxtarString: mainWithImport}).Build()
 
 		b.AssertFileContent("public/index.html", `abcd`)
@@ -65,7 +78,11 @@ JS Content:{{ $js.Content }}:End:
 		b.AssertFileContent("public/index.html", `1234`)
 	})
 
+<<<<<<< HEAD
 	c.Run("Edit Import Nested", func(c *qt.C) {
+=======
+	tt.Run("Edit Import Nested", func(c *qt.C) {
+>>>>>>> cb30cc82b (Improve content map, memory cache and dependency resolution)
 		b := hugolib.NewIntegrationTestBuilder(hugolib.IntegrationTestConfig{T: c, Running: true, NeedsOsFS: true, TxtarString: mainWithImport}).Build()
 
 		b.AssertFileContent("public/index.html", `efgh`)
@@ -93,7 +110,11 @@ module github.com/gohugoio/tests/testHugoModules
 		
 go 1.16
 		
+<<<<<<< HEAD
 require github.com/gohugoio/hugoTestProjectJSModImports v0.10.0 // indirect
+=======
+require github.com/gohugoio/hugoTestProjectJSModImports v0.9.0 // indirect
+>>>>>>> cb30cc82b (Improve content map, memory cache and dependency resolution)
 -- package.json --
 {
 	"dependencies": {
@@ -124,7 +145,11 @@ shim cwd
 `)
 
 	// React JSX, verify the shimming.
+<<<<<<< HEAD
 	b.AssertFileContent("public/js/like.js", filepath.FromSlash(`@v0.10.0/assets/js/shims/react.js
+=======
+	b.AssertFileContent("public/js/like.js", filepath.FromSlash(`@v0.9.0/assets/js/shims/react.js
+>>>>>>> cb30cc82b (Improve content map, memory cache and dependency resolution)
 module.exports = window.ReactDOM;
 `))
 }
@@ -209,6 +234,7 @@ TS2: {{ template "print" $ts2 }}
 		function greeter(person) {
 `)
 }
+<<<<<<< HEAD
 
 func TestBuildError(t *testing.T) {
 	c := qt.New(t)
@@ -259,3 +285,5 @@ JS Content:{{ $js.Content }}:End:
 	})
 
 }
+=======
+>>>>>>> cb30cc82b (Improve content map, memory cache and dependency resolution)

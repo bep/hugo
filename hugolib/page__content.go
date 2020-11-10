@@ -26,6 +26,8 @@ var (
 	internalSummaryDividerPre       = []byte("\n\n" + internalSummaryDividerBase + "\n\n")
 )
 
+var zeroContent = pageContent{}
+
 // The content related items on a Page.
 type pageContent struct {
 	selfLayout string

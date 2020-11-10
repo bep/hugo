@@ -16,13 +16,13 @@
 package page
 
 import (
+	"context"
 	"html/template"
 
 	"github.com/gohugoio/hugo/identity"
 
 	"github.com/bep/gitmap"
 	"github.com/gohugoio/hugo/config"
-	"github.com/gohugoio/hugo/tpl"
 
 	"github.com/gohugoio/hugo/common/maps"
 	"github.com/gohugoio/hugo/compare"
@@ -107,7 +107,7 @@ type ContentProvider interface {
 
 // FileProvider provides the source file.
 type FileProvider interface {
-	File() source.File
+	File() *source.File
 }
 
 // GetPageProvider provides the GetPage method.
@@ -118,9 +118,6 @@ type GetPageProvider interface {
 	// This will return nil when no page could be found, and will return
 	// an error if the ref is ambiguous.
 	GetPage(ref string) (Page, error)
-
-	// GetPageWithTemplateInfo is for internal use only.
-	GetPageWithTemplateInfo(info tpl.Info, ref string) (Page, error)
 }
 
 // GitInfoProvider provides Git info.
@@ -146,11 +143,18 @@ type OutputFormatsProvider interface {
 	OutputFormats() OutputFormats
 }
 
+// PageProvider provides access to a Page.
+// Implemented by shortcodes and others.
+type PageProvider interface {
+	Page() Page
+}
+
 // Page is the core interface in Hugo.
 type Page interface {
 	ContentProvider
 	TableOfContentsProvider
 	PageWithoutContent
+	identity.DependencyManagerProvider
 }
 
 // PageMetaProvider provides page metadata, typically provided via front matter.
@@ -195,14 +199,17 @@ type PageMetaProvider interface {
 	// Param looks for a param in Page and then in Site config.
 	Param(key any) (any, error)
 
-	// Path gets the relative path, including file name and extension if relevant,
-	// to the source of this Page. It will be relative to any content root.
+	// Path gets the cannonical source path.
+	// TODO1 a better description of what the path is.
 	Path() string
 
+<<<<<<< HEAD
 	// This is just a temporary bridge method. Use Path in templates.
 	// Pathc is for internal usage only.
 	Pathc() string
 
+=======
+>>>>>>> cb30cc82b (Improve content map, memory cache and dependency resolution)
 	// The slug, typically defined in front matter.
 	Slug() string
 
@@ -236,8 +243,13 @@ type PageMetaProvider interface {
 
 // PageRenderProvider provides a way for a Page to render content.
 type PageRenderProvider interface {
+<<<<<<< HEAD
 	Render(layout ...string) (template.HTML, error)
 	RenderString(args ...any) (template.HTML, error)
+=======
+	Render(ctx context.Context, layout ...string) (template.HTML, error)
+	RenderString(args ...interface{}) (template.HTML, error)
+>>>>>>> cb30cc82b (Improve content map, memory cache and dependency resolution)
 }
 
 // PageWithoutContent is the Page without any of the content methods.
@@ -298,7 +310,7 @@ type PageWithoutContent interface {
 	GetTerms(taxonomy string) Pages
 
 	// Used in change/dependency tracking.
-	identity.Provider
+	identity.Identity
 
 	DeprecatedWarningPageMethods
 }
@@ -380,8 +392,7 @@ type TreeProvider interface {
 	// Note that this method is not relevant for taxonomy lists and taxonomy terms pages.
 	IsAncestor(other any) (bool, error)
 
-	// CurrentSection returns the page's current section or the page itself if home or a section.
-	// Note that this will return nil for pages that is not regular, home or section pages.
+	// CurrentSection returns the page's current section or the page itself if a branch node (e.g. home or a section).
 	CurrentSection() Page
 
 	// IsDescendant returns whether the current page is a descendant of the given
@@ -405,15 +416,20 @@ type TreeProvider interface {
 	// Note that for non-sections, this method will always return an empty list.
 	Sections() Pages
 
-	// Page returns a reference to the Page itself, kept here mostly
-	// for legacy reasons.
+	// Page returns a reference to the Page itself, mostly
+	// implemented to enable portable partials between regular, shortcode and markdown hook templates.
 	Page() Page
 }
 
 // DeprecatedWarningPageMethods lists deprecated Page methods that will trigger
 // a WARNING if invoked.
 // This was added in Hugo 0.55.
+<<<<<<< HEAD
 type DeprecatedWarningPageMethods any // This was emptied in Hugo 0.93.0.
+=======
+// This was emptied in Hugo 0.93.0.
+type DeprecatedWarningPageMethods interface{}
+>>>>>>> cb30cc82b (Improve content map, memory cache and dependency resolution)
 
 // Move here to trigger ERROR instead of WARNING.
 // TODO(bep) create wrappers and put into the Page once it has some methods.

@@ -18,6 +18,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/gohugoio/hugo/cache/memcache"
 	"github.com/gohugoio/hugo/common/loggers"
 	"github.com/gohugoio/hugo/hugolib"
 	"github.com/gohugoio/hugo/tpl/transform"
@@ -268,6 +269,7 @@ func newDeps(cfg config.Provider) *deps.Deps {
 	return &deps.Deps{
 		Cfg:         cfg,
 		Fs:          hugofs.NewMem(l),
+		MemCache:    memcache.New(memcache.Config{}),
 		ContentSpec: cs,
 	}
 }

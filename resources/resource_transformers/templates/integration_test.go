@@ -16,11 +16,20 @@ package templates_test
 import (
 	"testing"
 
+<<<<<<< HEAD
+=======
+	qt "github.com/frankban/quicktest"
+
+>>>>>>> cb30cc82b (Improve content map, memory cache and dependency resolution)
 	"github.com/gohugoio/hugo/hugolib"
 )
 
 func TestExecuteAsTemplateMultipleLanguages(t *testing.T) {
+<<<<<<< HEAD
 	t.Parallel()
+=======
+	c := qt.New(t)
+>>>>>>> cb30cc82b (Improve content map, memory cache and dependency resolution)
 
 	files := `
 -- config.toml --
@@ -61,7 +70,11 @@ LangURL: {{ relLangURL "foo" }}
 
 	b := hugolib.NewIntegrationTestBuilder(
 		hugolib.IntegrationTestConfig{
+<<<<<<< HEAD
 			T:           t,
+=======
+			T:           c,
+>>>>>>> cb30cc82b (Improve content map, memory cache and dependency resolution)
 			TxtarString: files,
 		}).Build()
 

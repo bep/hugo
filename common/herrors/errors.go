@@ -39,7 +39,12 @@ type ErrorSender interface {
 // Recover is a helper function that can be used to capture panics.
 // Put this at the top of a method/function that crashes in a template:
 //     defer herrors.Recover()
+<<<<<<< HEAD
 func Recover(args ...any) {
+=======
+// TODO1 check usage
+func Recover(args ...interface{}) {
+>>>>>>> cb30cc82b (Improve content map, memory cache and dependency resolution)
 	if r := recover(); r != nil {
 		fmt.Println("ERR:", r)
 		args = append(args, "stacktrace from panic: \n"+string(debug.Stack()), "\n")

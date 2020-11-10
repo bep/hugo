@@ -14,9 +14,15 @@
 package transform
 
 import (
+<<<<<<< HEAD
 	"fmt"
+=======
+	"context"
+>>>>>>> cb30cc82b (Improve content map, memory cache and dependency resolution)
 	"io/ioutil"
 	"strings"
+
+	"github.com/gohugoio/hugo/cache/memcache"
 
 	"github.com/gohugoio/hugo/resources/resource"
 
@@ -71,24 +77,40 @@ func (ns *Namespace) Unmarshal(args ...any) (any, error) {
 			key += decoder.OptionsKey()
 		}
 
+<<<<<<< HEAD
 		return ns.cache.GetOrCreate(key, func() (any, error) {
 			f := metadecoders.FormatFromMediaType(r.MediaType())
 			if f == "" {
 				return nil, fmt.Errorf("MIME %q not supported", r.MediaType())
+=======
+		return ns.cache.GetOrCreate(context.TODO(), key, func() memcache.Entry {
+			f := metadecoders.FormatFromMediaType(r.MediaType())
+			if f == "" {
+				return memcache.Entry{Err: errors.Errorf("MIME %q not supported", r.MediaType())}
+>>>>>>> cb30cc82b (Improve content map, memory cache and dependency resolution)
 			}
 
 			reader, err := r.ReadSeekCloser()
 			if err != nil {
-				return nil, err
+				return memcache.Entry{Err: err}
 			}
 			defer reader.Close()
 
 			b, err := ioutil.ReadAll(reader)
 			if err != nil {
-				return nil, err
+				return memcache.Entry{Err: err}
 			}
 
-			return decoder.Unmarshal(b, f)
+			v, err := decoder.Unmarshal(b, f)
+
+			return memcache.Entry{
+				Value:     v,
+				Err:       err,
+				ClearWhen: memcache.ClearOnChange,
+				StaleFunc: func() bool {
+					return resource.IsStaleAny(r)
+				},
+			}
 		})
 	}
 
@@ -103,13 +125,19 @@ func (ns *Namespace) Unmarshal(args ...any) (any, error) {
 
 	key := helpers.MD5String(dataStr)
 
+<<<<<<< HEAD
 	return ns.cache.GetOrCreate(key, func() (any, error) {
+=======
+	return ns.cache.GetOrCreate(context.TODO(), key, func() memcache.Entry {
+>>>>>>> cb30cc82b (Improve content map, memory cache and dependency resolution)
 		f := decoder.FormatFromContentString(dataStr)
 		if f == "" {
-			return nil, errors.New("unknown format")
+			return memcache.Entry{Err: errors.New("unknown format")}
 		}
 
-		return decoder.Unmarshal([]byte(dataStr), f)
+		v, err := decoder.Unmarshal([]byte(dataStr), f)
+
+		return memcache.Entry{Value: v, Err: err, ClearWhen: memcache.ClearOnChange}
 	})
 }
 

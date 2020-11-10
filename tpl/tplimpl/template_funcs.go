@@ -20,7 +20,14 @@ import (
 	"reflect"
 	"strings"
 
+<<<<<<< HEAD
 	"github.com/gohugoio/hugo/common/hreflect"
+=======
+	"github.com/gohugoio/hugo/identity"
+	"github.com/gohugoio/hugo/resources/page"
+	"github.com/gohugoio/hugo/tpl"
+
+>>>>>>> cb30cc82b (Improve content map, memory cache and dependency resolution)
 	"github.com/gohugoio/hugo/common/maps"
 	"github.com/gohugoio/hugo/tpl"
 
@@ -63,9 +70,19 @@ import (
 )
 
 var (
+<<<<<<< HEAD
 	_                texttemplate.ExecHelper = (*templateExecHelper)(nil)
 	zero             reflect.Value
 	contextInterface = reflect.TypeOf((*context.Context)(nil)).Elem()
+=======
+	_                                  texttemplate.ExecHelper = (*templateExecHelper)(nil)
+	zero                               reflect.Value
+	identityInterface                  = reflect.TypeOf((*identity.Identity)(nil)).Elem()
+	identityProviderInterface          = reflect.TypeOf((*identity.IdentityProvider)(nil)).Elem()
+	identityLookupProviderInterface    = reflect.TypeOf((*identity.IdentityLookupProvider)(nil)).Elem()
+	dependencyManagerProviderInterface = reflect.TypeOf((*identity.DependencyManagerProvider)(nil)).Elem()
+	contextInterface                   = reflect.TypeOf((*context.Context)(nil)).Elem()
+>>>>>>> cb30cc82b (Improve content map, memory cache and dependency resolution)
 )
 
 type templateExecHelper struct {
@@ -78,7 +95,11 @@ func (t *templateExecHelper) GetFunc(ctx context.Context, tmpl texttemplate.Prep
 		if fn.Type().NumIn() > 0 {
 			first := fn.Type().In(0)
 			if first.Implements(contextInterface) {
+<<<<<<< HEAD
 				// TODO(bep) check if we can void this conversion every time -- and if that matters.
+=======
+				// TODO1 check if we can void this conversion every time -- and if that matters.
+>>>>>>> cb30cc82b (Improve content map, memory cache and dependency resolution)
 				// The first argument may be context.Context. This is never provided by the end user, but it's used to pass down
 				// contextual information, e.g. the top level data context (e.g. Page).
 				return fn, reflect.ValueOf(ctx), true
@@ -91,6 +112,12 @@ func (t *templateExecHelper) GetFunc(ctx context.Context, tmpl texttemplate.Prep
 }
 
 func (t *templateExecHelper) Init(ctx context.Context, tmpl texttemplate.Preparer) {
+<<<<<<< HEAD
+=======
+	if t.running {
+		t.trackDeps(ctx, tmpl, "", reflect.Value{})
+	}
+>>>>>>> cb30cc82b (Improve content map, memory cache and dependency resolution)
 }
 
 func (t *templateExecHelper) GetMapValue(ctx context.Context, tmpl texttemplate.Preparer, receiver, key reflect.Value) (reflect.Value, bool) {
@@ -111,6 +138,7 @@ func (t *templateExecHelper) GetMapValue(ctx context.Context, tmpl texttemplate.
 
 func (t *templateExecHelper) GetMethod(ctx context.Context, tmpl texttemplate.Preparer, receiver reflect.Value, name string) (method reflect.Value, firstArg reflect.Value) {
 	if t.running {
+<<<<<<< HEAD
 		switch name {
 		case "GetPage", "Render":
 			if info, ok := tmpl.(tpl.Info); ok {
@@ -136,6 +164,84 @@ func (t *templateExecHelper) GetMethod(ctx context.Context, tmpl texttemplate.Pr
 	}
 
 	return fn, zero
+=======
+		t.trackDeps(ctx, tmpl, name, receiver)
+	}
+
+	fn := receiver.MethodByName(name)
+	if !fn.IsValid() {
+		return zero, zero
+	}
+
+	if fn.Type().NumIn() > 0 {
+		first := fn.Type().In(0)
+		if first.Implements(contextInterface) {
+			// The first argument may be context.Context. This is never provided by the end user, but it's used to pass down
+			// contextual information, e.g. the top level data context (e.g. Page).
+			return fn, reflect.ValueOf(ctx)
+		}
+	}
+
+	return fn, zero
+}
+
+func (t *templateExecHelper) trackDeps(ctx context.Context, tmpl texttemplate.Preparer, name string, receiver reflect.Value) {
+	if tmpl == nil {
+		panic("must provide a template")
+	}
+
+	dot := ctx.Value(texttemplate.DataContextKey)
+
+	if dot == nil {
+		return
+	}
+
+	// TODO1 remove all but DependencyManagerProvider
+	// idm, ok := dot.(identity.Manager)
+
+	dp, ok := dot.(identity.DependencyManagerProvider)
+
+	if !ok {
+		// Check for .Page, as in shortcodes.
+		// TODO1 remove this interface from .Page
+		var pp page.PageProvider
+		if pp, ok = dot.(page.PageProvider); ok {
+			dp, ok = pp.Page().(identity.DependencyManagerProvider)
+		}
+	}
+
+	if !ok {
+		// The aliases currently have no dependency manager.
+		// TODO(bep)
+		return
+	}
+
+	// TODO1 bookmark1
+
+	idm := dp.GetDependencyManager()
+
+	if info, ok := tmpl.(identity.Identity); ok {
+		idm.AddIdentity(info)
+	} else {
+
+		// TODO1 fix this re shortcodes
+		id := identity.NewPathIdentity("layouts", tmpl.(tpl.Template).Name(), "", "")
+		idm.AddIdentity(id)
+	}
+
+	identity.WalkIdentitiesValue(receiver, func(id identity.Identity) bool {
+		idm.AddIdentity(id)
+		return false
+	})
+
+	if receiver.IsValid() {
+		if receiver.Type().Implements(identityLookupProviderInterface) {
+			if id, found := receiver.Interface().(identity.IdentityLookupProvider).LookupIdentity(name); found {
+				idm.AddIdentity(id)
+			}
+		}
+	}
+>>>>>>> cb30cc82b (Improve content map, memory cache and dependency resolution)
 }
 
 func newTemplateExecuter(d *deps.Deps) (texttemplate.Executer, map[string]reflect.Value) {

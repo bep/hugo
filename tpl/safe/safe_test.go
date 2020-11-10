@@ -182,6 +182,7 @@ func TestURL(t *testing.T) {
 		c.Assert(result, qt.Equals, test.expect)
 	}
 }
+<<<<<<< HEAD
 
 func TestSanitizeURL(t *testing.T) {
 	t.Parallel()
@@ -209,3 +210,5 @@ func TestSanitizeURL(t *testing.T) {
 		c.Assert(result, qt.Equals, test.expect)
 	}
 }
+=======
+>>>>>>> cb30cc82b (Improve content map, memory cache and dependency resolution)

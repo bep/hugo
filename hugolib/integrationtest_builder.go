@@ -2,12 +2,18 @@ package hugolib
 
 import (
 	"bytes"
+<<<<<<< HEAD
 	"encoding/base64"
+=======
+>>>>>>> cb30cc82b (Improve content map, memory cache and dependency resolution)
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
+<<<<<<< HEAD
 	"regexp"
+=======
+>>>>>>> cb30cc82b (Improve content map, memory cache and dependency resolution)
 	"strings"
 	"sync"
 	"testing"
@@ -30,9 +36,12 @@ import (
 )
 
 func NewIntegrationTestBuilder(conf IntegrationTestConfig) *IntegrationTestBuilder {
+<<<<<<< HEAD
 	// Code fences.
 	conf.TxtarString = strings.ReplaceAll(conf.TxtarString, "§§§", "```")
 
+=======
+>>>>>>> cb30cc82b (Improve content map, memory cache and dependency resolution)
 	data := txtar.Parse([]byte(conf.TxtarString))
 
 	c, ok := conf.T.(*qt.C)
@@ -41,6 +50,7 @@ func NewIntegrationTestBuilder(conf IntegrationTestConfig) *IntegrationTestBuild
 	}
 
 	if conf.NeedsOsFS {
+<<<<<<< HEAD
 		if !filepath.IsAbs(conf.WorkingDir) {
 			tempDir, clean, err := htesting.CreateTempDir(hugofs.Os, "hugo-integration-test")
 			c.Assert(err, qt.IsNil)
@@ -53,6 +63,15 @@ func NewIntegrationTestBuilder(conf IntegrationTestConfig) *IntegrationTestBuild
 		}
 	} else if conf.WorkingDir == "" {
 		conf.WorkingDir = helpers.FilePathSeparator
+=======
+		doClean := true
+		tempDir, clean, err := htesting.CreateTempDir(hugofs.Os, "hugo-integration-test")
+		c.Assert(err, qt.IsNil)
+		conf.WorkingDir = filepath.Join(tempDir, conf.WorkingDir)
+		if doClean {
+			c.Cleanup(clean)
+		}
+>>>>>>> cb30cc82b (Improve content map, memory cache and dependency resolution)
 	}
 
 	return &IntegrationTestBuilder{
@@ -105,12 +124,15 @@ func (s *IntegrationTestBuilder) AssertLogContains(text string) {
 	s.Assert(s.logBuff.String(), qt.Contains, text)
 }
 
+<<<<<<< HEAD
 func (s *IntegrationTestBuilder) AssertLogMatches(expression string) {
 	s.Helper()
 	re := regexp.MustCompile(expression)
 	s.Assert(re.MatchString(s.logBuff.String()), qt.IsTrue, qt.Commentf(s.logBuff.String()))
 }
 
+=======
+>>>>>>> cb30cc82b (Improve content map, memory cache and dependency resolution)
 func (s *IntegrationTestBuilder) AssertBuildCountData(count int) {
 	s.Helper()
 	s.Assert(s.H.init.data.InitCount(), qt.Equals, count)
@@ -141,11 +163,16 @@ func (s *IntegrationTestBuilder) AssertFileContent(filename string, matches ...s
 			if match == "" || strings.HasPrefix(match, "#") {
 				continue
 			}
+<<<<<<< HEAD
 			s.Assert(content, qt.Contains, match, qt.Commentf(m))
+=======
+			s.Assert(content, qt.Contains, match, qt.Commentf(content))
+>>>>>>> cb30cc82b (Improve content map, memory cache and dependency resolution)
 		}
 	}
 }
 
+<<<<<<< HEAD
 func (s *IntegrationTestBuilder) AssertFileContentExact(filename string, matches ...string) {
 	s.Helper()
 	content := s.FileContent(filename)
@@ -154,6 +181,8 @@ func (s *IntegrationTestBuilder) AssertFileContentExact(filename string, matches
 	}
 }
 
+=======
+>>>>>>> cb30cc82b (Improve content map, memory cache and dependency resolution)
 func (s *IntegrationTestBuilder) AssertDestinationExists(filename string, b bool) {
 	checker := qt.IsTrue
 	if !b {
@@ -163,16 +192,26 @@ func (s *IntegrationTestBuilder) AssertDestinationExists(filename string, b bool
 }
 
 func (s *IntegrationTestBuilder) destinationExists(filename string) bool {
+<<<<<<< HEAD
 	b, err := helpers.Exists(filename, s.fs.PublishDir)
+=======
+	b, err := helpers.Exists(filename, s.fs.Destination)
+>>>>>>> cb30cc82b (Improve content map, memory cache and dependency resolution)
 	if err != nil {
 		panic(err)
 	}
 	return b
 }
 
+<<<<<<< HEAD
 func (s *IntegrationTestBuilder) AssertIsFileError(err error) herrors.FileError {
 	s.Assert(err, qt.ErrorAs, new(herrors.FileError))
 	return herrors.UnwrapFileError(err)
+=======
+func (s *IntegrationTestBuilder) AssertIsFileError(err error) {
+	var ferr *herrors.ErrorWithFileContext
+	s.Assert(err, qt.ErrorAs, &ferr)
+>>>>>>> cb30cc82b (Improve content map, memory cache and dependency resolution)
 }
 
 func (s *IntegrationTestBuilder) AssertRenderCountContent(count int) {
@@ -188,7 +227,11 @@ func (s *IntegrationTestBuilder) AssertRenderCountPage(count int) {
 func (s *IntegrationTestBuilder) Build() *IntegrationTestBuilder {
 	s.Helper()
 	_, err := s.BuildE()
+<<<<<<< HEAD
 	if s.Cfg.Verbose || err != nil {
+=======
+	if s.Cfg.Verbose {
+>>>>>>> cb30cc82b (Improve content map, memory cache and dependency resolution)
 		fmt.Println(s.logBuff.String())
 	}
 	s.Assert(err, qt.IsNil)
@@ -197,10 +240,14 @@ func (s *IntegrationTestBuilder) Build() *IntegrationTestBuilder {
 
 func (s *IntegrationTestBuilder) BuildE() (*IntegrationTestBuilder, error) {
 	s.Helper()
+<<<<<<< HEAD
 	if err := s.initBuilder(); err != nil {
 		return s, err
 	}
 
+=======
+	s.initBuilder()
+>>>>>>> cb30cc82b (Improve content map, memory cache and dependency resolution)
 	err := s.build(BuildCfg{})
 	return s, err
 }
@@ -215,6 +262,32 @@ type IntegrationTestDebugConfig struct {
 	PrefixPagemap       string
 }
 
+<<<<<<< HEAD
+=======
+func (s *IntegrationTestBuilder) Debug(cfg IntegrationTestDebugConfig) {
+	if cfg.PrefixDestinationFs == "" {
+		cfg.PrefixDestinationFs = "public"
+	}
+
+	out := cfg.Out
+	if out == nil {
+		out = os.Stdout
+	}
+
+	if cfg.PrintPagemap {
+		for _, site := range s.H.Sites {
+			fmt.Printf("Page Map %s:\n", site.Lang())
+			site.pageMap.Debug(cfg.PrefixPagemap, out)
+		}
+	}
+
+	if cfg.PrintDestinationFs {
+		fmt.Printf("Print destination Fs using prefix %s:\n", cfg.PrefixDestinationFs)
+		helpers.PrintFs(s.fs.Destination, cfg.PrefixDestinationFs, out)
+	}
+}
+
+>>>>>>> cb30cc82b (Improve content map, memory cache and dependency resolution)
 func (s *IntegrationTestBuilder) EditFileReplace(filename string, replacementFunc func(s string) string) *IntegrationTestBuilder {
 	absFilename := s.absFilename(filename)
 	b, err := afero.ReadFile(s.fs.Source, absFilename)
@@ -267,11 +340,22 @@ func (s *IntegrationTestBuilder) RenameFile(old, new string) *IntegrationTestBui
 
 func (s *IntegrationTestBuilder) FileContent(filename string) string {
 	s.Helper()
+<<<<<<< HEAD
 	return s.readWorkingDir(s, s.fs, filepath.FromSlash(filename))
 }
 
 func (s *IntegrationTestBuilder) initBuilder() error {
 	var initErr error
+=======
+	filename = filepath.FromSlash(filename)
+	if !strings.HasPrefix(filename, s.Cfg.WorkingDir) {
+		filename = filepath.Join(s.Cfg.WorkingDir, filename)
+	}
+	return s.readDestination(s, s.fs, filename)
+}
+
+func (s *IntegrationTestBuilder) initBuilder() {
+>>>>>>> cb30cc82b (Improve content map, memory cache and dependency resolution)
 	s.builderInit.Do(func() {
 		var afs afero.Fs
 		if s.Cfg.NeedsOsFS {
@@ -286,6 +370,7 @@ func (s *IntegrationTestBuilder) initBuilder() error {
 
 		logger := loggers.NewBasicLoggerForWriter(s.Cfg.LogLevel, &s.logBuff)
 
+<<<<<<< HEAD
 		isBinaryRe := regexp.MustCompile(`^(.*)(\.png|\.jpg)$`)
 
 		for _, f := range s.data.Files {
@@ -299,6 +384,14 @@ func (s *IntegrationTestBuilder) initBuilder() error {
 			}
 			s.Assert(afs.MkdirAll(filepath.Dir(filename), 0777), qt.IsNil)
 			s.Assert(afero.WriteFile(afs, filename, data, 0666), qt.IsNil)
+=======
+		fs := hugofs.NewFrom(afs, config.New())
+
+		for _, f := range s.data.Files {
+			filename := filepath.Join(s.Cfg.WorkingDir, f.Name)
+			s.Assert(afs.MkdirAll(filepath.Dir(filename), 0777), qt.IsNil)
+			s.Assert(afero.WriteFile(afs, filename, bytes.TrimSuffix(f.Data, []byte("\n")), 0666), qt.IsNil)
+>>>>>>> cb30cc82b (Improve content map, memory cache and dependency resolution)
 		}
 
 		cfg, _, err := LoadConfig(
@@ -318,6 +411,7 @@ func (s *IntegrationTestBuilder) initBuilder() error {
 
 		cfg.Set("workingDir", s.Cfg.WorkingDir)
 
+<<<<<<< HEAD
 		fs := hugofs.NewFrom(afs, cfg)
 
 		s.Assert(err, qt.IsNil)
@@ -328,6 +422,11 @@ func (s *IntegrationTestBuilder) initBuilder() error {
 			initErr = err
 			return
 		}
+=======
+		depsCfg := deps.DepsCfg{Cfg: cfg, Fs: fs, Running: s.Cfg.Running, Logger: logger}
+		sites, err := NewHugoSites(depsCfg)
+		s.Assert(err, qt.IsNil)
+>>>>>>> cb30cc82b (Improve content map, memory cache and dependency resolution)
 
 		s.H = sites
 		s.fs = fs
@@ -345,8 +444,11 @@ func (s *IntegrationTestBuilder) initBuilder() error {
 
 		}
 	})
+<<<<<<< HEAD
 
 	return initErr
+=======
+>>>>>>> cb30cc82b (Improve content map, memory cache and dependency resolution)
 }
 
 func (s *IntegrationTestBuilder) absFilename(filename string) string {
@@ -422,9 +524,15 @@ func (s *IntegrationTestBuilder) changeEvents() []fsnotify.Event {
 	return events
 }
 
+<<<<<<< HEAD
 func (s *IntegrationTestBuilder) readWorkingDir(t testing.TB, fs *hugofs.Fs, filename string) string {
 	t.Helper()
 	return s.readFileFromFs(t, fs.WorkingDirReadOnly, filename)
+=======
+func (s *IntegrationTestBuilder) readDestination(t testing.TB, fs *hugofs.Fs, filename string) string {
+	t.Helper()
+	return s.readFileFromFs(t, fs.Destination, filename)
+>>>>>>> cb30cc82b (Improve content map, memory cache and dependency resolution)
 }
 
 func (s *IntegrationTestBuilder) readFileFromFs(t testing.TB, fs afero.Fs, filename string) string {
@@ -481,9 +589,12 @@ type IntegrationTestConfig struct {
 	// Whether it needs the real file system (e.g. for js.Build tests).
 	NeedsOsFS bool
 
+<<<<<<< HEAD
 	// Do not remove the temp dir after the test.
 	PrintAndKeepTempDir bool
 
+=======
+>>>>>>> cb30cc82b (Improve content map, memory cache and dependency resolution)
 	// Whether to run npm install before Build.
 	NeedsNpmInstall bool
 

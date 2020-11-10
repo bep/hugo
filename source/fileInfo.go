@@ -14,15 +14,21 @@
 package source
 
 import (
+<<<<<<< HEAD
 	"fmt"
+=======
+	"errors"
+>>>>>>> cb30cc82b (Improve content map, memory cache and dependency resolution)
 	"path/filepath"
-	"strings"
 	"sync"
 
 	"github.com/gohugoio/hugo/common/paths"
 
+<<<<<<< HEAD
 	"github.com/gohugoio/hugo/hugofs/files"
 
+=======
+>>>>>>> cb30cc82b (Improve content map, memory cache and dependency resolution)
 	"github.com/gohugoio/hugo/common/hugio"
 
 	"github.com/gohugoio/hugo/hugofs"
@@ -30,6 +36,7 @@ import (
 	"github.com/gohugoio/hugo/helpers"
 )
 
+<<<<<<< HEAD
 // fileInfo implements the File interface.
 var (
 	_ File = (*FileInfo)(nil)
@@ -100,145 +107,130 @@ type FileWithoutOverlap interface {
 // FileInfo describes a source file.
 type FileInfo struct {
 
+=======
+// File describes a source file.
+type File struct {
+>>>>>>> cb30cc82b (Improve content map, memory cache and dependency resolution)
 	// Absolute filename to the file on disk.
 	filename string
 
-	sp *SourceSpec
-
-	fi hugofs.FileMetaInfo
-
-	// Derived from filename
-	ext  string // Extension without any "."
-	lang string
-
-	name string
-
-	dir                 string
-	relDir              string
-	relPath             string
-	baseName            string
-	translationBaseName string
-	contentBaseName     string
-	section             string
-	classifier          files.ContentClass
+	fim hugofs.FileMetaInfo
 
 	uniqueID string
-
 	lazyInit sync.Once
 }
 
 // Filename returns a file's absolute path and filename on disk.
-func (fi *FileInfo) Filename() string { return fi.filename }
+func (fi *File) Filename() string { return fi.fim.Meta().Filename }
 
 // Path gets the relative path including file name and extension.  The directory
 // is relative to the content root.
-func (fi *FileInfo) Path() string { return fi.relPath }
+func (fi *File) Path() string { return filepath.Join(fi.p().Dir()[1:], fi.p().Name()) }
 
 // Dir gets the name of the directory that contains this file.  The directory is
 // relative to the content root.
-func (fi *FileInfo) Dir() string { return fi.relDir }
+func (fi *File) Dir() string {
+	return fi.pathToDir(fi.p().Dir())
+}
 
 // Extension is an alias to Ext().
+<<<<<<< HEAD
 func (fi *FileInfo) Extension() string {
 	helpers.Deprecated(".File.Extension", "Use .File.Ext instead. ", false)
+=======
+func (fi *File) Extension() string {
+	helpers.Deprecated(".File.Extension()", "Use .File.Ext()", false)
+>>>>>>> cb30cc82b (Improve content map, memory cache and dependency resolution)
 	return fi.Ext()
 }
 
-// Ext returns a file's extension without the leading period (ie. "md").
-func (fi *FileInfo) Ext() string { return fi.ext }
+// Ext returns a file's extension without the leading period (e.g. "md").
+// Deprecated: Use Extension() instead.
+func (fi *File) Ext() string { return fi.p().Ext() }
 
-// Lang returns a file's language (ie. "sv").
-func (fi *FileInfo) Lang() string { return fi.lang }
+// Lang returns a file's language (e.g. "sv").
+func (fi *File) Lang() string { return fi.p().Lang() }
 
-// LogicalName returns a file's name and extension (ie. "page.sv.md").
-func (fi *FileInfo) LogicalName() string { return fi.name }
+// LogicalName returns a file's name and extension (e.g. "page.sv.md").
+func (fi *File) LogicalName() string {
+	return fi.p().Name()
+}
 
-// BaseFileName returns a file's name without extension (ie. "page.sv").
-func (fi *FileInfo) BaseFileName() string { return fi.baseName }
+// BaseFileName returns a file's name without extension (e.g. "page.sv").
+func (fi *File) BaseFileName() string {
+	return fi.p().NameNoExt()
+}
 
 // TranslationBaseName returns a file's translation base name without the
-// language segment (ie. "page").
-func (fi *FileInfo) TranslationBaseName() string { return fi.translationBaseName }
+// language segment (e.g. "page").
+func (fi *File) TranslationBaseName() string { return fi.p().NameNoIdentifier() }
 
 // ContentBaseName is a either TranslationBaseName or name of containing folder
-// if file is a leaf bundle.
-func (fi *FileInfo) ContentBaseName() string {
-	fi.init()
-	return fi.contentBaseName
+// if file is a bundle.
+func (fi *File) ContentBaseName() string {
+	return fi.p().BaseNameNoIdentifier()
 }
 
 // Section returns a file's section.
-func (fi *FileInfo) Section() string {
-	fi.init()
-	return fi.section
+func (fi *File) Section() string {
+	return fi.p().Section()
 }
 
 // UniqueID returns a file's unique, MD5 hash identifier.
-func (fi *FileInfo) UniqueID() string {
+func (fi *File) UniqueID() string {
 	fi.init()
 	return fi.uniqueID
 }
 
 // FileInfo returns a file's underlying os.FileInfo.
-func (fi *FileInfo) FileInfo() hugofs.FileMetaInfo { return fi.fi }
+func (fi *File) FileInfo() hugofs.FileMetaInfo { return fi.fim }
 
-func (fi *FileInfo) String() string { return fi.BaseFileName() }
+func (fi *File) String() string { return fi.BaseFileName() }
 
 // Open implements ReadableFile.
-func (fi *FileInfo) Open() (hugio.ReadSeekCloser, error) {
-	f, err := fi.fi.Meta().Open()
+func (fi *File) Open() (hugio.ReadSeekCloser, error) {
+	f, err := fi.fim.Meta().Open()
 
 	return f, err
 }
 
-func (fi *FileInfo) IsZero() bool {
+func (fi *File) IsZero() bool {
 	return fi == nil
 }
 
 // We create a lot of these FileInfo objects, but there are parts of it used only
 // in some cases that is slightly expensive to construct.
-func (fi *FileInfo) init() {
+func (fi *File) init() {
 	fi.lazyInit.Do(func() {
-		relDir := strings.Trim(fi.relDir, helpers.FilePathSeparator)
-		parts := strings.Split(relDir, helpers.FilePathSeparator)
-		var section string
-		if (fi.classifier != files.ContentClassLeaf && len(parts) == 1) || len(parts) > 1 {
-			section = parts[0]
-		}
-		fi.section = section
-
-		if fi.classifier.IsBundle() && len(parts) > 0 {
-			fi.contentBaseName = parts[len(parts)-1]
-		} else {
-			fi.contentBaseName = fi.translationBaseName
-		}
-
-		fi.uniqueID = helpers.MD5String(filepath.ToSlash(fi.relPath))
+		fi.uniqueID = helpers.MD5String(filepath.ToSlash(fi.Path()))
 	})
 }
 
-// NewTestFile creates a partially filled File used in unit tests.
-// TODO(bep) improve this package
-func NewTestFile(filename string) *FileInfo {
-	base := filepath.Base(filepath.Dir(filename))
-	return &FileInfo{
-		filename:            filename,
-		translationBaseName: base,
+func (fi *File) pathToDir(s string) string {
+	if s == "" {
+		return s
 	}
+	return filepath.FromSlash(s[1:] + "/")
 }
 
-func (sp *SourceSpec) NewFileInfoFrom(path, filename string) (*FileInfo, error) {
+func (fi *File) p() *paths.Path {
+	return fi.fim.Meta().PathInfo
+}
+
+func NewFileInfoFrom(path, filename string) (*File, error) {
 	meta := &hugofs.FileMeta{
 		Filename: filename,
 		Path:     path,
+		PathInfo: paths.Parse(filepath.ToSlash(path)),
 	}
 
-	return sp.NewFileInfo(hugofs.NewFileMetaInfo(nil, meta))
+	return NewFileInfo(hugofs.NewFileMetaInfo(nil, meta))
 }
 
-func (sp *SourceSpec) NewFileInfo(fi hugofs.FileMetaInfo) (*FileInfo, error) {
+func NewFileInfo(fi hugofs.FileMetaInfo) (*File, error) {
 	m := fi.Meta()
 
+<<<<<<< HEAD
 	filename := m.Filename
 	relPath := m.Path
 
@@ -290,6 +282,15 @@ func (sp *SourceSpec) NewFileInfo(fi hugofs.FileMetaInfo) (*FileInfo, error) {
 		baseName:            baseName, // BaseFileName()
 		translationBaseName: translationBaseName,
 		classifier:          m.Classifier,
+=======
+	if m.PathInfo == nil {
+		return nil, errors.New("no path info")
+	}
+
+	f := &File{
+		filename: m.Filename,
+		fim:      fi,
+>>>>>>> cb30cc82b (Improve content map, memory cache and dependency resolution)
 	}
 
 	return f, nil

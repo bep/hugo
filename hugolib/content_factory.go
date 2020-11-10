@@ -14,14 +14,22 @@
 package hugolib
 
 import (
+<<<<<<< HEAD
 	"fmt"
+=======
+	"context"
+>>>>>>> cb30cc82b (Improve content map, memory cache and dependency resolution)
 	"io"
 	"path/filepath"
 	"strings"
 	"time"
 
+<<<<<<< HEAD
 	"github.com/gohugoio/hugo/common/htime"
 	"github.com/gohugoio/hugo/helpers"
+=======
+	"github.com/gohugoio/hugo/common/paths"
+>>>>>>> cb30cc82b (Improve content map, memory cache and dependency resolution)
 
 	"github.com/gohugoio/hugo/source"
 
@@ -40,9 +48,14 @@ type ContentFactory struct {
 	shortcodeReplacerPost *strings.Replacer
 }
 
+<<<<<<< HEAD
 // ApplyArchetypeFilename archetypeFilename to w as a template using the given Page p as the foundation for the data context.
 func (f ContentFactory) ApplyArchetypeFilename(w io.Writer, p page.Page, archetypeKind, archetypeFilename string) error {
 
+=======
+// AppplyArchetypeFilename archetypeFilename to w as a template using the given Page p as the foundation for the data context.
+func (f ContentFactory) AppplyArchetypeFilename(w io.Writer, p page.Page, archetypeKind, archetypeFilename string) error {
+>>>>>>> cb30cc82b (Improve content map, memory cache and dependency resolution)
 	fi, err := f.h.SourceFilesystems.Archetypes.Fs.Stat(archetypeFilename)
 	if err != nil {
 		return err
@@ -54,12 +67,19 @@ func (f ContentFactory) ApplyArchetypeFilename(w io.Writer, p page.Page, archety
 
 	templateSource, err := afero.ReadFile(f.h.SourceFilesystems.Archetypes.Fs, archetypeFilename)
 	if err != nil {
+<<<<<<< HEAD
 		return fmt.Errorf("failed to read archetype file %q: %s: %w", archetypeFilename, err, err)
 
 	}
 
 	return f.ApplyArchetypeTemplate(w, p, archetypeKind, string(templateSource))
 
+=======
+		return errors.Wrapf(err, "failed to read archetype file %q: %s", archetypeFilename, err)
+	}
+
+	return f.AppplyArchetypeTemplate(w, p, archetypeKind, string(templateSource))
+>>>>>>> cb30cc82b (Improve content map, memory cache and dependency resolution)
 }
 
 // ApplyArchetypeTemplate templateSource to w as a template using the given Page p as the foundation for the data context.
@@ -83,7 +103,7 @@ func (f ContentFactory) ApplyArchetypeTemplate(w io.Writer, p page.Page, archety
 		return fmt.Errorf("failed to parse archetype template: %s: %w", err, err)
 	}
 
-	result, err := executeToString(ps.s.Tmpl(), templ, d)
+	result, err := executeToString(context.Background(), ps.s.Tmpl(), templ, d)
 	if err != nil {
 		return fmt.Errorf("failed to execute archetype template: %s: %w", err, err)
 	}
@@ -91,7 +111,6 @@ func (f ContentFactory) ApplyArchetypeTemplate(w io.Writer, p page.Page, archety
 	_, err = io.WriteString(w, f.shortcodeReplacerPost.Replace(result))
 
 	return err
-
 }
 
 func (f ContentFactory) SectionFromFilename(filename string) (string, error) {
@@ -100,12 +119,7 @@ func (f ContentFactory) SectionFromFilename(filename string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-
-	parts := strings.Split(helpers.ToSlashTrimLeading(rel), "/")
-	if len(parts) < 2 {
-		return "", nil
-	}
-	return parts[0], nil
+	return paths.Parse(filepath.ToSlash(rel)).Section(), nil
 }
 
 // CreateContentPlaceHolder creates a content placeholder file inside the
@@ -165,7 +179,7 @@ type archetypeFileData struct {
 
 	// File is the same as Page.File, embedded here for historic reasons.
 	// TODO(bep) make this a method.
-	source.File
+	*source.File
 }
 
 func (f *archetypeFileData) Site() page.Site {

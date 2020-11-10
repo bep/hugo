@@ -50,6 +50,9 @@ type pageLexer struct {
 
 	// items delivered to client
 	items Items
+
+	// error delivered to the client
+	err error
 }
 
 // Implement the Result interface
@@ -205,6 +208,13 @@ var lf = []byte("\n")
 // nil terminates the parser
 func (l *pageLexer) errorf(format string, args ...any) stateFunc {
 	l.items = append(l.items, Item{tError, l.start, []byte(fmt.Sprintf(format, args...)), true})
+	return nil
+}
+
+// documentError can be used to signal a fatal error in the lexing process.
+// nil terminates the parser
+func (l *pageLexer) documentError(err error) stateFunc {
+	l.err = err
 	return nil
 }
 

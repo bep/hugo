@@ -16,6 +16,10 @@ package babel_test
 import (
 	"testing"
 
+<<<<<<< HEAD
+=======
+	qt "github.com/frankban/quicktest"
+>>>>>>> cb30cc82b (Improve content map, memory cache and dependency resolution)
 	jww "github.com/spf13/jwalterweatherman"
 
 	"github.com/gohugoio/hugo/htesting"
@@ -27,6 +31,11 @@ func TestTransformBabel(t *testing.T) {
 		t.Skip("Skip long running test when running locally")
 	}
 
+<<<<<<< HEAD
+=======
+	c := qt.New(t)
+
+>>>>>>> cb30cc82b (Improve content map, memory cache and dependency resolution)
 	files := `
 -- assets/js/main.js --
 /* A Car */
@@ -78,7 +87,11 @@ Transpiled3: {{ $transpiled.Permalink }}
 
 	b := hugolib.NewIntegrationTestBuilder(
 		hugolib.IntegrationTestConfig{
+<<<<<<< HEAD
 			T:               t,
+=======
+			T:               c,
+>>>>>>> cb30cc82b (Improve content map, memory cache and dependency resolution)
 			TxtarString:     files,
 			NeedsOsFS:       true,
 			NeedsNpmInstall: true,

@@ -14,6 +14,7 @@
 package dartsass_test
 
 import (
+<<<<<<< HEAD
 	"strings"
 	"testing"
 
@@ -21,6 +22,14 @@ import (
 	"github.com/gohugoio/hugo/hugolib"
 	"github.com/gohugoio/hugo/resources/resource_transformers/tocss/dartsass"
 	jww "github.com/spf13/jwalterweatherman"
+=======
+	"testing"
+
+	qt "github.com/frankban/quicktest"
+
+	"github.com/gohugoio/hugo/hugolib"
+	"github.com/gohugoio/hugo/resources/resource_transformers/tocss/dartsass"
+>>>>>>> cb30cc82b (Improve content map, memory cache and dependency resolution)
 )
 
 func TestTransformIncludePaths(t *testing.T) {
@@ -28,6 +37,11 @@ func TestTransformIncludePaths(t *testing.T) {
 		t.Skip()
 	}
 
+<<<<<<< HEAD
+=======
+	c := qt.New(t)
+
+>>>>>>> cb30cc82b (Improve content map, memory cache and dependency resolution)
 	files := `
 -- assets/scss/main.scss --
 @import "moo";
@@ -46,7 +60,11 @@ T1: {{ $r.Content }}
 
 	b := hugolib.NewIntegrationTestBuilder(
 		hugolib.IntegrationTestConfig{
+<<<<<<< HEAD
 			T:           t,
+=======
+			T:           c,
+>>>>>>> cb30cc82b (Improve content map, memory cache and dependency resolution)
 			TxtarString: files,
 			NeedsOsFS:   true,
 		}).Build()
@@ -58,6 +76,10 @@ func TestTransformImportRegularCSS(t *testing.T) {
 	if !dartsass.Supports() {
 		t.Skip()
 	}
+<<<<<<< HEAD
+=======
+	c := qt.New(t)
+>>>>>>> cb30cc82b (Improve content map, memory cache and dependency resolution)
 
 	files := `
 -- assets/scss/_moo.scss --
@@ -86,7 +108,11 @@ T1: {{ $r.Content | safeHTML }}
 
 	b := hugolib.NewIntegrationTestBuilder(
 		hugolib.IntegrationTestConfig{
+<<<<<<< HEAD
 			T:           t,
+=======
+			T:           c,
+>>>>>>> cb30cc82b (Improve content map, memory cache and dependency resolution)
 			TxtarString: files,
 			NeedsOsFS:   true,
 		},
@@ -112,6 +138,11 @@ func TestTransformThemeOverrides(t *testing.T) {
 		t.Skip()
 	}
 
+<<<<<<< HEAD
+=======
+	c := qt.New(t)
+
+>>>>>>> cb30cc82b (Improve content map, memory cache and dependency resolution)
 	files := `
 -- assets/scss/components/_boo.scss --
 $boolor: green;
@@ -159,7 +190,11 @@ zoo {
 
 	b := hugolib.NewIntegrationTestBuilder(
 		hugolib.IntegrationTestConfig{
+<<<<<<< HEAD
 			T:           t,
+=======
+			T:           c,
+>>>>>>> cb30cc82b (Improve content map, memory cache and dependency resolution)
 			TxtarString: files,
 			NeedsOsFS:   true,
 		},
@@ -167,6 +202,7 @@ zoo {
 
 	b.AssertFileContent("public/index.html", `T1: moo{color:#ccc}boo{color:green}zoo{color:pink}`)
 }
+<<<<<<< HEAD
 
 func TestTransformLogging(t *testing.T) {
 	if !dartsass.Supports() {
@@ -271,3 +307,5 @@ T1: {{ $r.Content }}
 	})
 
 }
+=======
+>>>>>>> cb30cc82b (Improve content map, memory cache and dependency resolution)

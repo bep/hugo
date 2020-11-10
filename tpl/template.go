@@ -23,6 +23,7 @@ import (
 
 	bp "github.com/gohugoio/hugo/bufferpool"
 
+	"github.com/gohugoio/hugo/identity"
 	"github.com/gohugoio/hugo/output"
 
 	htmltemplate "github.com/gohugoio/hugo/tpl/internal/go_templates/htmltemplate"
@@ -58,8 +59,13 @@ type UnusedTemplatesProvider interface {
 // TemplateHandler finds and executes templates.
 type TemplateHandler interface {
 	TemplateFinder
+<<<<<<< HEAD
 	Execute(t Template, wr io.Writer, data any) error
 	ExecuteWithContext(ctx context.Context, t Template, wr io.Writer, data any) error
+=======
+	Execute(t Template, wr io.Writer, data interface{}) error
+	ExecuteWithContext(ctx context.Context, t Template, wr io.Writer, data interface{}) error
+>>>>>>> cb30cc82b (Improve content map, memory cache and dependency resolution)
 	LookupLayout(d output.LayoutDescriptor, f output.Format) (Template, bool, error)
 	HasTemplate(name string) bool
 }
@@ -152,6 +158,7 @@ type TemplateFuncGetter interface {
 	GetFunc(name string) (reflect.Value, bool)
 }
 
+<<<<<<< HEAD
 // GetDataFromContext returns the template data context (usually .Page) from ctx if set.
 // NOte: This is not fully implemented yet.
 func GetDataFromContext(ctx context.Context) any {
@@ -208,4 +215,42 @@ func StripHTML(s string) string {
 	}
 
 	return s
+=======
+// NewTemplateIdentity creates a new identity.Identity based on the given tpl.
+func NewTemplateIdentity(tpl Template) *TemplateIdentity {
+	return &TemplateIdentity{
+		tpl: tpl,
+	}
+}
+
+// TemplateIdentity wraps a Template and implemnents identity.Identity.
+type TemplateIdentity struct {
+	tpl Template
+}
+
+func (id *TemplateIdentity) IdentifierBase() interface{} {
+	return id.tpl.Name()
+}
+
+// GetDataFromContext returns the template data context (usually .Page) from ctx if set.
+func GetDataFromContext(ctx context.Context) interface{} {
+	return ctx.Value(texttemplate.DataContextKey)
+}
+
+// AddIdentiesToDataContext adds the identities found in v to the
+// DependencyManager found in ctx.
+func AddIdentiesToDataContext(ctx context.Context, v interface{}) {
+	if v == nil {
+		return
+	}
+	if dot := GetDataFromContext(ctx); dot != nil {
+		if dp, ok := dot.(identity.DependencyManagerProvider); ok {
+			idm := dp.GetDependencyManager()
+			identity.WalkIdentities(v, func(id identity.Identity) bool {
+				idm.AddIdentity(id)
+				return false
+			})
+		}
+	}
+>>>>>>> cb30cc82b (Improve content map, memory cache and dependency resolution)
 }

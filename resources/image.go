@@ -26,7 +26,6 @@ import (
 	"io/ioutil"
 	"os"
 	"path"
-	"path/filepath"
 	"strings"
 	"sync"
 
@@ -227,7 +226,6 @@ func (i *imageResource) Fill(spec string) (images.ImageResource, error) {
 	img, err := i.doWithImageConfig(conf, func(src image.Image) (image.Image, error) {
 		return i.Proc.ApplyFiltersFromConfig(src, conf)
 	})
-
 	if err != nil {
 		return nil, err
 	}
@@ -403,10 +401,14 @@ func (i *imageResource) getImageMetaCacheTargetPath() string {
 	cfgHash := i.getSpec().imaging.Cfg.CfgHash
 	df := i.getResourcePaths().relTargetDirFile
 	if fi := i.getFileInfo(); fi != nil {
-		df.dir = filepath.Dir(fi.Meta().Path)
+		if fi.Meta().PathInfo == nil {
+			panic("no path info for " + fi.Meta().Filename)
+		}
+		// TODO1
+		df.dir = fi.Meta().PathInfo.Dir()
 	}
 	p1, _ := paths.FileAndExt(df.file)
-	h, _ := i.hash()
+	h := i.hash()
 	idStr := helpers.HashString(h, i.size(), imageMetaVersionNumber, cfgHash)
 	p := path.Join(df.dir, fmt.Sprintf("%s_%s.json", p1, idStr))
 	return p
@@ -418,7 +420,7 @@ func (i *imageResource) relTargetPathFromConfig(conf images.ImageConfig) dirFile
 		p2 = conf.TargetFormat.DefaultExtension()
 	}
 
-	h, _ := i.hash()
+	h := i.hash()
 	idStr := fmt.Sprintf("_hu%s_%d", h, i.size())
 
 	// Do not change for no good reason.
