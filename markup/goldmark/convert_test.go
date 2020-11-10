@@ -223,7 +223,7 @@ func TestConvertAttributes(t *testing.T) {
 		name       string
 		withConfig func(conf *markup_config.Config)
 		input      string
-		expect     interface{}
+		expect     any
 	}{
 		{
 			"Title",
@@ -263,8 +263,10 @@ func TestConvertAttributes(t *testing.T) {
 				conf.Highlight.CodeFences = true
 			},
 			"```bash {linenos=table .myclass id=\"myid\"}\necho 'foo';\n````\n{ .adfadf }",
-			[]string{"div class=\"highlight myclass\" id=\"myid\"><div s",
-				"table style"},
+			[]string{
+				"div class=\"highlight myclass\" id=\"myid\"><div s",
+				"table style",
+			},
 		},
 		{
 			"Paragraph",
@@ -326,10 +328,8 @@ func TestConvertAttributes(t *testing.T) {
 			for _, s := range cast.ToStringSlice(test.expect) {
 				c.Assert(got, qt.Contains, s)
 			}
-
 		})
 	}
-
 }
 
 func TestConvertIssues(t *testing.T) {

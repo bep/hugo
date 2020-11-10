@@ -8,6 +8,7 @@ import (
 	"github.com/pkg/errors"
 
 	"github.com/gohugoio/hugo/cache/filecache"
+	"github.com/gohugoio/hugo/cache/memcache"
 	"github.com/gohugoio/hugo/common/hexec"
 	"github.com/gohugoio/hugo/common/loggers"
 	"github.com/gohugoio/hugo/config"
@@ -64,11 +65,14 @@ type Deps struct {
 	// The configuration to use
 	Cfg config.Provider `json:"-"`
 
-	// The file cache to use.
+	// The file caches to use.
 	FileCaches filecache.Caches
 
+	// The memory cache to use.
+	MemCache *memcache.Cache
+
 	// The translation func to use
-	Translate func(translationID string, templateData interface{}) string `json:"-"`
+	Translate func(translationID string, templateData any) string `json:"-"`
 
 	// The language in use. TODO(bep) consolidate with site
 	Language *langs.Language
@@ -83,7 +87,7 @@ type Deps struct {
 	WithTemplate     func(templ tpl.TemplateManager) error `json:"-"`
 
 	// Used in tests
-	OverloadedTemplateFuncs map[string]interface{}
+	OverloadedTemplateFuncs map[string]any
 
 	translationProvider ResourceProvider
 
@@ -164,6 +168,13 @@ func (b *Listeners) Notify() {
 type ResourceProvider interface {
 	Update(deps *Deps) error
 	Clone(deps *Deps) error
+}
+
+// Stop stops all running caches etc.
+func (d *Deps) Stop() {
+	if d.MemCache != nil {
+		d.MemCache.Stop()
+	}
 }
 
 func (d *Deps) Tmpl() tpl.TemplateHandler {
@@ -249,11 +260,12 @@ func New(cfg DepsCfg) (*Deps, error) {
 	if err != nil {
 		return nil, errors.WithMessage(err, "failed to create file caches from configuration")
 	}
+	memCache := memcache.New(memcache.Config{Running: cfg.Running})
 
 	errorHandler := &globalErrHandler{}
 	buildState := &BuildState{}
 
-	resourceSpec, err := resources.NewSpec(ps, fileCaches, buildState, logger, errorHandler, execHelper, cfg.OutputFormats, cfg.MediaTypes)
+	resourceSpec, err := resources.NewSpec(ps, fileCaches, memCache, buildState, logger, errorHandler, execHelper, cfg.OutputFormats, cfg.MediaTypes)
 	if err != nil {
 		return nil, err
 	}
@@ -271,9 +283,10 @@ func New(cfg DepsCfg) (*Deps, error) {
 	}
 
 	ignoreErrors := cast.ToStringSlice(cfg.Cfg.Get("ignoreErrors"))
-	ignorableLogger := loggers.NewIgnorableLogger(logger, ignoreErrors...)
+	ignoreWarnings := cast.ToStringSlice(cfg.Cfg.Get("ignoreWarnings"))
 
 	logDistinct := helpers.NewDistinctLogger(logger)
+	ignorableLogger := loggers.NewIgnorableLogger(logDistinct, ignoreErrors, ignoreWarnings)
 
 	d := &Deps{
 		Fs:                      fs,
@@ -292,6 +305,7 @@ func New(cfg DepsCfg) (*Deps, error) {
 		Language:                cfg.Language,
 		Site:                    cfg.Site,
 		FileCaches:              fileCaches,
+		MemCache:                memCache,
 		BuildStartListeners:     &Listeners{},
 		BuildClosers:            &Closers{},
 		BuildState:              buildState,
@@ -333,7 +347,7 @@ func (d Deps) ForLanguage(cfg DepsCfg, onCreated func(d *Deps) error) (*Deps, er
 	// TODO(bep) clean up these inits.
 	resourceCache := d.ResourceSpec.ResourceCache
 	postBuildAssets := d.ResourceSpec.PostBuildAssets
-	d.ResourceSpec, err = resources.NewSpec(d.PathSpec, d.ResourceSpec.FileCaches, d.BuildState, d.Log, d.globalErrHandler, d.ExecHelper, cfg.OutputFormats, cfg.MediaTypes)
+	d.ResourceSpec, err = resources.NewSpec(d.PathSpec, d.ResourceSpec.FileCaches, d.MemCache, d.BuildState, d.Log, d.globalErrHandler, d.ExecHelper, cfg.OutputFormats, cfg.MediaTypes)
 	if err != nil {
 		return nil, err
 	}
@@ -392,7 +406,7 @@ type DepsCfg struct {
 	TemplateProvider ResourceProvider
 	WithTemplate     func(templ tpl.TemplateManager) error
 	// Used in tests
-	OverloadedTemplateFuncs map[string]interface{}
+	OverloadedTemplateFuncs map[string]any
 
 	// i18n handling.
 	TranslationProvider ResourceProvider
@@ -408,10 +422,6 @@ type BuildState struct {
 
 func (b *BuildState) Incr() int {
 	return int(atomic.AddUint64(&b.counter, uint64(1)))
-}
-
-func NewBuildState() BuildState {
-	return BuildState{}
 }
 
 type Closer interface {

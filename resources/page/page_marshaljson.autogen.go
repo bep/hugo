@@ -69,7 +69,7 @@ func MarshalPageToJSON(p Page) ([]byte, error) {
 	linkTitle := p.LinkTitle()
 	isNode := p.IsNode()
 	isPage := p.IsPage()
-	path := p.Pathc()
+	path := p.Path()
 	slug := p.Slug()
 	lang := p.Lang()
 	isSection := p.IsSection()
@@ -89,10 +89,11 @@ func MarshalPageToJSON(p Page) ([]byte, error) {
 	isTranslated := p.IsTranslated()
 	allTranslations := p.AllTranslations()
 	translations := p.Translations()
-	getIdentity := p.GetIdentity()
+	identifierBase := p.IdentifierBase()
+	getDependencyManager := p.GetDependencyManager()
 
 	s := struct {
-		Content                  interface{}
+		Content                  any
 		Plain                    string
 		PlainWords               []string
 		Summary                  template.HTML
@@ -110,7 +111,7 @@ func MarshalPageToJSON(p Page) ([]byte, error) {
 		Name                     string
 		Title                    string
 		Params                   maps.Params
-		Data                     interface{}
+		Data                     any
 		Date                     time.Time
 		Lastmod                  time.Time
 		PublishDate              time.Time
@@ -137,7 +138,7 @@ func MarshalPageToJSON(p Page) ([]byte, error) {
 		Type                     string
 		Weight                   int
 		Language                 *langs.Language
-		File                     source.File
+		File                     *source.File
 		GitInfo                  *gitmap.GitInfo
 		OutputFormats            OutputFormats
 		AlternativeOutputFormats OutputFormats
@@ -146,7 +147,8 @@ func MarshalPageToJSON(p Page) ([]byte, error) {
 		IsTranslated             bool
 		AllTranslations          Pages
 		Translations             Pages
-		GetIdentity              identity.Identity
+		IdentifierBase           any
+		GetDependencyManager     identity.Manager
 	}{
 		Content:                  content,
 		Plain:                    plain,
@@ -202,7 +204,8 @@ func MarshalPageToJSON(p Page) ([]byte, error) {
 		IsTranslated:             isTranslated,
 		AllTranslations:          allTranslations,
 		Translations:             translations,
-		GetIdentity:              getIdentity,
+		IdentifierBase:           identifierBase,
+		GetDependencyManager:     getDependencyManager,
 	}
 
 	return json.Marshal(&s)

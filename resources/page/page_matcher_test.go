@@ -54,8 +54,8 @@ func TestPageMatcher(t *testing.T) {
 
 	c.Run("Decode", func(c *qt.C) {
 		var v PageMatcher
-		c.Assert(DecodePageMatcher(map[string]interface{}{"kind": "foo"}, &v), qt.Not((qt.IsNil)))
-		c.Assert(DecodePageMatcher(map[string]interface{}{"kind": "home", "path": filepath.FromSlash("/a/b/**")}, &v), qt.IsNil)
+		c.Assert(DecodePageMatcher(map[string]any{"kind": "foo"}, &v), qt.Not((qt.IsNil)))
+		c.Assert(DecodePageMatcher(map[string]any{"kind": "home", "path": filepath.FromSlash("/a/b/**")}, &v), qt.IsNil)
 		c.Assert(v, qt.Equals, PageMatcher{Kind: "home", Path: "/a/b/**"})
 	})
 }

@@ -3,9 +3,9 @@ package lang
 import (
 	"testing"
 
-	translators "github.com/gohugoio/localescompressed"
 	qt "github.com/frankban/quicktest"
 	"github.com/gohugoio/hugo/deps"
+	translators "github.com/gohugoio/localescompressed"
 )
 
 func TestNumFmt(t *testing.T) {

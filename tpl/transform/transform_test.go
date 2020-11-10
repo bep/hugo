@@ -17,6 +17,7 @@ import (
 	"html/template"
 	"testing"
 
+	"github.com/gohugoio/hugo/cache/memcache"
 	"github.com/gohugoio/hugo/common/loggers"
 	"github.com/spf13/afero"
 
@@ -38,8 +39,8 @@ func TestEmojify(t *testing.T) {
 	ns := New(newDeps(v))
 
 	for _, test := range []struct {
-		s      interface{}
-		expect interface{}
+		s      any
+		expect any
 	}{
 		{":notamoji:", template.HTML(":notamoji:")},
 		{"I :heart: Hugo", template.HTML("I ❤️ Hugo")},
@@ -68,10 +69,10 @@ func TestHighlight(t *testing.T) {
 	ns := New(newDeps(v))
 
 	for _, test := range []struct {
-		s      interface{}
+		s      any
 		lang   string
-		opts   interface{}
-		expect interface{}
+		opts   any
+		expect any
 	}{
 		{"func boo() {}", "go", "", "boo"},
 		{"func boo() {}", "go", nil, "boo"},
@@ -101,8 +102,8 @@ func TestHTMLEscape(t *testing.T) {
 	ns := New(newDeps(v))
 
 	for _, test := range []struct {
-		s      interface{}
-		expect interface{}
+		s      any
+		expect any
 	}{
 		{`"Foo & Bar's Diner" <y@z>`, `&#34;Foo &amp; Bar&#39;s Diner&#34; &lt;y@z&gt;`},
 		{"Hugo & Caddy > Wordpress & Apache", "Hugo &amp; Caddy &gt; Wordpress &amp; Apache"},
@@ -131,8 +132,8 @@ func TestHTMLUnescape(t *testing.T) {
 	ns := New(newDeps(v))
 
 	for _, test := range []struct {
-		s      interface{}
-		expect interface{}
+		s      any
+		expect any
 	}{
 		{`&quot;Foo &amp; Bar&#39;s Diner&quot; &lt;y@z&gt;`, `"Foo & Bar's Diner" <y@z>`},
 		{"Hugo &amp; Caddy &gt; Wordpress &amp; Apache", "Hugo & Caddy > Wordpress & Apache"},
@@ -161,8 +162,8 @@ func TestMarkdownify(t *testing.T) {
 	ns := New(newDeps(v))
 
 	for _, test := range []struct {
-		s      interface{}
-		expect interface{}
+		s      any
+		expect any
 	}{
 		{"Hello **World!**", template.HTML("Hello <strong>World!</strong>")},
 		{[]byte("Hello Bytes **World!**"), template.HTML("Hello Bytes <strong>World!</strong>")},
@@ -215,8 +216,8 @@ func TestPlainify(t *testing.T) {
 	ns := New(newDeps(v))
 
 	for _, test := range []struct {
-		s      interface{}
-		expect interface{}
+		s      any
+		expect any
 	}{
 		{"<em>Note:</em> blah <b>blah</b>", "Note: blah blah"},
 		// errors
@@ -249,6 +250,7 @@ func newDeps(cfg config.Provider) *deps.Deps {
 	return &deps.Deps{
 		Cfg:         cfg,
 		Fs:          hugofs.NewMem(l),
+		MemCache:    memcache.New(memcache.Config{}),
 		ContentSpec: cs,
 	}
 }

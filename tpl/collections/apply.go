@@ -23,9 +23,9 @@ import (
 )
 
 // Apply takes a map, array, or slice and returns a new slice with the function fname applied over it.
-func (ns *Namespace) Apply(seq interface{}, fname string, args ...interface{}) (interface{}, error) {
+func (ns *Namespace) Apply(seq any, fname string, args ...any) (any, error) {
 	if seq == nil {
-		return make([]interface{}, 0), nil
+		return make([]any, 0), nil
 	}
 
 	if fname == "apply" {
@@ -47,7 +47,7 @@ func (ns *Namespace) Apply(seq interface{}, fname string, args ...interface{}) (
 
 	switch seqv.Kind() {
 	case reflect.Array, reflect.Slice:
-		r := make([]interface{}, seqv.Len())
+		r := make([]any, seqv.Len())
 		for i := 0; i < seqv.Len(); i++ {
 			vv := seqv.Index(i)
 
@@ -65,7 +65,7 @@ func (ns *Namespace) Apply(seq interface{}, fname string, args ...interface{}) (
 	}
 }
 
-func applyFnToThis(fn, this reflect.Value, args ...interface{}) (reflect.Value, error) {
+func applyFnToThis(fn, this reflect.Value, args ...any) (reflect.Value, error) {
 	n := make([]reflect.Value, len(args))
 	for i, arg := range args {
 		if arg == "." {

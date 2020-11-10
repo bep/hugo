@@ -50,7 +50,7 @@ type Namespace struct {
 
 // Getenv retrieves the value of the environment variable named by the key.
 // It returns the value, which will be empty if the variable is not present.
-func (ns *Namespace) Getenv(key interface{}) (string, error) {
+func (ns *Namespace) Getenv(key any) (string, error) {
 	skey, err := cast.ToStringE(key)
 	if err != nil {
 		return "", nil
@@ -81,7 +81,7 @@ func readFile(fs afero.Fs, filename string) (string, error) {
 // ReadFile reads the file named by filename relative to the configured WorkingDir.
 // It returns the contents as a string.
 // There is an upper size limit set at 1 megabytes.
-func (ns *Namespace) ReadFile(i interface{}) (string, error) {
+func (ns *Namespace) ReadFile(i any) (string, error) {
 	s, err := cast.ToStringE(i)
 	if err != nil {
 		return "", err
@@ -95,7 +95,7 @@ func (ns *Namespace) ReadFile(i interface{}) (string, error) {
 }
 
 // ReadDir lists the directory contents relative to the configured WorkingDir.
-func (ns *Namespace) ReadDir(i interface{}) ([]_os.FileInfo, error) {
+func (ns *Namespace) ReadDir(i any) ([]_os.FileInfo, error) {
 	path, err := cast.ToStringE(i)
 	if err != nil {
 		return nil, err
@@ -110,7 +110,7 @@ func (ns *Namespace) ReadDir(i interface{}) ([]_os.FileInfo, error) {
 }
 
 // FileExists checks whether a file exists under the given path.
-func (ns *Namespace) FileExists(i interface{}) (bool, error) {
+func (ns *Namespace) FileExists(i any) (bool, error) {
 	path, err := cast.ToStringE(i)
 	if err != nil {
 		return false, err
@@ -129,7 +129,7 @@ func (ns *Namespace) FileExists(i interface{}) (bool, error) {
 }
 
 // Stat returns the os.FileInfo structure describing file.
-func (ns *Namespace) Stat(i interface{}) (_os.FileInfo, error) {
+func (ns *Namespace) Stat(i any) (_os.FileInfo, error) {
 	path, err := cast.ToStringE(i)
 	if err != nil {
 		return nil, err

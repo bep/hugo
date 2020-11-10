@@ -128,9 +128,9 @@ func ApplyLegacyConfig(cfg config.Provider, conf *Config) error {
 	return nil
 }
 
-func parseOptions(in string) (map[string]interface{}, error) {
+func parseOptions(in string) (map[string]any, error) {
 	in = strings.Trim(in, " ")
-	opts := make(map[string]interface{})
+	opts := make(map[string]any)
 
 	if in == "" {
 		return opts, nil

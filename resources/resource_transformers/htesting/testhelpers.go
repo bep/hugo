@@ -17,6 +17,7 @@ import (
 	"path/filepath"
 
 	"github.com/gohugoio/hugo/cache/filecache"
+	"github.com/gohugoio/hugo/cache/memcache"
 	"github.com/gohugoio/hugo/config"
 	"github.com/gohugoio/hugo/helpers"
 	"github.com/gohugoio/hugo/hugofs"
@@ -31,7 +32,7 @@ func NewTestResourceSpec() (*resources.Spec, error) {
 	cfg.Set("baseURL", "https://example.org")
 	cfg.Set("publishDir", "public")
 
-	imagingCfg := map[string]interface{}{
+	imagingCfg := map[string]any{
 		"resampleFilter": "linear",
 		"quality":        68,
 		"anchor":         "left",
@@ -50,8 +51,9 @@ func NewTestResourceSpec() (*resources.Spec, error) {
 	if err != nil {
 		return nil, err
 	}
+	memCache := memcache.New(memcache.Config{})
 
-	spec, err := resources.NewSpec(s, filecaches, nil, nil, nil, nil, output.DefaultFormats, media.DefaultTypes)
+	spec, err := resources.NewSpec(s, filecaches, memCache, nil, nil, nil, nil, output.DefaultFormats, media.DefaultTypes)
 	return spec, err
 }
 

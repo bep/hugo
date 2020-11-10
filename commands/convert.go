@@ -137,7 +137,7 @@ func (cc *convertCmd) convertAndSavePage(p page.Page, site *hugolib.Site, target
 		}
 	}
 
-	if p.File().IsZero() {
+	if p.File() == nil {
 		// No content file.
 		return nil
 	}
@@ -202,7 +202,7 @@ func (cc *convertCmd) convertAndSavePage(p page.Page, site *hugolib.Site, target
 type parsedFile struct {
 	frontMatterFormat metadecoders.Format
 	frontMatterSource []byte
-	frontMatter       map[string]interface{}
+	frontMatter       map[string]any
 
 	// Everything after Front Matter
 	content []byte

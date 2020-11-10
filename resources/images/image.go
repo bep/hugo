@@ -326,7 +326,7 @@ func imageConfigFromImage(img image.Image) image.Config {
 	return image.Config{Width: b.Max.X, Height: b.Max.Y}
 }
 
-func ToFilters(in interface{}) []gift.Filter {
+func ToFilters(in any) []gift.Filter {
 	switch v := in.(type) {
 	case []gift.Filter:
 		return v

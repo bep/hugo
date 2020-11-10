@@ -20,9 +20,23 @@ import (
 	"github.com/gohugoio/hugo/hugofs/glob"
 )
 
+var (
+	_ StaleInfo = Resources{}
+)
+
 // Resources represents a slice of resources, which can be a mix of different types.
 // I.e. both pages and images etc.
 type Resources []Resource
+
+// Resources is stale if any of the the elements are stale.
+func (rs Resources) IsStale() bool {
+	for _, r := range rs {
+		if s, ok := r.(StaleInfo); ok && s.IsStale() {
+			return true
+		}
+	}
+	return false
+}
 
 // ResourcesConverter converts a given slice of Resource objects to Resources.
 type ResourcesConverter interface {
@@ -108,7 +122,7 @@ func (r Resources) MergeByLanguage(r2 Resources) Resources {
 
 // MergeByLanguageInterface is the generic version of MergeByLanguage. It
 // is here just so it can be called from the tpl package.
-func (r Resources) MergeByLanguageInterface(in interface{}) (interface{}, error) {
+func (r Resources) MergeByLanguageInterface(in any) (any, error) {
 	r2, ok := in.(Resources)
 	if !ok {
 		return nil, fmt.Errorf("%T cannot be merged by language", in)

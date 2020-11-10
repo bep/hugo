@@ -44,7 +44,7 @@ type Namespace struct {
 }
 
 // CountRunes returns the number of runes in s, excluding whitespace.
-func (ns *Namespace) CountRunes(s interface{}) (int, error) {
+func (ns *Namespace) CountRunes(s any) (int, error) {
 	ss, err := cast.ToStringE(s)
 	if err != nil {
 		return 0, _errors.Wrap(err, "Failed to convert content to string")
@@ -61,7 +61,7 @@ func (ns *Namespace) CountRunes(s interface{}) (int, error) {
 }
 
 // RuneCount returns the number of runes in s.
-func (ns *Namespace) RuneCount(s interface{}) (int, error) {
+func (ns *Namespace) RuneCount(s any) (int, error) {
 	ss, err := cast.ToStringE(s)
 	if err != nil {
 		return 0, _errors.Wrap(err, "Failed to convert content to string")
@@ -70,7 +70,7 @@ func (ns *Namespace) RuneCount(s interface{}) (int, error) {
 }
 
 // CountWords returns the approximate word count in s.
-func (ns *Namespace) CountWords(s interface{}) (int, error) {
+func (ns *Namespace) CountWords(s any) (int, error) {
 	ss, err := cast.ToStringE(s)
 	if err != nil {
 		return 0, _errors.Wrap(err, "Failed to convert content to string")
@@ -100,7 +100,7 @@ func (ns *Namespace) CountWords(s interface{}) (int, error) {
 
 // Count counts the number of non-overlapping instances of substr in s.
 // If substr is an empty string, Count returns 1 + the number of Unicode code points in s.
-func (ns *Namespace) Count(substr, s interface{}) (int, error) {
+func (ns *Namespace) Count(substr, s any) (int, error) {
 	substrs, err := cast.ToStringE(substr)
 	if err != nil {
 		return 0, _errors.Wrap(err, "Failed to convert substr to string")
@@ -113,7 +113,7 @@ func (ns *Namespace) Count(substr, s interface{}) (int, error) {
 }
 
 // Chomp returns a copy of s with all trailing newline characters removed.
-func (ns *Namespace) Chomp(s interface{}) (interface{}, error) {
+func (ns *Namespace) Chomp(s any) (any, error) {
 	ss, err := cast.ToStringE(s)
 	if err != nil {
 		return "", err
@@ -129,7 +129,7 @@ func (ns *Namespace) Chomp(s interface{}) (interface{}, error) {
 }
 
 // Contains reports whether substr is in s.
-func (ns *Namespace) Contains(s, substr interface{}) (bool, error) {
+func (ns *Namespace) Contains(s, substr any) (bool, error) {
 	ss, err := cast.ToStringE(s)
 	if err != nil {
 		return false, err
@@ -144,7 +144,7 @@ func (ns *Namespace) Contains(s, substr interface{}) (bool, error) {
 }
 
 // ContainsAny reports whether any Unicode code points in chars are within s.
-func (ns *Namespace) ContainsAny(s, chars interface{}) (bool, error) {
+func (ns *Namespace) ContainsAny(s, chars any) (bool, error) {
 	ss, err := cast.ToStringE(s)
 	if err != nil {
 		return false, err
@@ -159,7 +159,7 @@ func (ns *Namespace) ContainsAny(s, chars interface{}) (bool, error) {
 }
 
 // HasPrefix tests whether the input s begins with prefix.
-func (ns *Namespace) HasPrefix(s, prefix interface{}) (bool, error) {
+func (ns *Namespace) HasPrefix(s, prefix any) (bool, error) {
 	ss, err := cast.ToStringE(s)
 	if err != nil {
 		return false, err
@@ -174,7 +174,7 @@ func (ns *Namespace) HasPrefix(s, prefix interface{}) (bool, error) {
 }
 
 // HasSuffix tests whether the input s begins with suffix.
-func (ns *Namespace) HasSuffix(s, suffix interface{}) (bool, error) {
+func (ns *Namespace) HasSuffix(s, suffix any) (bool, error) {
 	ss, err := cast.ToStringE(s)
 	if err != nil {
 		return false, err
@@ -191,7 +191,7 @@ func (ns *Namespace) HasSuffix(s, suffix interface{}) (bool, error) {
 // Replace returns a copy of the string s with all occurrences of old replaced
 // with new.  The number of replacements can be limited with an optional fourth
 // parameter.
-func (ns *Namespace) Replace(s, old, new interface{}, limit ...interface{}) (string, error) {
+func (ns *Namespace) Replace(s, old, new any, limit ...any) (string, error) {
 	ss, err := cast.ToStringE(s)
 	if err != nil {
 		return "", err
@@ -222,7 +222,7 @@ func (ns *Namespace) Replace(s, old, new interface{}, limit ...interface{}) (str
 // SliceString slices a string by specifying a half-open range with
 // two indices, start and end. 1 and 4 creates a slice including elements 1 through 3.
 // The end index can be omitted, it defaults to the string's length.
-func (ns *Namespace) SliceString(a interface{}, startEnd ...interface{}) (string, error) {
+func (ns *Namespace) SliceString(a any, startEnd ...any) (string, error) {
 	aStr, err := cast.ToStringE(a)
 	if err != nil {
 		return "", err
@@ -266,7 +266,7 @@ func (ns *Namespace) SliceString(a interface{}, startEnd ...interface{}) (string
 }
 
 // Split slices an input string into all substrings separated by delimiter.
-func (ns *Namespace) Split(a interface{}, delimiter string) ([]string, error) {
+func (ns *Namespace) Split(a any, delimiter string) ([]string, error) {
 	aStr, err := cast.ToStringE(a)
 	if err != nil {
 		return []string{}, err
@@ -287,7 +287,7 @@ func (ns *Namespace) Split(a interface{}, delimiter string) ([]string, error) {
 // In addition, borrowing from the extended behavior described at http://php.net/substr,
 // if length is given and is negative, then that many characters will be omitted from
 // the end of string.
-func (ns *Namespace) Substr(a interface{}, nums ...interface{}) (string, error) {
+func (ns *Namespace) Substr(a any, nums ...any) (string, error) {
 	s, err := cast.ToStringE(a)
 	if err != nil {
 		return "", err
@@ -362,7 +362,7 @@ func (ns *Namespace) Substr(a interface{}, nums ...interface{}) (string, error) 
 
 // Title returns a copy of the input s with all Unicode letters that begin words
 // mapped to their title case.
-func (ns *Namespace) Title(s interface{}) (string, error) {
+func (ns *Namespace) Title(s any) (string, error) {
 	ss, err := cast.ToStringE(s)
 	if err != nil {
 		return "", err
@@ -372,7 +372,7 @@ func (ns *Namespace) Title(s interface{}) (string, error) {
 }
 
 // FirstUpper returns a string with the first character as upper case.
-func (ns *Namespace) FirstUpper(s interface{}) (string, error) {
+func (ns *Namespace) FirstUpper(s any) (string, error) {
 	ss, err := cast.ToStringE(s)
 	if err != nil {
 		return "", err
@@ -383,7 +383,7 @@ func (ns *Namespace) FirstUpper(s interface{}) (string, error) {
 
 // ToLower returns a copy of the input s with all Unicode letters mapped to their
 // lower case.
-func (ns *Namespace) ToLower(s interface{}) (string, error) {
+func (ns *Namespace) ToLower(s any) (string, error) {
 	ss, err := cast.ToStringE(s)
 	if err != nil {
 		return "", err
@@ -394,7 +394,7 @@ func (ns *Namespace) ToLower(s interface{}) (string, error) {
 
 // ToUpper returns a copy of the input s with all Unicode letters mapped to their
 // upper case.
-func (ns *Namespace) ToUpper(s interface{}) (string, error) {
+func (ns *Namespace) ToUpper(s any) (string, error) {
 	ss, err := cast.ToStringE(s)
 	if err != nil {
 		return "", err
@@ -405,7 +405,7 @@ func (ns *Namespace) ToUpper(s interface{}) (string, error) {
 
 // Trim returns a string with all leading and trailing characters defined
 // contained in cutset removed.
-func (ns *Namespace) Trim(s, cutset interface{}) (string, error) {
+func (ns *Namespace) Trim(s, cutset any) (string, error) {
 	ss, err := cast.ToStringE(s)
 	if err != nil {
 		return "", err
@@ -421,7 +421,7 @@ func (ns *Namespace) Trim(s, cutset interface{}) (string, error) {
 
 // TrimLeft returns a slice of the string s with all leading characters
 // contained in cutset removed.
-func (ns *Namespace) TrimLeft(cutset, s interface{}) (string, error) {
+func (ns *Namespace) TrimLeft(cutset, s any) (string, error) {
 	ss, err := cast.ToStringE(s)
 	if err != nil {
 		return "", err
@@ -437,7 +437,7 @@ func (ns *Namespace) TrimLeft(cutset, s interface{}) (string, error) {
 
 // TrimPrefix returns s without the provided leading prefix string. If s doesn't
 // start with prefix, s is returned unchanged.
-func (ns *Namespace) TrimPrefix(prefix, s interface{}) (string, error) {
+func (ns *Namespace) TrimPrefix(prefix, s any) (string, error) {
 	ss, err := cast.ToStringE(s)
 	if err != nil {
 		return "", err
@@ -453,7 +453,7 @@ func (ns *Namespace) TrimPrefix(prefix, s interface{}) (string, error) {
 
 // TrimRight returns a slice of the string s with all trailing characters
 // contained in cutset removed.
-func (ns *Namespace) TrimRight(cutset, s interface{}) (string, error) {
+func (ns *Namespace) TrimRight(cutset, s any) (string, error) {
 	ss, err := cast.ToStringE(s)
 	if err != nil {
 		return "", err
@@ -469,7 +469,7 @@ func (ns *Namespace) TrimRight(cutset, s interface{}) (string, error) {
 
 // TrimSuffix returns s without the provided trailing suffix string. If s
 // doesn't end with suffix, s is returned unchanged.
-func (ns *Namespace) TrimSuffix(suffix, s interface{}) (string, error) {
+func (ns *Namespace) TrimSuffix(suffix, s any) (string, error) {
 	ss, err := cast.ToStringE(s)
 	if err != nil {
 		return "", err
@@ -484,7 +484,7 @@ func (ns *Namespace) TrimSuffix(suffix, s interface{}) (string, error) {
 }
 
 // Repeat returns a new string consisting of count copies of the string s.
-func (ns *Namespace) Repeat(n, s interface{}) (string, error) {
+func (ns *Namespace) Repeat(n, s any) (string, error) {
 	ss, err := cast.ToStringE(s)
 	if err != nil {
 		return "", err

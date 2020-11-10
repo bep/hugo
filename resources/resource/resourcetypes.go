@@ -16,6 +16,8 @@ package resource
 import (
 	"image"
 
+	"github.com/gohugoio/hugo/common/types"
+
 	"github.com/gohugoio/hugo/common/maps"
 	"github.com/gohugoio/hugo/langs"
 	"github.com/gohugoio/hugo/media"
@@ -65,7 +67,7 @@ type ImageOps interface {
 	Fill(spec string) (Image, error)
 	Fit(spec string) (Image, error)
 	Resize(spec string) (Image, error)
-	Filter(filters ...interface{}) (Image, error)
+	Filter(filters ...any) (Image, error)
 	Exif() *exif.Exif
 
 	// Internal
@@ -118,7 +120,7 @@ type ResourceParamsProvider interface {
 type ResourceDataProvider interface {
 	// Resource specific data set by Hugo.
 	// One example would be.Data.Digest for fingerprinted resources.
-	Data() interface{}
+	Data() any
 }
 
 // ResourcesLanguageMerger describes an interface for merging resources from a
@@ -126,12 +128,7 @@ type ResourceDataProvider interface {
 type ResourcesLanguageMerger interface {
 	MergeByLanguage(other Resources) Resources
 	// Needed for integration with the tpl package.
-	MergeByLanguageInterface(other interface{}) (interface{}, error)
-}
-
-// Identifier identifies a resource.
-type Identifier interface {
-	Key() string
+	MergeByLanguageInterface(other any) (any, error)
 }
 
 // ContentResource represents a Resource that provides a way to get to its content.
@@ -151,7 +148,7 @@ type ContentProvider interface {
 	// * Page: template.HTML
 	// * JSON: String
 	// * Etc.
-	Content() (interface{}, error)
+	Content() (any, error)
 }
 
 // OpenReadSeekCloser allows setting some other way (than reading from a filesystem)
@@ -183,7 +180,37 @@ type TranslationKeyProvider interface {
 // UnmarshableResource represents a Resource that can be unmarshaled to some other format.
 type UnmarshableResource interface {
 	ReadSeekCloserResource
-	Identifier
+	types.Identifier
+}
+
+// Staler controls stale state of a Resource. A stale resource should be discarded.
+type Staler interface {
+	MarkStale()
+	StaleInfo
+}
+
+// StaleInfo tells if a resource is marked as stale.
+type StaleInfo interface {
+	IsStale() bool
+}
+
+// IsStaleAny reports whether any of the os is marked as stale.
+func IsStaleAny(os ...any) bool {
+	for _, o := range os {
+		if s, ok := o.(StaleInfo); ok && s.IsStale() {
+			return true
+		}
+	}
+	return false
+}
+
+// MarkStale will mark any of the oses as stale, if possible.
+func MarkStale(os ...any) {
+	for _, o := range os {
+		if s, ok := o.(Staler); ok {
+			s.MarkStale()
+		}
+	}
 }
 
 type resourceTypesHolder struct {

@@ -33,7 +33,7 @@ import (
 func TestOptionKey(t *testing.T) {
 	c := qt.New(t)
 
-	opts := map[string]interface{}{
+	opts := map[string]any{
 		"TargetPath": "foo",
 		"Target":     "es2018",
 	}
@@ -63,7 +63,6 @@ func TestToBuildOptions(t *testing.T) {
 		Format:    "cjs",
 		Minify:    true,
 		mediaType: media.JavascriptType,
-		AvoidTDZ:  true,
 	})
 	c.Assert(err, qt.IsNil)
 	c.Assert(opts, qt.DeepEquals, api.BuildOptions{
@@ -154,7 +153,6 @@ func TestResolveComponentInAssets(t *testing.T) {
 		// Issue #8949
 		{"Check file before directory", []string{"foo.js", "foo/index.js"}, "foo", "foo.js"},
 	} {
-
 		c.Run(test.name, func(c *qt.C) {
 			baseDir := "assets"
 			mfs := afero.NewMemMapFs()
@@ -174,6 +172,5 @@ func TestResolveComponentInAssets(t *testing.T) {
 
 			c.Assert(gotPath, qt.Equals, test.expect)
 		})
-
 	}
 }

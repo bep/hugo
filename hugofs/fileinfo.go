@@ -31,6 +31,7 @@ import (
 	"github.com/pkg/errors"
 
 	"github.com/gohugoio/hugo/common/hreflect"
+	"github.com/gohugoio/hugo/common/paths"
 
 	"github.com/spf13/afero"
 )
@@ -42,12 +43,14 @@ func NewFileMeta() *FileMeta {
 // PathFile returns the relative file path for the file source.
 func (f *FileMeta) PathFile() string {
 	if f.BaseDir == "" {
-		return ""
+		return f.Filename
 	}
 	return strings.TrimPrefix(strings.TrimPrefix(f.Filename, f.BaseDir), filepathSeparator)
 }
 
 type FileMeta struct {
+	PathInfo *paths.Path
+
 	Name             string
 	Filename         string
 	Path             string
@@ -58,6 +61,7 @@ type FileMeta struct {
 	SourceRoot string
 	MountRoot  string
 	Module     string
+	Component  string
 
 	Weight     int
 	Ordinal    int
@@ -71,10 +75,11 @@ type FileMeta struct {
 
 	SkipDir bool
 
-	Lang                       string
-	TranslationBaseName        string
-	TranslationBaseNameWithExt string
-	Translations               []string
+	Lang         string
+	Translations []string
+
+	// TranslationBaseName        string
+	// TranslationBaseNameWithExt string
 
 	Fs           afero.Fs
 	OpenFunc     func() (afero.File, error)
@@ -133,6 +138,10 @@ type FileMetaInfo interface {
 	Meta() *FileMeta
 }
 
+type FileInfoProvider interface {
+	FileInfo() FileMetaInfo
+}
+
 type fileInfoMeta struct {
 	os.FileInfo
 
@@ -188,7 +197,7 @@ func (fi *dirNameOnlyFileInfo) IsDir() bool {
 	return true
 }
 
-func (fi *dirNameOnlyFileInfo) Sys() interface{} {
+func (fi *dirNameOnlyFileInfo) Sys() any {
 	return nil
 }
 

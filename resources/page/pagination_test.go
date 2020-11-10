@@ -18,6 +18,8 @@ import (
 	"html/template"
 	"testing"
 
+	"github.com/gohugoio/hugo/resources/page/pagekinds"
+
 	"github.com/gohugoio/hugo/config"
 
 	qt "github.com/frankban/quicktest"
@@ -211,12 +213,12 @@ func TestPaginationURLFactory(t *testing.T) {
 			}{
 				{
 					"HTML home page 32",
-					TargetPathDescriptor{Kind: KindHome, Type: output.HTMLFormat},
+					TargetPathDescriptor{Kind: pagekinds.Home, Type: output.HTMLFormat},
 					"http://example.com/", 32, "/zoo/32/", "/zoo/32.html",
 				},
 				{
 					"JSON home page 42",
-					TargetPathDescriptor{Kind: KindHome, Type: output.JSONFormat},
+					TargetPathDescriptor{Kind: pagekinds.Home, Type: output.JSONFormat},
 					"http://example.com/", 42, "/zoo/42/index.json", "/zoo/42.json",
 				},
 			}
@@ -254,8 +256,8 @@ func TestProbablyEqualPageLists(t *testing.T) {
 	ninePagesByWeight, _ := createTestPages(9).GroupBy("Weight", "asc")
 
 	for i, this := range []struct {
-		v1     interface{}
-		v2     interface{}
+		v1     any
+		v2     any
 		expect bool
 	}{
 		{nil, nil, true},

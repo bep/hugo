@@ -19,13 +19,14 @@ import (
 	"path/filepath"
 
 	"github.com/gohugoio/hugo/config"
+	"github.com/gohugoio/hugo/parser/pageparser"
 	"github.com/gohugoio/hugo/source"
 
-	"github.com/gohugoio/hugo/hugofs/files"
 	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
 
 	"github.com/gohugoio/hugo/common/herrors"
+	"github.com/gohugoio/hugo/common/paths"
 	"github.com/gohugoio/hugo/hugofs"
 )
 
@@ -35,7 +36,7 @@ func newPagesProcessor(h *HugoSites, sp *source.SourceSpec) *pagesProcessor {
 		procs[s.Lang()] = &sitePagesProcessor{
 			m:           s.pageMap,
 			errorSender: s.h,
-			itemChan:    make(chan interface{}, config.GetNumWorkerMultiplier()*2),
+			itemChan:    make(chan any, config.GetNumWorkerMultiplier()*2),
 		}
 	}
 	return &pagesProcessor{
@@ -44,7 +45,7 @@ func newPagesProcessor(h *HugoSites, sp *source.SourceSpec) *pagesProcessor {
 }
 
 type pagesCollectorProcessorProvider interface {
-	Process(item interface{}) error
+	Process(item any) error
 	Start(ctx context.Context) context.Context
 	Wait() error
 }
@@ -54,7 +55,7 @@ type pagesProcessor struct {
 	procs map[string]pagesCollectorProcessorProvider
 }
 
-func (proc *pagesProcessor) Process(item interface{}) error {
+func (proc *pagesProcessor) Process(item any) error {
 	switch v := item.(type) {
 	// Page bundles mapped to their language.
 	case pageBundles:
@@ -97,7 +98,7 @@ func (proc *pagesProcessor) getProcFromFi(fi hugofs.FileMetaInfo) pagesCollector
 
 type nopPageProcessor int
 
-func (nopPageProcessor) Process(item interface{}) error {
+func (nopPageProcessor) Process(item any) error {
 	return nil
 }
 
@@ -116,11 +117,11 @@ type sitePagesProcessor struct {
 	errorSender herrors.ErrorSender
 
 	ctx       context.Context
-	itemChan  chan interface{}
+	itemChan  chan any
 	itemGroup *errgroup.Group
 }
 
-func (p *sitePagesProcessor) Process(item interface{}) error {
+func (p *sitePagesProcessor) Process(item any) error {
 	select {
 	case <-p.ctx.Done():
 		return nil
@@ -155,17 +156,16 @@ func (p *sitePagesProcessor) copyFile(fim hugofs.FileMetaInfo) error {
 	if err != nil {
 		return errors.Wrap(err, "copyFile: failed to open")
 	}
+	defer f.Close()
 
 	s := p.m.s
 
-	target := filepath.Join(s.PathSpec.GetTargetLanguageBasePath(), meta.Path)
-
-	defer f.Close()
+	target := filepath.Join(s.PathSpec.GetTargetLanguageBasePath(), filepath.FromSlash(meta.PathInfo.Path()))
 
 	return s.publish(&s.PathSpec.ProcessingStats.Files, target, f)
 }
 
-func (p *sitePagesProcessor) doProcess(item interface{}) error {
+func (p *sitePagesProcessor) doProcess(item any) error {
 	m := p.m
 	switch v := item.(type) {
 	case *fileinfoBundle:
@@ -177,19 +177,21 @@ func (p *sitePagesProcessor) doProcess(item interface{}) error {
 			return nil
 		}
 		meta := v.Meta()
+		pi := meta.PathInfo
 
-		classifier := meta.Classifier
-		switch classifier {
-		case files.ContentClassContent:
+		switch pi.BundleType() {
+		case paths.PathTypeContentSingle:
 			if err := m.AddFilesBundle(v); err != nil {
+				if errors.Is(err, pageparser.ErrPlainHTMLDocumentsNotSupported) {
+					// Treat it as a plain HTML file instead.
+					return p.copyFile(v)
+				}
 				return err
 			}
-		case files.ContentClassFile:
-			if err := p.copyFile(v); err != nil {
-				return err
-			}
+		case paths.PathTypeFile:
+			return p.copyFile(v)
 		default:
-			panic(fmt.Sprintf("invalid classifier: %q", classifier))
+			panic(fmt.Sprintf("invalid type: %q", pi.BundleType()))
 		}
 	default:
 		panic(fmt.Sprintf("unrecognized item type in Process: %T", item))

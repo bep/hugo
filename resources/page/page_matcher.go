@@ -17,6 +17,8 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/gohugoio/hugo/resources/page/pagekinds"
+
 	"github.com/pkg/errors"
 
 	"github.com/gohugoio/hugo/common/maps"
@@ -58,8 +60,8 @@ func (m PageMatcher) Matches(p Page) bool {
 
 	if m.Path != "" {
 		g, err := glob.GetGlob(m.Path)
-		// TODO(bep) Path() vs filepath vs leading slash.
-		p := strings.ToLower(filepath.ToSlash(p.Pathc()))
+		// TODO1 vs file.Path.
+		p := strings.ToLower(filepath.ToSlash(p.Path()))
 		if !(strings.HasPrefix(p, "/")) {
 			p = "/" + p
 		}
@@ -72,7 +74,7 @@ func (m PageMatcher) Matches(p Page) bool {
 }
 
 // DecodeCascade decodes in which could be eiter a map or a slice of maps.
-func DecodeCascade(in interface{}) (map[PageMatcher]maps.Params, error) {
+func DecodeCascade(in any) (map[PageMatcher]maps.Params, error) {
 	m, err := maps.ToSliceStringMap(in)
 	if err != nil {
 		return map[PageMatcher]maps.Params{
@@ -107,14 +109,14 @@ func DecodeCascade(in interface{}) (map[PageMatcher]maps.Params, error) {
 }
 
 // DecodePageMatcher decodes m into v.
-func DecodePageMatcher(m interface{}, v *PageMatcher) error {
+func DecodePageMatcher(m any, v *PageMatcher) error {
 	if err := mapstructure.WeakDecode(m, v); err != nil {
 		return err
 	}
 
 	v.Kind = strings.ToLower(v.Kind)
 	if v.Kind != "" {
-		if _, found := kindMap[v.Kind]; !found {
+		if pagekinds.Get(v.Kind) == "" {
 			return errors.Errorf("%q is not a valid Page Kind", v.Kind)
 		}
 	}

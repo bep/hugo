@@ -14,6 +14,7 @@
 package page
 
 import (
+	"context"
 	"fmt"
 	"html/template"
 	"path"
@@ -22,7 +23,7 @@ import (
 
 	"github.com/gohugoio/hugo/hugofs/files"
 	"github.com/gohugoio/hugo/identity"
-	"github.com/gohugoio/hugo/tpl"
+	"github.com/spf13/afero"
 
 	"github.com/gohugoio/hugo/modules"
 
@@ -56,10 +57,13 @@ func newTestPage() *testPage {
 
 func newTestPageWithFile(filename string) *testPage {
 	filename = filepath.FromSlash(filename)
-	file := source.NewTestFile(filename)
+	file, err := source.NewFileInfoFrom(filename, filename)
+	if err != nil {
+		panic(err)
+	}
 	return &testPage{
-		params: make(map[string]interface{}),
-		data:   make(map[string]interface{}),
+		params: make(map[string]any),
+		data:   make(map[string]any),
 		file:   file,
 		currentSection: &testPage{
 			sectionEntries: []string{"a", "b", "c"},
@@ -87,6 +91,16 @@ func newTestPathSpecFor(cfg config.Provider) *helpers.PathSpec {
 	return s
 }
 
+func newTestSourceSpec() *source.SourceSpec {
+	v := config.New()
+	fs := hugofs.NewFrom(hugofs.NewBaseFileDecorator(afero.NewMemMapFs()), v)
+	ps, err := helpers.NewPathSpec(fs, v, nil)
+	if err != nil {
+		panic(err)
+	}
+	return source.NewSourceSpec(ps, nil, fs.Source)
+}
+
 type testPage struct {
 	kind        string
 	description string
@@ -111,10 +125,10 @@ type testPage struct {
 
 	weight int
 
-	params map[string]interface{}
-	data   map[string]interface{}
+	params map[string]any
+	data   map[string]any
 
-	file source.File
+	file *source.File
 
 	currentSection *testPage
 	sectionEntries []string
@@ -152,7 +166,7 @@ func (p *testPage) BundleType() files.ContentClass {
 	panic("not implemented")
 }
 
-func (p *testPage) Content() (interface{}, error) {
+func (p *testPage) Content() (any, error) {
 	panic("not implemented")
 }
 
@@ -164,7 +178,7 @@ func (p *testPage) CurrentSection() Page {
 	return p.currentSection
 }
 
-func (p *testPage) Data() interface{} {
+func (p *testPage) Data() any {
 	return p.data
 }
 
@@ -192,7 +206,7 @@ func (p *testPage) Draft() bool {
 	panic("not implemented")
 }
 
-func (p *testPage) Eq(other interface{}) bool {
+func (p *testPage) Eq(other any) bool {
 	return p == other
 }
 
@@ -208,7 +222,7 @@ func (p *testPage) Extension() string {
 	panic("not implemented")
 }
 
-func (p *testPage) File() source.File {
+func (p *testPage) File() *source.File {
 	return p.file
 }
 
@@ -232,11 +246,7 @@ func (p *testPage) GetPage(ref string) (Page, error) {
 	panic("not implemented")
 }
 
-func (p *testPage) GetPageWithTemplateInfo(info tpl.Info, ref string) (Page, error) {
-	panic("not implemented")
-}
-
-func (p *testPage) GetParam(key string) interface{} {
+func (p *testPage) GetParam(key string) any {
 	panic("not implemented")
 }
 
@@ -264,15 +274,15 @@ func (p *testPage) Hugo() hugo.Info {
 	panic("not implemented")
 }
 
-func (p *testPage) InSection(other interface{}) (bool, error) {
+func (p *testPage) InSection(other any) (bool, error) {
 	panic("not implemented")
 }
 
-func (p *testPage) IsAncestor(other interface{}) (bool, error) {
+func (p *testPage) IsAncestor(other any) (bool, error) {
 	panic("not implemented")
 }
 
-func (p *testPage) IsDescendant(other interface{}) (bool, error) {
+func (p *testPage) IsDescendant(other any) (bool, error) {
 	panic("not implemented")
 }
 
@@ -386,15 +396,15 @@ func (p *testPage) RegularPagesRecursive() Pages {
 	panic("not implemented")
 }
 
-func (p *testPage) Paginate(seq interface{}, options ...interface{}) (*Pager, error) {
+func (p *testPage) Paginate(seq any, options ...any) (*Pager, error) {
 	return nil, nil
 }
 
-func (p *testPage) Paginator(options ...interface{}) (*Pager, error) {
+func (p *testPage) Paginator(options ...any) (*Pager, error) {
 	return nil, nil
 }
 
-func (p *testPage) Param(key interface{}) (interface{}, error) {
+func (p *testPage) Param(key any) (any, error) {
 	return resource.Param(p, nil, key)
 }
 
@@ -411,10 +421,6 @@ func (p *testPage) Parent() Page {
 }
 
 func (p *testPage) Path() string {
-	return p.path
-}
-
-func (p *testPage) Pathc() string {
 	return p.path
 }
 
@@ -458,11 +464,11 @@ func (p *testPage) ReadingTime() int {
 	panic("not implemented")
 }
 
-func (p *testPage) Ref(argsm map[string]interface{}) (string, error) {
+func (p *testPage) Ref(argsm map[string]any) (string, error) {
 	panic("not implemented")
 }
 
-func (p *testPage) RefFrom(argsm map[string]interface{}, source interface{}) (string, error) {
+func (p *testPage) RefFrom(argsm map[string]any, source any) (string, error) {
 	return "", nil
 }
 
@@ -470,19 +476,19 @@ func (p *testPage) RelPermalink() string {
 	panic("not implemented")
 }
 
-func (p *testPage) RelRef(argsm map[string]interface{}) (string, error) {
+func (p *testPage) RelRef(argsm map[string]any) (string, error) {
 	panic("not implemented")
 }
 
-func (p *testPage) RelRefFrom(argsm map[string]interface{}, source interface{}) (string, error) {
+func (p *testPage) RelRefFrom(argsm map[string]any, source any) (string, error) {
 	return "", nil
 }
 
-func (p *testPage) Render(layout ...string) (template.HTML, error) {
+func (p *testPage) Render(ctx context.Context, layout ...string) (template.HTML, error) {
 	panic("not implemented")
 }
 
-func (p *testPage) RenderString(args ...interface{}) (template.HTML, error) {
+func (p *testPage) RenderString(args ...any) (template.HTML, error) {
 	panic("not implemented")
 }
 
@@ -587,8 +593,12 @@ func (p *testPage) WordCount() int {
 	panic("not implemented")
 }
 
-func (p *testPage) GetIdentity() identity.Identity {
-	panic("not implemented")
+func (p *testPage) IdentifierBase() any {
+	return p.path
+}
+
+func (p *testPage) GetDependencyManager() identity.Manager {
+	return identity.NopManager
 }
 
 func createTestPages(num int) Pages {

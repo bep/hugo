@@ -68,7 +68,7 @@ func TestDefaultTypes(t *testing.T) {
 	c.Assert(RSSFormat.NoUgly, qt.Equals, true)
 	c.Assert(CalendarFormat.IsHTML, qt.Equals, false)
 
-	c.Assert(len(DefaultFormats), qt.Equals, 10)
+	c.Assert(len(DefaultFormats), qt.Equals, 11)
 
 }
 
@@ -81,6 +81,12 @@ func TestGetFormatByName(t *testing.T) {
 	c.Assert(found, qt.Equals, false)
 	_, found = formats.GetByName("FOO")
 	c.Assert(found, qt.Equals, false)
+}
+
+func TestIsZero(t *testing.T) {
+	c := qt.New(t)
+	c.Assert(HTMLFormat.IsZero(), qt.IsFalse)
+	c.Assert(Format{}.IsZero(), qt.IsTrue)
 }
 
 func TestGetFormatByExt(t *testing.T) {
@@ -145,15 +151,15 @@ func TestDecodeFormats(t *testing.T) {
 
 	tests := []struct {
 		name        string
-		maps        []map[string]interface{}
+		maps        []map[string]any
 		shouldError bool
 		assert      func(t *testing.T, name string, f Formats)
 	}{
 		{
 			"Redefine JSON",
-			[]map[string]interface{}{
+			[]map[string]any{
 				{
-					"JsON": map[string]interface{}{
+					"JsON": map[string]any{
 						"baseName":    "myindex",
 						"isPlainText": "false",
 					},
@@ -171,9 +177,9 @@ func TestDecodeFormats(t *testing.T) {
 		},
 		{
 			"Add XML format with string as mediatype",
-			[]map[string]interface{}{
+			[]map[string]any{
 				{
-					"MYXMLFORMAT": map[string]interface{}{
+					"MYXMLFORMAT": map[string]any{
 						"baseName":  "myxml",
 						"mediaType": "application/xml",
 					},
@@ -194,9 +200,9 @@ func TestDecodeFormats(t *testing.T) {
 		},
 		{
 			"Add format unknown mediatype",
-			[]map[string]interface{}{
+			[]map[string]any{
 				{
-					"MYINVALID": map[string]interface{}{
+					"MYINVALID": map[string]any{
 						"baseName":  "mymy",
 						"mediaType": "application/hugo",
 					},
@@ -208,15 +214,15 @@ func TestDecodeFormats(t *testing.T) {
 		},
 		{
 			"Add and redefine XML format",
-			[]map[string]interface{}{
+			[]map[string]any{
 				{
-					"MYOTHERXMLFORMAT": map[string]interface{}{
+					"MYOTHERXMLFORMAT": map[string]any{
 						"baseName":  "myotherxml",
 						"mediaType": media.XMLType,
 					},
 				},
 				{
-					"MYOTHERXMLFORMAT": map[string]interface{}{
+					"MYOTHERXMLFORMAT": map[string]any{
 						"baseName": "myredefined",
 					},
 				},

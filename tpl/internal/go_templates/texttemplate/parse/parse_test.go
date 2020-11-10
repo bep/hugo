@@ -2,6 +2,7 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
+//go:build go1.13
 // +build go1.13
 
 package parse
@@ -312,7 +313,7 @@ var parseTests = []parseTest{
 	{"block definition", `{{block "foo"}}hello{{end}}`, hasError, ""},
 }
 
-var builtins = map[string]interface{}{
+var builtins = map[string]any{
 	"printf":   fmt.Sprintf,
 	"contains": strings.Contains,
 }

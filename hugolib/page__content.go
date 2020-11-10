@@ -26,14 +26,14 @@ var (
 	internalSummaryDividerPre       = []byte("\n\n" + internalSummaryDividerBase + "\n\n")
 )
 
+var zeroContent = pageContent{}
+
 // The content related items on a Page.
 type pageContent struct {
 	selfLayout string
 	truncated  bool
 
 	cmap *pageContentMap
-
-	shortcodeState *shortcodeHandler
 
 	source rawPageContent
 }
@@ -111,7 +111,7 @@ type pageContentMap struct {
 	hasNonMarkdownShortcode bool
 
 	//  *shortcode, pageContentReplacement or pageparser.Item
-	items []interface{}
+	items []any
 }
 
 func (p *pageContentMap) AddBytes(item pageparser.Item) {

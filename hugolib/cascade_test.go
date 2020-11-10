@@ -106,13 +106,10 @@ cascade:
 					"draft":         bool(false),
 					"iscjklanguage": bool(false),
 				})
-
 			}
-
 		})
 
 	}
-
 }
 
 func TestCascade(t *testing.T) {
@@ -125,33 +122,33 @@ func TestCascade(t *testing.T) {
 		b.Build(BuildCfg{})
 
 		b.AssertFileContent("public/index.html", `
-12|term|categories/cool/_index.md|Cascade Category|cat.png|categories|HTML-|
-12|term|categories/catsect1|catsect1|cat.png|categories|HTML-|
-12|term|categories/funny|funny|cat.png|categories|HTML-|
-12|taxonomy|categories/_index.md|My Categories|cat.png|categories|HTML-|
-32|term|categories/sad/_index.md|Cascade Category|sad.png|categories|HTML-|
-42|term|tags/blue|blue|home.png|tags|HTML-|
-42|taxonomy|tags|Cascade Home|home.png|tags|HTML-|
-42|section|sectnocontent|Cascade Home|home.png|sectnocontent|HTML-|
-42|section|sect3|Cascade Home|home.png|sect3|HTML-|
-42|page|bundle1/index.md|Cascade Home|home.png|page|HTML-|
-42|page|p2.md|Cascade Home|home.png|page|HTML-|
-42|page|sect2/p2.md|Cascade Home|home.png|sect2|HTML-|
-42|page|sect3/nofrontmatter.md|Cascade Home|home.png|sect3|HTML-|
-42|page|sect3/p1.md|Cascade Home|home.png|sect3|HTML-|
-42|page|sectnocontent/p1.md|Cascade Home|home.png|sectnocontent|HTML-|
-42|section|sectnofrontmatter/_index.md|Cascade Home|home.png|sectnofrontmatter|HTML-|
-42|term|tags/green|green|home.png|tags|HTML-|
-42|home|_index.md|Home|home.png|page|HTML-|
-42|page|p1.md|p1|home.png|page|HTML-|
-42|section|sect1/_index.md|Sect1|sect1.png|stype|HTML-|
-42|section|sect1/s1_2/_index.md|Sect1_2|sect1.png|stype|HTML-|
-42|page|sect1/s1_2/p1.md|Sect1_2_p1|sect1.png|stype|HTML-|
-42|page|sect1/s1_2/p2.md|Sect1_2_p2|sect1.png|stype|HTML-|
-42|section|sect2/_index.md|Sect2|home.png|sect2|HTML-|
-42|page|sect2/p1.md|Sect2_p1|home.png|sect2|HTML-|
-52|page|sect4/p1.md|Cascade Home|home.png|sect4|RSS-|
-52|section|sect4/_index.md|Sect4|home.png|sect4|RSS-|
+12|term|/categories/cool|Cascade Category|cat.png|categories|HTML-|
+12|term|/categories/catsect1|catsect1|cat.png|categories|HTML-|
+12|term|/categories/funny|funny|cat.png|categories|HTML-|
+12|taxonomy|/categories|My Categories|cat.png|categories|HTML-|
+32|term|/categories/sad|Cascade Category|sad.png|categories|HTML-|
+42|term|/tags/blue|blue|home.png|tags|HTML-|
+42|taxonomy|/tags|Cascade Home|home.png|tags|HTML-|
+42|section|/sectnocontent|Cascade Home|home.png|sectnocontent|HTML-|
+42|section|/sect3|Cascade Home|home.png|sect3|HTML-|
+42|page|/bundle1|Cascade Home|home.png|page|HTML-|
+42|page|/p2|Cascade Home|home.png|page|HTML-|
+42|page|/sect2/p2|Cascade Home|home.png|sect2|HTML-|
+42|page|/sect3/nofrontmatter|Cascade Home|home.png|sect3|HTML-|
+42|page|/sect3/p1|Cascade Home|home.png|sect3|HTML-|
+42|page|/sectnocontent/p1|Cascade Home|home.png|sectnocontent|HTML-|
+42|section|/sectnofrontmatter|Cascade Home|home.png|sectnofrontmatter|HTML-|
+42|term|/tags/green|green|home.png|tags|HTML-|
+42|home|/|Home|home.png|page|HTML-|
+42|page|/p1|p1|home.png|page|HTML-|
+42|section|/sect1|Sect1|sect1.png|stype|HTML-|
+42|section|/sect1/s1_2|Sect1_2|sect1.png|stype|HTML-|
+42|page|/sect1/s1_2/p1|Sect1_2_p1|sect1.png|stype|HTML-|
+42|page|/sect1/s1_2/p2|Sect1_2_p2|sect1.png|stype|HTML-|
+42|section|/sect2|Sect2|home.png|sect2|HTML-|
+42|page|/sect2/p1|Sect2_p1|home.png|sect2|HTML-|
+52|page|/sect4/p1|Cascade Home|home.png|sect4|RSS-|
+52|section|/sect4|Sect4|home.png|sect4|RSS-|
 `)
 
 		// Check that type set in cascade gets the correct layout.
@@ -301,7 +298,7 @@ Banner: post.jpg`,
 }
 
 func newCascadeTestBuilder(t testing.TB, langs []string) *sitesBuilder {
-	p := func(m map[string]interface{}) string {
+	p := func(m map[string]any) string {
 		var yamlStr string
 
 		if len(m) > 0 {
@@ -358,76 +355,76 @@ defaultContentLanguageInSubDir = false
 		}
 
 		withContent(
-			"_index.md", p(map[string]interface{}{
+			"_index.md", p(map[string]any{
 				"title": "Home",
-				"cascade": map[string]interface{}{
+				"cascade": map[string]any{
 					"title":   "Cascade Home",
 					"ICoN":    "home.png",
 					"outputs": []string{"HTML"},
 					"weight":  42,
 				},
 			}),
-			"p1.md", p(map[string]interface{}{
+			"p1.md", p(map[string]any{
 				"title": "p1",
 			}),
-			"p2.md", p(map[string]interface{}{}),
-			"sect1/_index.md", p(map[string]interface{}{
+			"p2.md", p(map[string]any{}),
+			"sect1/_index.md", p(map[string]any{
 				"title": "Sect1",
 				"type":  "stype",
-				"cascade": map[string]interface{}{
+				"cascade": map[string]any{
 					"title":      "Cascade Sect1",
 					"icon":       "sect1.png",
 					"type":       "stype",
 					"categories": []string{"catsect1"},
 				},
 			}),
-			"sect1/s1_2/_index.md", p(map[string]interface{}{
+			"sect1/s1_2/_index.md", p(map[string]any{
 				"title": "Sect1_2",
 			}),
-			"sect1/s1_2/p1.md", p(map[string]interface{}{
+			"sect1/s1_2/p1.md", p(map[string]any{
 				"title": "Sect1_2_p1",
 			}),
-			"sect1/s1_2/p2.md", p(map[string]interface{}{
+			"sect1/s1_2/p2.md", p(map[string]any{
 				"title": "Sect1_2_p2",
 			}),
-			"sect2/_index.md", p(map[string]interface{}{
+			"sect2/_index.md", p(map[string]any{
 				"title": "Sect2",
 			}),
-			"sect2/p1.md", p(map[string]interface{}{
+			"sect2/p1.md", p(map[string]any{
 				"title":      "Sect2_p1",
 				"categories": []string{"cool", "funny", "sad"},
 				"tags":       []string{"blue", "green"},
 			}),
-			"sect2/p2.md", p(map[string]interface{}{}),
-			"sect3/p1.md", p(map[string]interface{}{}),
+			"sect2/p2.md", p(map[string]any{}),
+			"sect3/p1.md", p(map[string]any{}),
 
 			// No front matter, see #6855
 			"sect3/nofrontmatter.md", `**Hello**`,
 			"sectnocontent/p1.md", `**Hello**`,
 			"sectnofrontmatter/_index.md", `**Hello**`,
 
-			"sect4/_index.md", p(map[string]interface{}{
+			"sect4/_index.md", p(map[string]any{
 				"title": "Sect4",
-				"cascade": map[string]interface{}{
+				"cascade": map[string]any{
 					"weight":  52,
 					"outputs": []string{"RSS"},
 				},
 			}),
-			"sect4/p1.md", p(map[string]interface{}{}),
-			"p2.md", p(map[string]interface{}{}),
-			"bundle1/index.md", p(map[string]interface{}{}),
-			"bundle1/bp1.md", p(map[string]interface{}{}),
-			"categories/_index.md", p(map[string]interface{}{
+			"sect4/p1.md", p(map[string]any{}),
+			"p2.md", p(map[string]any{}),
+			"bundle1/index.md", p(map[string]any{}),
+			"bundle1/bp1.md", p(map[string]any{}),
+			"categories/_index.md", p(map[string]any{
 				"title": "My Categories",
-				"cascade": map[string]interface{}{
+				"cascade": map[string]any{
 					"title":  "Cascade Category",
 					"icoN":   "cat.png",
 					"weight": 12,
 				},
 			}),
-			"categories/cool/_index.md", p(map[string]interface{}{}),
-			"categories/sad/_index.md", p(map[string]interface{}{
-				"cascade": map[string]interface{}{
+			"categories/cool/_index.md", p(map[string]any{}),
+			"categories/sad/_index.md", p(map[string]any{
+				"cascade": map[string]any{
 					"icon":   "sad.png",
 					"weight": 32,
 				},

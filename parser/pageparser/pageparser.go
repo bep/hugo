@@ -42,7 +42,7 @@ func Parse(r io.Reader, cfg Config) (Result, error) {
 
 type ContentFrontMatter struct {
 	Content           []byte
-	FrontMatter       map[string]interface{}
+	FrontMatter       map[string]any
 	FrontMatterFormat metadecoders.Format
 }
 
@@ -110,7 +110,7 @@ func parseSection(r io.Reader, cfg Config, start stateFunc) (Result, error) {
 func parseBytes(b []byte, cfg Config, start stateFunc) (Result, error) {
 	lexer := newPageLexer(b, start, cfg)
 	lexer.run()
-	return lexer, nil
+	return lexer, lexer.err
 }
 
 // An Iterator has methods to iterate a parsed page with support going back

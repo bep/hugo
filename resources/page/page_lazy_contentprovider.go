@@ -38,7 +38,7 @@ func NewLazyContentProvider(f func() (ContentProvider, error)) *LazyContentProvi
 		init: lazy.New(),
 		cp:   NopPage,
 	}
-	lcp.init.Add(func() (interface{}, error) {
+	lcp.init.Add(func() (any, error) {
 		cp, err := f()
 		if err != nil {
 			return nil, err
@@ -53,7 +53,7 @@ func (lcp *LazyContentProvider) Reset() {
 	lcp.init.Reset()
 }
 
-func (lcp *LazyContentProvider) Content() (interface{}, error) {
+func (lcp *LazyContentProvider) Content() (any, error) {
 	lcp.init.Do()
 	return lcp.cp.Content()
 }

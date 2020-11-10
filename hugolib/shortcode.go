@@ -26,6 +26,7 @@ import (
 	"sync"
 
 	"github.com/gohugoio/hugo/helpers"
+	"github.com/gohugoio/hugo/identity"
 
 	"github.com/gohugoio/hugo/common/herrors"
 	"github.com/pkg/errors"
@@ -43,16 +44,16 @@ import (
 )
 
 var (
-	_ urls.RefLinker  = (*ShortcodeWithPage)(nil)
-	_ pageWrapper     = (*ShortcodeWithPage)(nil)
-	_ text.Positioner = (*ShortcodeWithPage)(nil)
+	_ urls.RefLinker    = (*ShortcodeWithPage)(nil)
+	_ text.Positioner   = (*ShortcodeWithPage)(nil)
+	_ page.PageProvider = (*ShortcodeWithPage)(nil)
 )
 
 // ShortcodeWithPage is the "." context in a shortcode template.
 type ShortcodeWithPage struct {
-	Params        interface{}
+	Params        any
 	Inner         template.HTML
-	Page          page.Page
+	page          page.Page
 	Parent        *ShortcodeWithPage
 	Name          string
 	IsNamedParams bool
@@ -73,7 +74,7 @@ type ShortcodeWithPage struct {
 // may be expensive to calculate, so only use this in error situations.
 func (scp *ShortcodeWithPage) Position() text.Position {
 	scp.posInit.Do(func() {
-		if p, ok := mustUnwrapPage(scp.Page).(pageContext); ok {
+		if p, ok := mustUnwrapPage(scp.page).(pageContext); ok {
 			scp.pos = p.posOffset(scp.posOffset)
 		}
 	})
@@ -82,19 +83,19 @@ func (scp *ShortcodeWithPage) Position() text.Position {
 
 // Site returns information about the current site.
 func (scp *ShortcodeWithPage) Site() page.Site {
-	return scp.Page.Site()
+	return scp.page.Site()
 }
 
 // Ref is a shortcut to the Ref method on Page. It passes itself as a context
 // to get better error messages.
-func (scp *ShortcodeWithPage) Ref(args map[string]interface{}) (string, error) {
-	return scp.Page.RefFrom(args, scp)
+func (scp *ShortcodeWithPage) Ref(args map[string]any) (string, error) {
+	return scp.page.RefFrom(args, scp)
 }
 
 // RelRef is a shortcut to the RelRef method on Page. It passes itself as a context
 // to get better error messages.
-func (scp *ShortcodeWithPage) RelRef(args map[string]interface{}) (string, error) {
-	return scp.Page.RelRefFrom(args, scp)
+func (scp *ShortcodeWithPage) RelRef(args map[string]any) (string, error) {
+	return scp.page.RelRefFrom(args, scp)
 }
 
 // Scratch returns a scratch-pad scoped for this shortcode. This can be used
@@ -107,7 +108,7 @@ func (scp *ShortcodeWithPage) Scratch() *maps.Scratch {
 }
 
 // Get is a convenience method to look up shortcode parameters by its key.
-func (scp *ShortcodeWithPage) Get(key interface{}) interface{} {
+func (scp *ShortcodeWithPage) Get(key any) any {
 	if scp.Params == nil {
 		return nil
 	}
@@ -149,8 +150,14 @@ func (scp *ShortcodeWithPage) Get(key interface{}) interface{} {
 	return x.Interface()
 }
 
-func (scp *ShortcodeWithPage) page() page.Page {
-	return scp.Page
+// Page returns the Page which contains this shortcode.
+func (scp *ShortcodeWithPage) Page() page.Page {
+	return scp.page
+}
+
+// TODO1
+func (scp *ShortcodeWithPage) GetDependencyManager() identity.Manager {
+	return scp.Page().GetDependencyManager()
 }
 
 // Note - this value must not contain any markup syntax
@@ -162,10 +169,10 @@ func createShortcodePlaceholder(id string, ordinal int) string {
 
 type shortcode struct {
 	name      string
-	isInline  bool          // inline shortcode. Any inner will be a Go template.
-	isClosing bool          // whether a closing tag was provided
-	inner     []interface{} // string or nested shortcode
-	params    interface{}   // map or array
+	isInline  bool  // inline shortcode. Any inner will be a Go template.
+	isClosing bool  // whether a closing tag was provided
+	inner     []any // string or nested shortcode
+	params    any   // map or array
 	ordinal   int
 	err       error
 
@@ -214,16 +221,16 @@ func (s shortcode) innerString() string {
 
 func (sc shortcode) String() string {
 	// for testing (mostly), so any change here will break tests!
-	var params interface{}
+	var params any
 	switch v := sc.params.(type) {
-	case map[string]interface{}:
+	case map[string]any:
 		// sort the keys so test assertions won't fail
 		var keys []string
 		for k := range v {
 			keys = append(keys, k)
 		}
 		sort.Strings(keys)
-		tmp := make(map[string]interface{})
+		tmp := make(map[string]any)
 
 		for _, k := range keys {
 			tmp[k] = v[k]
@@ -321,7 +328,7 @@ func renderShortcode(
 		hasVariants = hasVariants || more
 	}
 
-	data := &ShortcodeWithPage{Ordinal: sc.ordinal, posOffset: sc.pos, Params: sc.params, Page: newPageForShortcode(p), Parent: parent, Name: sc.name}
+	data := &ShortcodeWithPage{Ordinal: sc.ordinal, posOffset: sc.pos, Params: sc.params, page: newPageForShortcode(p), Parent: parent, Name: sc.name}
 	if sc.params != nil {
 		data.IsNamedParams = reflect.TypeOf(sc.params).Kind() == reflect.Map
 	}
@@ -552,11 +559,11 @@ Loop:
 			} else if pt.Peek().IsShortcodeParamVal() {
 				// named params
 				if sc.params == nil {
-					params := make(map[string]interface{})
+					params := make(map[string]any)
 					params[currItem.ValStr()] = pt.Next().ValTyped()
 					sc.params = params
 				} else {
-					if params, ok := sc.params.(map[string]interface{}); ok {
+					if params, ok := sc.params.(map[string]any); ok {
 						params[currItem.ValStr()] = pt.Next().ValTyped()
 					} else {
 						return sc, errShortCodeIllegalState
@@ -565,11 +572,11 @@ Loop:
 			} else {
 				// positional params
 				if sc.params == nil {
-					var params []interface{}
+					var params []any
 					params = append(params, currItem.ValTyped())
 					sc.params = params
 				} else {
-					if params, ok := sc.params.([]interface{}); ok {
+					if params, ok := sc.params.([]any); ok {
 						params = append(params, currItem.ValTyped())
 						sc.params = params
 					} else {

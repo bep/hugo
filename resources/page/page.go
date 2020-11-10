@@ -16,15 +16,14 @@
 package page
 
 import (
+	"context"
 	"html/template"
 
 	"github.com/gohugoio/hugo/identity"
 
 	"github.com/bep/gitmap"
 	"github.com/gohugoio/hugo/config"
-	"github.com/gohugoio/hugo/tpl"
 
-	"github.com/gohugoio/hugo/common/hugo"
 	"github.com/gohugoio/hugo/common/maps"
 	"github.com/gohugoio/hugo/compare"
 	"github.com/gohugoio/hugo/hugofs/files"
@@ -76,7 +75,7 @@ type ChildCareProvider interface {
 
 // ContentProvider provides the content related values for a Page.
 type ContentProvider interface {
-	Content() (interface{}, error)
+	Content() (any, error)
 	Plain() string
 	PlainWords() []string
 	Summary() template.HTML
@@ -89,7 +88,7 @@ type ContentProvider interface {
 
 // FileProvider provides the source file.
 type FileProvider interface {
-	File() source.File
+	File() *source.File
 }
 
 // GetPageProvider provides the GetPage method.
@@ -100,9 +99,6 @@ type GetPageProvider interface {
 	// This will return nil when no page could be found, and will return
 	// an error if the ref is ambiguous.
 	GetPage(ref string) (Page, error)
-
-	// GetPageWithTemplateInfo is for internal use only.
-	GetPageWithTemplateInfo(info tpl.Info, ref string) (Page, error)
 }
 
 // GitInfoProvider provides Git info.
@@ -126,11 +122,18 @@ type OutputFormatsProvider interface {
 	OutputFormats() OutputFormats
 }
 
+// PageProvider provides access to a Page.
+// Implemented by shortcodes and others.
+type PageProvider interface {
+	Page() Page
+}
+
 // Page is the core interface in Hugo.
 type Page interface {
 	ContentProvider
 	TableOfContentsProvider
 	PageWithoutContent
+	identity.DependencyManagerProvider
 }
 
 // PageMetaProvider provides page metadata, typically provided via front matter.
@@ -174,14 +177,11 @@ type PageMetaProvider interface {
 	IsPage() bool
 
 	// Param looks for a param in Page and then in Site config.
-	Param(key interface{}) (interface{}, error)
+	Param(key any) (any, error)
 
-	// Path gets the relative path, including file name and extension if relevant,
-	// to the source of this Page. It will be relative to any content root.
+	// Path gets the cannonical source path.
+	// TODO1 a better description of what the path is.
 	Path() string
-
-	// This is just a temporary bridge method. Use Path in templates.
-	Pathc() string
 
 	// The slug, typically defined in front matter.
 	Slug() string
@@ -216,8 +216,8 @@ type PageMetaProvider interface {
 
 // PageRenderProvider provides a way for a Page to render content.
 type PageRenderProvider interface {
-	Render(layout ...string) (template.HTML, error)
-	RenderString(args ...interface{}) (template.HTML, error)
+	Render(ctx context.Context, layout ...string) (template.HTML, error)
+	RenderString(args ...any) (template.HTML, error)
 }
 
 // PageWithoutContent is the Page without any of the content methods.
@@ -270,7 +270,7 @@ type PageWithoutContent interface {
 	GetTerms(taxonomy string) Pages
 
 	// Used in change/dependency tracking.
-	identity.Provider
+	identity.Identity
 
 	DeprecatedWarningPageMethods
 }
@@ -294,10 +294,10 @@ type RawContentProvider interface {
 
 // RefProvider provides the methods needed to create reflinks to pages.
 type RefProvider interface {
-	Ref(argsm map[string]interface{}) (string, error)
-	RefFrom(argsm map[string]interface{}, source interface{}) (string, error)
-	RelRef(argsm map[string]interface{}) (string, error)
-	RelRefFrom(argsm map[string]interface{}, source interface{}) (string, error)
+	Ref(argsm map[string]any) (string, error)
+	RefFrom(argsm map[string]any, source any) (string, error)
+	RelRef(argsm map[string]any) (string, error)
+	RelRefFrom(argsm map[string]any, source any) (string, error)
 }
 
 // RelatedKeywordsProvider allows a Page to be indexed.
@@ -344,15 +344,14 @@ type TreeProvider interface {
 
 	// IsAncestor returns whether the current page is an ancestor of the given
 	// Note that this method is not relevant for taxonomy lists and taxonomy terms pages.
-	IsAncestor(other interface{}) (bool, error)
+	IsAncestor(other any) (bool, error)
 
-	// CurrentSection returns the page's current section or the page itself if home or a section.
-	// Note that this will return nil for pages that is not regular, home or section pages.
+	// CurrentSection returns the page's current section or the page itself if a branch node (e.g. home or a section).
 	CurrentSection() Page
 
 	// IsDescendant returns whether the current page is a descendant of the given
 	// Note that this method is not relevant for taxonomy lists and taxonomy terms pages.
-	IsDescendant(other interface{}) (bool, error)
+	IsDescendant(other any) (bool, error)
 
 	// FirstSection returns the section on level 1 below home, e.g. "/docs".
 	// For the home page, this will return itself.
@@ -361,7 +360,7 @@ type TreeProvider interface {
 	// InSection returns whether the given page is in the current section.
 	// Note that this will always return false for pages that are
 	// not either regular, home or section pages.
-	InSection(other interface{}) (bool, error)
+	InSection(other any) (bool, error)
 
 	// Parent returns a section's parent section or a page's section.
 	// To get a section's subsections, see Page's Sections method.
@@ -371,28 +370,17 @@ type TreeProvider interface {
 	// Note that for non-sections, this method will always return an empty list.
 	Sections() Pages
 
-	// Page returns a reference to the Page itself, kept here mostly
-	// for legacy reasons.
+	// Page returns a reference to the Page itself, mostly
+	// implemented to enable portable partials between regular, shortcode and markdown hook templates.
 	Page() Page
 }
 
 // DeprecatedWarningPageMethods lists deprecated Page methods that will trigger
 // a WARNING if invoked.
 // This was added in Hugo 0.55.
-type DeprecatedWarningPageMethods interface {
-	source.FileWithoutOverlap
-	DeprecatedWarningPageMethods1
-}
-
-type DeprecatedWarningPageMethods1 interface {
-	IsDraft() bool
-	Hugo() hugo.Info
-	LanguagePrefix() string
-	GetParam(key string) interface{}
-	RSSLink() template.URL
-	URL() string
-}
+// This was emptied in Hugo 0.93.0.
+type DeprecatedWarningPageMethods any
 
 // Move here to trigger ERROR instead of WARNING.
 // TODO(bep) create wrappers and put into the Page once it has some methods.
-type DeprecatedErrorPageMethods interface{}
+type DeprecatedErrorPageMethods any

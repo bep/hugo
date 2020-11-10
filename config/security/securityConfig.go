@@ -110,7 +110,6 @@ func (c Config) CheckAllowedExec(name string) error {
 		}
 	}
 	return nil
-
 }
 
 func (c Config) CheckAllowedGetEnv(name string) error {
@@ -147,19 +146,18 @@ func (c Config) CheckAllowedHTTPMethod(method string) error {
 }
 
 // ToSecurityMap converts c to a map with 'security' as the root key.
-func (c Config) ToSecurityMap() map[string]interface{} {
+func (c Config) ToSecurityMap() map[string]any {
 	// Take it to JSON and back to get proper casing etc.
 	asJson, err := json.Marshal(c)
 	herrors.Must(err)
-	m := make(map[string]interface{})
+	m := make(map[string]any)
 	herrors.Must(json.Unmarshal(asJson, &m))
 
 	// Add the root
-	sec := map[string]interface{}{
+	sec := map[string]any{
 		"security": m,
 	}
 	return sec
-
 }
 
 // DecodeConfig creates a privacy Config from a given Hugo configuration.
@@ -189,14 +187,13 @@ func DecodeConfig(cfg config.Provider) (Config, error) {
 	}
 
 	return sc, nil
-
 }
 
 func stringSliceToWhitelistHook() mapstructure.DecodeHookFuncType {
 	return func(
 		f reflect.Type,
 		t reflect.Type,
-		data interface{}) (interface{}, error) {
+		data any) (any, error) {
 
 		if t != reflect.TypeOf(Whitelist{}) {
 			return data, nil
@@ -205,7 +202,6 @@ func stringSliceToWhitelistHook() mapstructure.DecodeHookFuncType {
 		wl := types.ToStringSlicePreserveString(data)
 
 		return NewWhitelist(wl...), nil
-
 	}
 }
 

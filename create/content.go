@@ -102,7 +102,6 @@ func NewContent(h *hugolib.HugoSites, kind, targetPath string) error {
 		}
 
 		return b.buildFile()
-
 	}
 
 	filename, err := withBuildLock()
@@ -115,7 +114,6 @@ func NewContent(h *hugolib.HugoSites, kind, targetPath string) error {
 	}
 
 	return nil
-
 }
 
 type contentBuilder struct {
@@ -168,7 +166,6 @@ func (b *contentBuilder) buildDir() error {
 			}
 			return false
 		})
-
 	}
 
 	if err := b.h.Build(hugolib.BuildCfg{NoBuildLock: true, SkipRender: true, ContentInclusionFilter: contentInclusionFilter}); err != nil {
@@ -267,7 +264,6 @@ func (b *contentBuilder) setArcheTypeFilenameToUse(ext string) {
 			return
 		}
 	}
-
 }
 
 func (b *contentBuilder) applyArcheType(contentFilename, archetypeFilename string) error {
@@ -287,7 +283,6 @@ func (b *contentBuilder) applyArcheType(contentFilename, archetypeFilename strin
 	}
 
 	return b.cf.AppplyArchetypeFilename(f, p, b.kind, archetypeFilename)
-
 }
 
 func (b *contentBuilder) mapArcheTypeDir() error {
@@ -346,7 +341,7 @@ func (b *contentBuilder) openInEditorIfConfigured(filename string) error {
 	editorExec := strings.Fields(editor)[0]
 	editorFlags := strings.Fields(editor)[1:]
 
-	var args []interface{}
+	var args []any
 	for _, editorFlag := range editorFlags {
 		args = append(args, editorFlag)
 	}
@@ -378,7 +373,6 @@ func (b *contentBuilder) usesSiteVar(filename string) (bool, error) {
 	}
 
 	return bytes.Contains(bb, []byte(".Site")) || bytes.Contains(bb, []byte("site.")), nil
-
 }
 
 type archetypeMap struct {

@@ -298,7 +298,7 @@ func checkPageTitle(t *testing.T, page page.Page, title string) {
 	}
 }
 
-func checkPageContent(t *testing.T, page page.Page, expected string, msg ...interface{}) {
+func checkPageContent(t *testing.T, page page.Page, expected string, msg ...any) {
 	t.Helper()
 	a := normalizeContent(expected)
 	b := normalizeContent(content(page))
@@ -325,7 +325,7 @@ func checkPageTOC(t *testing.T, page page.Page, toc string) {
 	}
 }
 
-func checkPageSummary(t *testing.T, page page.Page, summary string, msg ...interface{}) {
+func checkPageSummary(t *testing.T, page page.Page, summary string, msg ...any) {
 	a := normalizeContent(string(page.Summary()))
 	b := normalizeContent(summary)
 	if a != b {
@@ -369,7 +369,7 @@ func normalizeExpected(ext, str string) string {
 }
 
 func testAllMarkdownEnginesForPages(t *testing.T,
-	assertFunc func(t *testing.T, ext string, pages page.Pages), settings map[string]interface{}, pageSources ...string) {
+	assertFunc func(t *testing.T, ext string, pages page.Pages), settings map[string]any, pageSources ...string) {
 
 	engines := []struct {
 		ext           string
@@ -399,8 +399,8 @@ func testAllMarkdownEnginesForPages(t *testing.T,
 				contentDir = s
 			}
 
-			cfg.Set("security", map[string]interface{}{
-				"exec": map[string]interface{}{
+			cfg.Set("security", map[string]any{
+				"exec": map[string]any{
 					"allow": []string{"^python$", "^rst2html.*", "^asciidoctor$"},
 				},
 			})
@@ -546,6 +546,7 @@ date: 2012-01-12
 	s := b.H.Sites[0]
 
 	checkDate := func(p page.Page, year int) {
+		b.Helper()
 		b.Assert(p.Date().Year(), qt.Equals, year)
 		b.Assert(p.Lastmod().Year(), qt.Equals, year)
 	}
@@ -573,7 +574,7 @@ func TestCreateNewPage(t *testing.T) {
 		checkPageType(t, p, "page")
 	}
 
-	settings := map[string]interface{}{
+	settings := map[string]any{
 		"contentDir": "mycontent",
 	}
 
@@ -698,7 +699,7 @@ func TestPageWithShortCodeInSummary(t *testing.T) {
 func TestPageWithAdditionalExtension(t *testing.T) {
 	t.Parallel()
 	cfg, fs := newTestCfg()
-	cfg.Set("markup", map[string]interface{}{
+	cfg.Set("markup", map[string]any{
 		"defaultMarkdownHandler": "blackfriday", // TODO(bep)
 	})
 
@@ -978,18 +979,18 @@ func TestPageWithLastmodFromGitInfo(t *testing.T) {
 	wd, err := os.Getwd()
 	c.Assert(err, qt.IsNil)
 
-	cfg.Set("frontmatter", map[string]interface{}{
+	cfg.Set("frontmatter", map[string]any{
 		"lastmod": []string{":git", "lastmod"},
 	})
 	cfg.Set("defaultContentLanguage", "en")
 
-	langConfig := map[string]interface{}{
-		"en": map[string]interface{}{
+	langConfig := map[string]any{
+		"en": map[string]any{
 			"weight":       1,
 			"languageName": "English",
 			"contentDir":   "content",
 		},
-		"nn": map[string]interface{}{
+		"nn": map[string]any{
 			"weight":       2,
 			"languageName": "Nynorsk",
 			"contentDir":   "content_nn",
@@ -1039,7 +1040,7 @@ lastMod: 2018-02-28
 Content
 `
 
-			cfg.Set("frontmatter", map[string]interface{}{
+			cfg.Set("frontmatter", map[string]any{
 				"date": []string{dateHandler, "date"},
 			})
 
@@ -1100,7 +1101,7 @@ func TestWordCountWithAllCJKRunesWithoutHasCJKLanguage(t *testing.T) {
 
 func TestWordCountWithAllCJKRunesHasCJKLanguage(t *testing.T) {
 	t.Parallel()
-	settings := map[string]interface{}{"hasCJKLanguage": true}
+	settings := map[string]any{"hasCJKLanguage": true}
 
 	assertFunc := func(t *testing.T, ext string, pages page.Pages) {
 		p := pages[0]
@@ -1113,7 +1114,7 @@ func TestWordCountWithAllCJKRunesHasCJKLanguage(t *testing.T) {
 
 func TestWordCountWithMainEnglishWithCJKRunes(t *testing.T) {
 	t.Parallel()
-	settings := map[string]interface{}{"hasCJKLanguage": true}
+	settings := map[string]any{"hasCJKLanguage": true}
 
 	assertFunc := func(t *testing.T, ext string, pages page.Pages) {
 		p := pages[0]
@@ -1132,7 +1133,7 @@ func TestWordCountWithMainEnglishWithCJKRunes(t *testing.T) {
 
 func TestWordCountWithIsCJKLanguageFalse(t *testing.T) {
 	t.Parallel()
-	settings := map[string]interface{}{
+	settings := map[string]any{
 		"hasCJKLanguage": true,
 	}
 
@@ -1213,22 +1214,53 @@ func TestPagePaths(t *testing.T) {
 func TestTranslationKey(t *testing.T) {
 	t.Parallel()
 	c := qt.New(t)
-	cfg, fs := newTestCfg()
 
-	writeSource(t, fs, filepath.Join("content", filepath.FromSlash("sect/simple.no.md")), "---\ntitle: \"A1\"\ntranslationKey: \"k1\"\n---\nContent\n")
-	writeSource(t, fs, filepath.Join("content", filepath.FromSlash("sect/simple.en.md")), "---\ntitle: \"A2\"\n---\nContent\n")
+	files := `-- config.toml --
+baseURL = "https://example.com"
+disableKinds=["taxonomy", "term", "sitemap", "robotsTXT"]
+[languages]
+[languages.en]
+weight = 1
+title = "Title in English"
+[languages.nn]
+weight = 2
+title = "Tittel på nynorsk"
+[outputs]
+	home = ['HTML']
+	page = ['HTML']
 
-	s := buildSingleSite(t, deps.DepsCfg{Fs: fs, Cfg: cfg}, BuildCfg{SkipRender: true})
+-- content/sect/simple.en.md --
+---
+title: A1
+translationKey: k1
+---
+-- content/sect/simple.nn.md --
+---
+title: A2
+---
+-- layouts/index.html --
+{{ range site.Pages }}
+Path: {{ .Path }}|Kind: {{ .Kind }}|TranslationKey: {{ .TranslationKey }}|Title: {{ .Title }}
+{{ end }}
+	`
 
-	c.Assert(len(s.RegularPages()), qt.Equals, 2)
+	b := NewIntegrationTestBuilder(
+		IntegrationTestConfig{
+			T:           c,
+			TxtarString: files,
+		}).Build()
 
-	home, _ := s.Info.Home()
-	c.Assert(home, qt.Not(qt.IsNil))
-	c.Assert(home.TranslationKey(), qt.Equals, "home")
-	c.Assert(s.RegularPages()[0].TranslationKey(), qt.Equals, "page/k1")
-	p2 := s.RegularPages()[1]
+	b.AssertFileContent("public/index.html", `
+Path: /sect/simple|Kind: page|TranslationKey: page/k1|Title: A1
+Path: /sect|Kind: section|TranslationKey: section/sect|Title: Sects
+Path: /|Kind: home|TranslationKey: home|Title: Title in English
+	`)
 
-	c.Assert(p2.TranslationKey(), qt.Equals, "page/sect/simple")
+	b.AssertFileContent("public/nn/index.html", `
+Path: /sect/simple|Kind: page|TranslationKey: page/sect/simple|Title: A2
+Path: /sect|Kind: section|TranslationKey: section/sect|Title: Sects
+Path: /|Kind: home|TranslationKey: home|Title: Tittel på nynorsk
+	`)
 }
 
 func TestChompBOM(t *testing.T) {
@@ -1454,13 +1486,9 @@ Content:{{ .Content }}
 	)
 }
 
-// https://github.com/gohugoio/hugo/issues/5781
-func TestPageWithZeroFile(t *testing.T) {
-	newTestSitesBuilder(t).WithLogger(loggers.NewWarningLogger()).WithSimpleConfigFile().
-		WithTemplatesAdded("index.html", "{{ .File.Filename }}{{ with .File }}{{ .Dir }}{{ end }}").Build(BuildCfg{})
-}
-
 func TestHomePageWithNoTitle(t *testing.T) {
+	t.Parallel()
+
 	b := newTestSitesBuilder(t).WithConfigFile("toml", `
 title = "Site Title"
 `)
@@ -1538,6 +1566,7 @@ func TestPathIssues(t *testing.T) {
 
 				cfg.Set("permalinks", map[string]string{
 					"post": ":section/:title",
+					"blog": ":section/:title",
 				})
 
 				cfg.Set("uglyURLs", uglyURLs)
@@ -1552,6 +1581,7 @@ func TestPathIssues(t *testing.T) {
 					writeSource(t, fs, filepath.Join("content", "post", fmt.Sprintf("doc%d.md", i)),
 						fmt.Sprintf(`---
 title: "test%d.dot"
+weight: 10
 tags:
 - ".net"
 ---
@@ -1561,7 +1591,8 @@ tags:
 
 				writeSource(t, fs, filepath.Join("content", "Blog", "Blog1.md"),
 					fmt.Sprintf(`---
-title: "testBlog"
+title: "My Blog"
+weitght: 100
 tags:
 - "Blog"
 ---
@@ -1579,13 +1610,19 @@ tags:
 					return s
 				}
 
-				blog := "blog"
+				// Note: In Hugo 0.93.0 we redefined the disablePathToLower setting.
+				// Now the canonical content path is lower case, always.
+				// You can still have mixed-case in the name part of the URL using permalinks config,
+				// but not in the directory parts of the URL.
+				// TODO1 release notes
+				// See https://github.com/gohugoio/hugo/issues/9171
+				myblog := "my-blog"
 
 				if disablePathToLower {
-					blog = "Blog"
+					myblog = "My-Blog"
 				}
 
-				th.assertFileContent(pathFunc("public/"+blog+"/"+blog+"1/index.html"), "some blog content")
+				th.assertFileContent(pathFunc("public/blog/"+myblog+"/index.html"), "some blog content")
 
 				th.assertFileContent(pathFunc("public/post/test0.dot/index.html"), "some content")
 
@@ -1944,5 +1981,5 @@ Page1: {{ $p1.Path }}
 
 	b.Build(BuildCfg{})
 
-	b.AssertFileContent("public/index.html", "Lang: no", filepath.FromSlash("Page1: a/B/C/Page1.md"))
+	b.AssertFileContent("public/index.html", "Lang: no", "Page1: /a/b/c/page1")
 }

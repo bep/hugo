@@ -26,8 +26,7 @@ func New(d *deps.Deps) *Namespace {
 }
 
 // Namespace provides template functions for the "debug" namespace.
-type Namespace struct {
-}
+type Namespace struct{}
 
 // Dump returns a object dump of val as a string.
 // Note that not every value passed to Dump will print so nicely, but
@@ -35,6 +34,6 @@ type Namespace struct {
 // nicely.
 // Also note that the output from Dump may change from Hugo version to the next,
 // so don't depend on a specific output.
-func (ns *Namespace) Dump(val interface{}) string {
+func (ns *Namespace) Dump(val any) string {
 	return litter.Sdump(val)
 }

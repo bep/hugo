@@ -16,6 +16,10 @@ package hugolib
 import (
 	"sync"
 
+	"github.com/gohugoio/hugo/resources/page/pagekinds"
+
+	"github.com/gohugoio/hugo/common/herrors"
+
 	"github.com/gohugoio/hugo/resources/page"
 )
 
@@ -26,29 +30,30 @@ type pageData struct {
 	data     page.Data
 }
 
-func (p *pageData) Data() interface{} {
+func (p *pageData) Data() any {
+	defer herrors.Recover()
 	p.dataInit.Do(func() {
 		p.data = make(page.Data)
 
-		if p.Kind() == page.KindPage {
+		if p.Kind() == pagekinds.Page {
 			return
 		}
 
 		switch p.Kind() {
-		case page.KindTerm:
-			b := p.treeRef.n
-			name := b.viewInfo.name
-			termKey := b.viewInfo.termKey
+		case pagekinds.Term:
+			b := p.m.treeRef.GetNode()
+			name := b.traits.(viewInfoTrait).ViewInfo().name
+			termKey := b.traits.(viewInfoTrait).ViewInfo().term
 
 			taxonomy := p.s.Taxonomies()[name.plural].Get(termKey)
 
 			p.data[name.singular] = taxonomy
 			p.data["Singular"] = name.singular
 			p.data["Plural"] = name.plural
-			p.data["Term"] = b.viewInfo.term()
-		case page.KindTaxonomy:
-			b := p.treeRef.n
-			name := b.viewInfo.name
+			p.data["Term"] = b.traits.(viewInfoTrait).ViewInfo().Term()
+		case pagekinds.Taxonomy:
+			b := p.m.treeRef.GetNode()
+			name := b.traits.(viewInfoTrait).ViewInfo().name
 
 			p.data["Singular"] = name.singular
 			p.data["Plural"] = name.plural
