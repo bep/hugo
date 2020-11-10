@@ -16,6 +16,8 @@ package hugolib
 import (
 	"sync"
 
+	"github.com/gohugoio/hugo/common/herrors"
+
 	"github.com/gohugoio/hugo/resources/page"
 )
 
@@ -27,6 +29,7 @@ type pageData struct {
 }
 
 func (p *pageData) Data() interface{} {
+	defer herrors.Recover()
 	p.dataInit.Do(func() {
 		p.data = make(page.Data)
 
@@ -37,6 +40,12 @@ func (p *pageData) Data() interface{} {
 		switch p.Kind() {
 		case page.KindTerm:
 			b := p.treeRef.n
+			if b == nil {
+				panic("TODO1 non")
+			}
+			if b.viewInfo == nil {
+				panic("TODO1 viewInfo nil for " + p.treeRef.key)
+			}
 			name := b.viewInfo.name
 			termKey := b.viewInfo.termKey
 

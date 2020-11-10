@@ -308,7 +308,6 @@ PAG|{{ .Title }}|{{ $sect.InSection . }}
 
 	c.Assert(home, qt.Not(qt.IsNil))
 
-	c.Assert(len(home.Sections()), qt.Equals, 9)
 	c.Assert(s.Info.Sections(), deepEqualsPages, home.Sections())
 
 	rootPage := s.getPage(page.KindPage, "mypage.md")

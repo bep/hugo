@@ -17,6 +17,8 @@ import (
 	"path"
 	"strings"
 
+	"github.com/gohugoio/hugo/common/herrors"
+
 	"github.com/gohugoio/hugo/common/types"
 	"github.com/gohugoio/hugo/resources/page"
 )
@@ -37,7 +39,7 @@ func (pt pageTree) IsAncestor(other interface{}) (bool, error) {
 
 	ref1, ref2 := pt.p.getTreeRef(), tp.getTreeRef()
 
-	if ref1 != nil && ref1.key == "/" {
+	if ref1 != nil && ref1.key == "" {
 		return true, nil
 	}
 
@@ -54,11 +56,7 @@ func (pt pageTree) IsAncestor(other interface{}) (bool, error) {
 		return true, nil
 	}
 
-	if strings.HasPrefix(ref2.key, ref1.key) {
-		return true, nil
-	}
-
-	return strings.HasPrefix(ref2.key, ref1.key+cmBranchSeparator), nil
+	return strings.HasPrefix(ref2.key, ref1.key+contentMapNodeSeparator), nil
 }
 
 func (pt pageTree) CurrentSection() page.Page {
@@ -83,7 +81,7 @@ func (pt pageTree) IsDescendant(other interface{}) (bool, error) {
 
 	ref1, ref2 := pt.p.getTreeRef(), tp.getTreeRef()
 
-	if ref2 != nil && ref2.key == "/" {
+	if ref2 != nil && ref2.key == "" {
 		return true, nil
 	}
 
@@ -100,11 +98,7 @@ func (pt pageTree) IsDescendant(other interface{}) (bool, error) {
 		return true, nil
 	}
 
-	if strings.HasPrefix(ref1.key, ref2.key) {
-		return true, nil
-	}
-
-	return strings.HasPrefix(ref1.key, ref2.key+cmBranchSeparator), nil
+	return strings.HasPrefix(ref1.key, ref2.key+contentMapNodeSeparator), nil
 }
 
 func (pt pageTree) FirstSection() page.Page {
@@ -145,10 +139,10 @@ func (pt pageTree) InSection(other interface{}) (bool, error) {
 		return ref1.n.p.IsHome(), nil
 	}
 
-	s1, _ := ref1.getCurrentSection()
-	s2, _ := ref2.getCurrentSection()
+	b1 := ref1.getCurrentSection()
+	b2 := ref2.getCurrentSection()
 
-	return s1 == s2, nil
+	return b1 == b2, nil
 }
 
 func (pt pageTree) Page() page.Page {
@@ -156,31 +150,30 @@ func (pt pageTree) Page() page.Page {
 }
 
 func (pt pageTree) Parent() page.Page {
+	defer herrors.Recover() // TODO1
+
 	p := pt.p
 
-	if p.parent != nil {
+	if pt.p.parent != nil {
+		// Page resource.
 		return p.parent
-	}
-
-	if pt.p.IsHome() {
-		return nil
 	}
 
 	tree := p.getTreeRef()
 
-	if tree == nil || pt.p.Kind() == page.KindTaxonomy {
-		return pt.p.s.home
+	if tree == nil {
+		return p.s.home
 	}
 
-	_, b := tree.getSection()
-	if b == nil {
+	if tree.branch == nil {
 		return nil
 	}
 
-	return b.p
+	return tree.branch.n.p
 }
 
 func (pt pageTree) Sections() page.Pages {
+	defer herrors.Recover() // TODO1
 	if pt.p.bucket == nil {
 		return nil
 	}

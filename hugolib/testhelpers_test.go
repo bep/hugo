@@ -711,7 +711,7 @@ func (s *sitesBuilder) AssertFileContent(filename string, matches ...string) {
 		lines := strings.Split(m, "\n")
 		for _, match := range lines {
 			match = strings.TrimSpace(match)
-			if match == "" {
+			if match == "" || strings.HasPrefix(match, "#") {
 				continue
 			}
 			if !strings.Contains(content, match) {
@@ -1022,6 +1022,21 @@ func dumpSPages(pages ...*pageState) {
 			i+1,
 			p.Kind(), p.Title(), p.RelPermalink(), p.Path(), p.SectionsPath())
 	}
+}
+
+func dumpPageMaps(h *HugoSites) {
+	panic("TODO1")
+	/*
+		for _, s := range h.Sites {
+			fmt.Println("________", s.Lang())
+			m := s.pageMap
+			fmt.Println("\nSections:\n____")
+			m.sections.printKeys()
+			fmt.Println("\nPages:\n____")
+			m.pages.printKeys()
+
+		}
+	*/
 }
 
 func printStringIndexes(s string) {

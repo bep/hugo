@@ -173,18 +173,49 @@ func (s *Site) Taxonomies() TaxonomyList {
 	return s.taxonomies
 }
 
-type taxonomiesConfig map[string]string
-
-func (t taxonomiesConfig) Values() []viewName {
-	var vals []viewName
-	for k, v := range t {
-		vals = append(vals, viewName{singular: k, plural: v})
+type (
+	taxonomiesConfig       map[string]string
+	taxonomiesConfigValues struct {
+		views          []viewName
+		viewsByTreeKey map[string]viewName
 	}
-	sort.Slice(vals, func(i, j int) bool {
-		return vals[i].plural < vals[j].plural
+)
+
+func (t taxonomiesConfig) Values() taxonomiesConfigValues {
+	var views []viewName
+	for k, v := range t {
+		views = append(views, viewName{singular: k, plural: v, pluralTreeKey: cleanTreeKey(v)})
+	}
+	sort.Slice(views, func(i, j int) bool {
+		return views[i].plural < views[j].plural
 	})
 
-	return vals
+	viewsByTreeKey := make(map[string]viewName)
+	for _, v := range views {
+		viewsByTreeKey[v.pluralTreeKey] = v
+	}
+
+	return taxonomiesConfigValues{
+		views:          views,
+		viewsByTreeKey: viewsByTreeKey,
+	}
+}
+
+func (t taxonomiesConfigValues) getPageKind(key string) string {
+	_, found := t.viewsByTreeKey[key]
+	if found {
+		return page.KindTaxonomy
+	}
+
+	// It may be a term.
+	for k, _ := range t.viewsByTreeKey {
+		if strings.HasPrefix(key, k) {
+			return page.KindTerm
+		}
+	}
+
+	return ""
+
 }
 
 type siteConfigHolder struct {
@@ -251,11 +282,6 @@ func (s *Site) prepareInits() {
 	})
 
 	s.init.prevNextInSection = init.Branch(func() (interface{}, error) {
-		var sections page.Pages
-		s.home.treeRef.m.collectSectionsRecursiveIncludingSelf(pageMapQuery{Prefix: s.home.treeRef.key}, func(n *contentNode) {
-			sections = append(sections, n.p)
-		})
-
 		setNextPrev := func(pas page.Pages) {
 			for i, p := range pas {
 				np, ok := p.(nextPrevInSectionProvider)
@@ -281,28 +307,25 @@ func (s *Site) prepareInits() {
 			}
 		}
 
-		for _, sect := range sections {
-			treeRef := sect.(treeRefProvider).getTreeRef()
-
+		s.pageMap.WalkBranches(func(s string, b *contentBranchNode) bool {
+			if b.n.isView() {
+				return false
+			}
+			if contentTreeNoListAlwaysFilter(s, b.n) {
+				return false
+			}
 			var pas page.Pages
-			treeRef.m.collectPages(pageMapQuery{Prefix: treeRef.key + cmBranchSeparator}, func(c *contentNode) {
-				pas = append(pas, c.p)
-			})
+			b.pages.Walk(
+				contentTreeNoListAlwaysFilter,
+				func(s string, c *contentNode) bool {
+					pas = append(pas, c.p)
+					return false
+				},
+			)
 			page.SortByDefault(pas)
-
 			setNextPrev(pas)
-		}
-
-		// The root section only goes one level down.
-		treeRef := s.home.getTreeRef()
-
-		var pas page.Pages
-		treeRef.m.collectPages(pageMapQuery{Prefix: treeRef.key + cmBranchSeparator}, func(c *contentNode) {
-			pas = append(pas, c.p)
+			return false
 		})
-		page.SortByDefault(pas)
-
-		setNextPrev(pas)
 
 		return nil, nil
 	})
@@ -328,9 +351,11 @@ func (s *Site) Menus() navigation.Menus {
 }
 
 func (s *Site) initRenderFormats() {
+
 	formatSet := make(map[string]bool)
 	formats := output.Formats{}
-	s.pageMap.pageTrees.WalkRenderable(func(s string, n *contentNode) bool {
+
+	s.pageMap.WalkPagesAllPrefixSection("", nil, contentTreeNoRenderFilter, func(branch, owner *contentBranchNode, s string, n *contentNode) bool {
 		for _, f := range n.p.m.configuredOutputFormats {
 			if !formatSet[f.Name] {
 				formats = append(formats, f)
@@ -354,6 +379,7 @@ func (s *Site) initRenderFormats() {
 
 	sort.Sort(formats)
 	s.renderFormats = formats
+
 }
 
 func (s *Site) GetRelatedDocsHandler() *page.RelatedDocsHandler {
@@ -1176,7 +1202,6 @@ func (s *Site) processPartial(config *BuildCfg, init func(config *BuildCfg) erro
 		}
 
 		filenamesChanged = helpers.UniqueStringsReuse(filenamesChanged)
-
 		if err := s.readAndProcessContent(filenamesChanged...); err != nil {
 			return err
 		}
@@ -1443,11 +1468,13 @@ func (s *Site) assembleMenus() {
 	sectionPagesMenu := s.Info.sectionPagesMenu
 
 	if sectionPagesMenu != "" {
-		s.pageMap.sections.Walk(func(s string, v interface{}) bool {
-			p := v.(*contentNode).p
-			if p.IsHome() {
+		s.pageMap.WalkPagesAllPrefixSection("", noTaxonomiesFilter, contentTreeNoListAlwaysFilter, func(branch, owner *contentBranchNode, s string, n *contentNode) bool {
+			if s == "" {
 				return false
 			}
+
+			p := n.p
+
 			// From Hugo 0.22 we have nested sections, but until we get a
 			// feel of how that would work in this setting, let us keep
 			// this menu for the top level only.
@@ -1466,10 +1493,11 @@ func (s *Site) assembleMenus() {
 
 			return false
 		})
+
 	}
 
 	// Add menu entries provided by pages
-	s.pageMap.pageTrees.WalkRenderable(func(ss string, n *contentNode) bool {
+	s.pageMap.WalkPagesAllPrefixSection("", noTaxonomiesFilter, contentTreeNoRenderFilter, func(branch, owner *contentBranchNode, ss string, n *contentNode) bool {
 		p := n.p
 
 		for name, me := range p.pageMenus.menus() {
@@ -1554,7 +1582,7 @@ func (s *Site) resetBuildState(sourceChanged bool) {
 	s.init.Reset()
 
 	if sourceChanged {
-		s.pageMap.contentMap.pageReverseIndex.Reset()
+		s.pageMap.pageReverseIndex.Reset()
 		s.PageCollections = newPageCollections(s.pageMap)
 		s.pageMap.withEveryBundlePage(func(p *pageState) bool {
 			p.pagePages = &pagePages{}
@@ -1565,6 +1593,7 @@ func (s *Site) resetBuildState(sourceChanged bool) {
 			p.Scratcher = maps.NewScratcher()
 			return false
 		})
+
 	} else {
 		s.pageMap.withEveryBundlePage(func(p *pageState) bool {
 			p.Scratcher = maps.NewScratcher()
@@ -1810,6 +1839,10 @@ func (s *Site) newPage(
 	m := map[string]interface{}{}
 	if title != "" {
 		m["title"] = title
+	}
+
+	if kind == page.KindHome && len(sections) > 0 {
+		panic("TODO1 home has no sections")
 	}
 
 	p, err := newPageFromMeta(

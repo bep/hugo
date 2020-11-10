@@ -47,6 +47,10 @@ import (
 
 var cjkRe = regexp.MustCompile(`\p{Han}|\p{Hangul}|\p{Hiragana}|\p{Katakana}`)
 
+var (
+	_ resource.Dated = (*pageMeta)(nil)
+)
+
 type pageMeta struct {
 	// kind is the discriminator that identifies the different page types
 	// in the different page collections. This can, as an example, be used
@@ -94,7 +98,7 @@ type pageMeta struct {
 
 	urlPaths pagemeta.URLPath
 
-	resource.Dates
+	pageMetaDates
 
 	// Set if this page is bundled inside another.
 	bundled bool
@@ -122,6 +126,34 @@ type pageMeta struct {
 	renderingConfigOverrides map[string]interface{}
 	contentConverterInit     sync.Once
 	contentConverter         converter.Converter
+}
+
+type pageMetaDates struct {
+	calculated   resource.Dates
+	userProvided resource.Dates
+}
+
+func (d *pageMetaDates) getDates() resource.Dates {
+	if !resource.IsZeroDates(d.userProvided) {
+		return d.userProvided
+	}
+	return d.calculated
+}
+
+func (d *pageMetaDates) Date() time.Time {
+	return d.getDates().Date()
+}
+
+func (d *pageMetaDates) Lastmod() time.Time {
+	return d.getDates().Lastmod()
+}
+
+func (d *pageMetaDates) PublishDate() time.Time {
+	return d.getDates().PublishDate()
+}
+
+func (d *pageMetaDates) ExpiryDate() time.Time {
+	return d.getDates().ExpiryDate()
 }
 
 func (p *pageMeta) Aliases() []string {
@@ -304,20 +336,23 @@ func (p *pageMeta) Weight() int {
 	return p.weight
 }
 
-func (pm *pageMeta) mergeBucketCascades(b1, b2 *pagesMapBucket) {
+func (pm *pageMeta) mergeBucketCascades(skipKey func(key string) bool, b1, b2 *pagesMapBucket) {
 	if b1.cascade == nil {
 		b1.cascade = make(map[page.PageMatcher]maps.Params)
 	}
 
 	if b2 != nil && b2.cascade != nil {
 		for k, v := range b2.cascade {
-
 			vv, found := b1.cascade[k]
 			if !found {
 				b1.cascade[k] = v
 			} else {
 				// Merge
 				for ck, cv := range v {
+					if skipKey(ck) {
+						continue
+					}
+
 					if _, found := vv[ck]; !found {
 						vv[ck] = cv
 					}
@@ -380,7 +415,13 @@ func (pm *pageMeta) setMetadata(parentBucket *pagesMapBucket, p *pageState, fron
 	if p.bucket != nil {
 		if parentBucket != nil {
 			// Merge missing keys from parent into this.
-			pm.mergeBucketCascades(p.bucket, parentBucket)
+			pm.mergeBucketCascades(func(key string) bool {
+				// TODO1
+				if key != "title" {
+					return false
+				}
+				return p.File().IsZero()
+			}, p.bucket, parentBucket)
 		}
 		cascade = p.bucket.cascade
 	} else if parentBucket != nil {
@@ -415,7 +456,7 @@ func (pm *pageMeta) setMetadata(parentBucket *pagesMapBucket, p *pageState, fron
 	descriptor := &pagemeta.FrontMatterDescriptor{
 		Frontmatter:   frontmatter,
 		Params:        pm.params,
-		Dates:         &pm.Dates,
+		Dates:         &pm.pageMetaDates.userProvided,
 		PageURLs:      &pm.urlPaths,
 		BaseFilename:  contentBaseName,
 		ModTime:       mtime,
@@ -657,7 +698,7 @@ func (p *pageMeta) noListAlways() bool {
 }
 
 func (p *pageMeta) getListFilter(local bool) contentTreeNodeCallback {
-	return newContentTreeFilter(func(n *contentNode) bool {
+	return func(s string, n *contentNode) bool {
 		if n == nil {
 			return true
 		}
@@ -673,7 +714,7 @@ func (p *pageMeta) getListFilter(local bool) contentTreeNodeCallback {
 		}
 
 		return !shouldList
-	})
+	}
 }
 
 func (p *pageMeta) noRender() bool {
@@ -710,7 +751,7 @@ func (p *pageMeta) applyDefaultValues(n *contentNode) error {
 		case page.KindSection:
 			var sectionName string
 			if n != nil {
-				sectionName = n.rootSection()
+				sectionName = n.rootSection() // TODO1 get rid of this somehow
 			} else {
 				sectionName = p.sections[0]
 			}

@@ -23,7 +23,7 @@ import (
 func Test073(t *testing.T) {
 	assertDisabledTaxonomyAndTerm := func(b *sitesBuilder, taxonomy, term bool) {
 		b.Assert(b.CheckExists("public/tags/index.html"), qt.Equals, taxonomy)
-		b.Assert(b.CheckExists("public/tags/tag1/index.html"), qt.Equals, term)
+		// TODO1 should this be possible? Probably simpler to do this via build option b.Assert(b.CheckExists("public/tags/tag1/index.html"), qt.Equals, term)
 	}
 
 	assertOutputTaxonomyAndTerm := func(b *sitesBuilder, taxonomy, term bool) {
