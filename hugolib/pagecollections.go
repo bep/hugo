@@ -32,8 +32,6 @@ type PageCollections struct {
 	pageMap *pageMap
 
 	// Lazy initialized page collections
-	pages           *lazyPagesFactory
-	regularPages    *lazyPagesFactory
 	allPages        *lazyPagesFactory
 	allRegularPages *lazyPagesFactory
 }
@@ -41,13 +39,13 @@ type PageCollections struct {
 // Pages returns all pages.
 // This is for the current language only.
 func (c *PageCollections) Pages() page.Pages {
-	return c.pages.get()
+	return c.pageMap.s.home.bucket.getPagesAndSectionsRecursive()
 }
 
 // RegularPages returns all the regular pages.
 // This is for the current language only.
 func (c *PageCollections) RegularPages() page.Pages {
-	return c.regularPages.get()
+	return c.pageMap.s.home.RegularPagesRecursive()
 }
 
 // AllPages returns all pages for all languages.
@@ -84,14 +82,6 @@ func newPageCollections(m *pageMap) *PageCollections {
 	}
 
 	c := &PageCollections{pageMap: m}
-
-	c.pages = newLazyPagesFactory(func() page.Pages {
-		return m.createListAllPages()
-	})
-
-	c.regularPages = newLazyPagesFactory(func() page.Pages {
-		return c.findPagesByKindIn(page.KindPage, c.pages.get())
-	})
 
 	return c
 }

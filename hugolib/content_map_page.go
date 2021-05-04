@@ -913,11 +913,11 @@ type pagesMapBucket struct {
 }
 
 type pagesMapBucketPages struct {
-	pagesInit sync.Once
-	pages     page.Pages
-
 	pagesAndSectionsInit sync.Once
 	pagesAndSections     page.Pages
+
+	pagesAndSectionsRecursiveInit sync.Once
+	pagesAndSectionsRecursive     page.Pages
 
 	regularPageInit sync.Once
 	regularPages    page.Pages
@@ -970,10 +970,24 @@ func (b *pagesMapBucket) getPagesAndSections() page.Pages {
 	}
 
 	b.pagesAndSectionsInit.Do(func() {
-		b.pagesAndSections = b.self.treeRef.getPagesAndSections()
+		b.pagesAndSections = b.self.treeRef.getPagesAndSections(true)
+		page.SortByDefault(b.pagesAndSections)
 	})
 
 	return b.pagesAndSections
+}
+
+func (b *pagesMapBucket) getPagesAndSectionsRecursive() page.Pages {
+	if b == nil {
+		return nil
+	}
+
+	b.pagesAndSectionsRecursiveInit.Do(func() {
+		b.pagesAndSectionsRecursive = b.self.treeRef.getPagesAndSections(false)
+		page.SortByDefault(b.pagesAndSectionsRecursive)
+	})
+
+	return b.pagesAndSectionsRecursive
 }
 
 func (b *pagesMapBucket) getSections() page.Pages {

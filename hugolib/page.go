@@ -177,7 +177,7 @@ func (p *pageState) MarshalJSON() ([]byte, error) {
 
 func (p *pageState) RegularPagesRecursive() page.Pages {
 	switch p.Kind() {
-	case page.KindSection:
+	case page.KindSection, page.KindHome:
 		return p.bucket.getRegularPagesRecursive()
 	default:
 		return p.RegularPages()
