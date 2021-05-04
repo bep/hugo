@@ -176,63 +176,40 @@ func (p *pageState) MarshalJSON() ([]byte, error) {
 }
 
 func (p *pageState) RegularPagesRecursive() page.Pages {
-	p.regularPagesRecursiveInit.Do(func() {
-		var pages page.Pages
-		switch p.Kind() {
-		case page.KindSection:
-			pages = p.bucket.getRegularPagesRecursive()
-		default:
-			pages = p.RegularPages()
-		}
-		p.regularPagesRecursive = pages
-	})
-	return p.regularPagesRecursive
+	switch p.Kind() {
+	case page.KindSection:
+		return p.bucket.getRegularPagesRecursive()
+	default:
+		return p.RegularPages()
+	}
 }
 
 func (p *pageState) RegularPages() page.Pages {
-	p.regularPagesInit.Do(func() {
-		var pages page.Pages
-
-		switch p.Kind() {
-		case page.KindPage:
-		case page.KindSection, page.KindHome, page.KindTaxonomy:
-			pages = p.bucket.getRegularPages()
-		case page.KindTerm:
-			all := p.Pages()
-			for _, p := range all {
-				if p.IsPage() {
-					pages = append(pages, p)
-				}
-			}
-		default:
-			pages = p.s.RegularPages()
-		}
-
-		p.regularPages = pages
-	})
-
-	return p.regularPages
+	switch p.Kind() {
+	case page.KindPage:
+	case page.KindSection, page.KindHome, page.KindTaxonomy:
+		return p.bucket.getRegularPages()
+	case page.KindTerm:
+		return p.bucket.getRegularTaxonomyEntries()
+	default:
+		return p.s.RegularPages()
+	}
+	return nil
 }
 
 func (p *pageState) Pages() page.Pages {
-	p.pagesInit.Do(func() {
-		var pages page.Pages
-		switch p.Kind() {
-		case page.KindPage:
-		case page.KindSection, page.KindHome:
-			pages = p.bucket.getPagesAndSections()
-		case page.KindTerm:
-			pages = p.bucket.getTaxonomyEntries()
-		case page.KindTaxonomy:
-			pages = p.bucket.getTaxonomies()
-		default:
-			pages = p.s.Pages()
-		}
-
-		p.pages = pages
-	})
-
-	return p.pages
+	switch p.Kind() {
+	case page.KindPage:
+	case page.KindSection, page.KindHome:
+		return p.bucket.getPagesAndSections()
+	case page.KindTerm:
+		return p.bucket.getTaxonomyEntries()
+	case page.KindTaxonomy:
+		return p.bucket.getTaxonomies()
+	default:
+		return p.s.Pages()
+	}
+	return nil
 }
 
 // RawContent returns the un-rendered source content without

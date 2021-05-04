@@ -54,7 +54,6 @@ func newPageBase(metaProvider *pageMeta) (*pageState, error) {
 			RefProvider:             page.NopPage,
 			ShortcodeInfoProvider:   page.NopPage,
 			LanguageProvider:        s,
-			pagePages:               &pagePages{},
 
 			InternalDependencies: s,
 			init:                 lazy.New(),

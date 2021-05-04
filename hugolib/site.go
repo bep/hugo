@@ -336,8 +336,7 @@ func (s *Site) prepareInits() {
 	})
 
 	s.init.taxonomies = init.Branch(func() (interface{}, error) {
-		err := s.pageMap.assembleTaxonomies()
-		return nil, err
+		return nil, s.pageMap.createSiteTaxonomies()
 	})
 }
 
@@ -1585,7 +1584,6 @@ func (s *Site) resetBuildState(sourceChanged bool) {
 		s.pageMap.pageReverseIndex.Reset()
 		s.PageCollections = newPageCollections(s.pageMap)
 		s.pageMap.withEveryBundlePage(func(p *pageState) bool {
-			p.pagePages = &pagePages{}
 			if p.bucket != nil {
 				p.bucket.pagesMapBucketPages = &pagesMapBucketPages{}
 			}

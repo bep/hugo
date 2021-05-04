@@ -436,36 +436,21 @@ func (m *pageMap) assemblePages() error {
 
 	// Holds references to sections or pages to exlude from the build
 	// because front matter dictated it (e.g. a draft).
-	sectionsToDelete := make(map[string]bool)
-	var pagesToDelete []*contentTreeRef
+	var (
+		sectionsToDelete = make(map[string]bool)
+		pagesToDelete    []*contentTreeRef
+	)
 
 	handleBranch := func(branch, owner *contentBranchNode, s string, n *contentNode) bool {
-
-		if branch == nil && s != "" {
-			panic(fmt.Sprintf("no branch set for branch %q", s))
-		}
-
-		if s != "" && branch.n.p == nil {
-			panic(fmt.Sprintf("no page set on owner for for branch %q", s))
-		}
-
-		tref := &contentTreeRef{
-			m:      m,
-			branch: branch,
-			owner:  owner,
-			key:    s,
-			n:      n,
-		}
-
 		if n.p != nil {
+			// Page already set, nothing more to do.
 			if n.p.IsHome() {
 				m.s.home = n.p
 			}
 			return false
 		}
 
-		section := branch
-		var bucket *pagesMapBucket
+		// Determine Page Kind.
 		var kind string
 		if s == "" {
 			kind = page.KindHome
@@ -477,18 +462,22 @@ func (m *pageMap) assemblePages() error {
 			}
 		}
 
-		bucket = section.n.p.bucket
-
 		if n.fi != nil {
-			n.p, err = m.newPageFromContentNode(m.s, n, bucket, nil)
+			n.p, err = m.newPageFromContentNode(m.s, n, branch.n.p.bucket, nil)
 			if err != nil {
 				return true
 			}
 		} else {
-			n.p = m.s.newPage(n, bucket, kind, "", m.splitKey(s)...)
+			n.p = m.s.newPage(n, branch.n.p.bucket, kind, "", m.splitKey(s)...)
 		}
 
-		n.p.treeRef = tref
+		n.p.treeRef = &contentTreeRef{
+			m:      m,
+			branch: branch,
+			owner:  owner,
+			key:    s,
+			n:      n,
+		}
 
 		if n.p.IsHome() {
 			m.s.home = n.p
@@ -497,8 +486,7 @@ func (m *pageMap) assemblePages() error {
 		if !m.s.shouldBuild(n.p) {
 			sectionsToDelete[s] = true
 			if s == "" {
-				// Home page
-				// TODO1 a way to abort walking.
+				// Home page, abort.
 				return true
 
 			}
@@ -511,21 +499,8 @@ func (m *pageMap) assemblePages() error {
 
 	handlePage := func(branch, owner *contentBranchNode, s string, n *contentNode) bool {
 
-		tref := &contentTreeRef{
-			m:      m,
-			branch: branch,
-			owner:  owner,
-			key:    s,
-			n:      n,
-		}
-
-		section := branch
-		bucket := section.n.p.bucket
+		bucket := branch.n.p.bucket
 		kind := page.KindPage
-		// It may also be a taxonomy term.
-		if section.n.p.Kind() == page.KindTaxonomy {
-			kind = page.KindTerm
-		}
 
 		if n.fi != nil {
 			n.p, err = m.newPageFromContentNode(m.s, n, bucket, nil)
@@ -534,6 +509,14 @@ func (m *pageMap) assemblePages() error {
 			}
 		} else {
 			n.p = m.s.newPage(n, bucket, kind, "", m.splitKey(s)...)
+		}
+
+		tref := &contentTreeRef{
+			m:      m,
+			branch: branch,
+			owner:  owner,
+			key:    s,
+			n:      n,
 		}
 
 		n.p.treeRef = tref
@@ -553,8 +536,6 @@ func (m *pageMap) assemblePages() error {
 		}
 
 		p := owner.p
-
-		// TODO1 error handling
 		meta := n.fi.Meta()
 		classifier := meta.Classifier()
 		var r resource.Resource
@@ -583,6 +564,7 @@ func (m *pageMap) assemblePages() error {
 	}
 
 	// Create home page if it does not exist.
+
 	hn := m.Get("")
 	if hn == nil {
 		hn = m.InsertSection("", &contentNode{})
@@ -649,6 +631,7 @@ func (m *pageMap) assemblePages() error {
 		m.sections.DeletePrefix(s + "/")
 	}
 
+	// Attach pages to views.
 	if !m.cfg.taxonomyDisabled {
 		for _, viewName := range m.cfg.taxonomyConfig.views {
 
@@ -822,11 +805,6 @@ func (m *pageMap) assemblePages() error {
 	return nil
 }
 
-// TODO1 consolidate
-func (m *pageMap) assembleTaxonomies() error {
-	return m.createSiteTaxonomies()
-}
-
 // withEveryBundlePage applies fn to every Page, including those bundled inside
 // leaf bundles.
 func (m *pageMap) withEveryBundlePage(fn func(p *pageState) bool) error {
@@ -941,26 +919,49 @@ type pagesMapBucketPages struct {
 	pagesAndSectionsInit sync.Once
 	pagesAndSections     page.Pages
 
+	regularPageInit sync.Once
+	regularPages    page.Pages
+
+	regularPagesRecursiveInit sync.Once
+	regularPagesRecursive     page.Pages
+
 	sectionsInit sync.Once
 	sections     page.Pages
+
+	taxonomiesInit sync.Once
+	taxonomies     page.Pages
+
+	taxonomyEntriesInit sync.Once
+	taxonomyEntries     page.Pages
+
+	taxonomyEntriesRegularInit sync.Once
+	taxonomyEntriesRegular     page.Pages
 }
 
 func (b *pagesMapBucket) getRegularPagesRecursive() page.Pages {
 	if b == nil {
 		return nil
 	}
-	pages := b.self.treeRef.getRegularPagesRecursive()
-	page.SortByDefault(pages)
-	return pages
+
+	b.regularPagesRecursiveInit.Do(func() {
+		b.regularPagesRecursive = b.self.treeRef.getRegularPagesRecursive()
+		page.SortByDefault(b.regularPagesRecursive)
+	})
+
+	return b.regularPagesRecursive
 }
 
 func (b *pagesMapBucket) getRegularPages() page.Pages {
 	if b == nil {
 		return nil
 	}
-	pages := b.self.treeRef.getRegularPages()
-	page.SortByDefault(pages)
-	return pages
+
+	b.regularPagesRecursiveInit.Do(func() {
+		b.regularPagesRecursive = b.self.treeRef.getRegularPages()
+		page.SortByDefault(b.regularPagesRecursive)
+	})
+
+	return b.regularPagesRecursive
 }
 
 func (b *pagesMapBucket) getPagesAndSections() page.Pages {
@@ -995,18 +996,20 @@ func (b *pagesMapBucket) getTaxonomies() page.Pages {
 		return nil
 	}
 
-	ref := b.self.treeRef
-	if ref == nil {
-		return nil
-	}
-	var pas page.Pages
+	b.taxonomiesInit.Do(func() {
+		ref := b.self.treeRef
+		if ref == nil {
+			return
+		}
 
-	b.self.s.pageMap.WalkBranchesPrefix(ref.key+"/", func(s string, b *contentBranchNode) bool {
-		pas = append(pas, b.n.p)
-		return false
+		b.self.s.pageMap.WalkBranchesPrefix(ref.key+"/", func(s string, branch *contentBranchNode) bool {
+			b.taxonomies = append(b.taxonomies, branch.n.p)
+			return false
+		})
+		page.SortByDefault(b.taxonomies)
 	})
-	page.SortByDefault(pas)
-	return pas
+
+	return b.taxonomies
 }
 
 func (b *pagesMapBucket) getTaxonomyEntries() page.Pages {
@@ -1014,18 +1017,38 @@ func (b *pagesMapBucket) getTaxonomyEntries() page.Pages {
 		return nil
 	}
 
-	ref := b.self.treeRef
-	if ref == nil {
+	b.taxonomyEntriesInit.Do(func() {
+		ref := b.self.treeRef
+		if ref == nil {
+			return
+		}
+
+		for k, _ := range ref.owner.refs {
+			b.taxonomyEntries = append(b.taxonomyEntries, k.(*pageState))
+		}
+
+		page.SortByDefault(b.taxonomyEntries)
+	})
+
+	return b.taxonomyEntries
+}
+
+func (b *pagesMapBucket) getRegularTaxonomyEntries() page.Pages {
+	if b == nil {
 		return nil
 	}
-	var pas page.Pages
 
-	for k, _ := range ref.owner.refs {
-		pas = append(pas, k.(*pageState))
-	}
+	b.taxonomyEntriesRegularInit.Do(func() {
+		all := b.getTaxonomyEntries()
 
-	page.SortByDefault(pas)
-	return pas
+		for _, p := range all {
+			if p.IsPage() {
+				b.taxonomyEntriesRegular = append(b.taxonomyEntriesRegular, p)
+			}
+		}
+	})
+
+	return b.taxonomyEntriesRegular
 }
 
 type viewName struct {
