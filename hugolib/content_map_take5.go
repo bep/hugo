@@ -380,11 +380,6 @@ func (m *sectionMap) Walk(q sectionMapQuery) error {
 		}
 	}
 
-	var (
-		currentSectionBranchKey string = sectionZeroKey
-		currentSectionBranch    []*contentBranchNode
-	)
-
 	type depthType int
 
 	const (
@@ -401,28 +396,6 @@ func (m *sectionMap) Walk(q sectionMapQuery) error {
 		if s != "" {
 			d := path.Dir(s)
 			_, parentBranch = m.LongestPrefix(d)
-		}
-
-		if q.SectionsFunc != nil {
-			// TODO1 remove
-			if currentSectionBranchKey == sectionZeroKey {
-				currentSectionBranchKey = s
-				currentSectionBranch = []*contentBranchNode{bn}
-			} else {
-				treeRel := m.treeRelation(currentSectionBranchKey, s)
-				currentSectionBranchKey = s
-				switch treeRel {
-				case 1:
-					// Siblings
-					currentSectionBranch[len(currentSectionBranch)-1] = bn
-				case 0:
-					// Child
-					currentSectionBranch = append(currentSectionBranch, bn)
-				default:
-					currentSectionBranch = append(currentSectionBranch[:1], bn)
-				}
-			}
-			q.SectionsFunc(currentSectionBranch)
 		}
 
 		if depth <= depthBranch {
@@ -595,8 +568,6 @@ type sectionMapQuery struct {
 	NoRecurse bool
 	// Do not navigate down to the leaf nodes.
 	OnlyBranches bool
-	// Will be called for every section change.
-	SectionsFunc func(sections []*contentBranchNode)
 	// Global node filter. Return true to skip.
 	Exclude contentTreeNodeCallback
 	// Branch node filter. Return true to skip.

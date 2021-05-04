@@ -81,59 +81,6 @@ func TestSectionMap(t *testing.T) {
 	c.Assert(blogSection.InsertResource("/blog/my-article/sunset.jpg", image1), qt.IsNil)
 	c.Assert(blogSection.InsertResource("/blog/my-article2/sunrise.jpg", image2), qt.IsNil)
 
-	c.Run("Sections start from root", func(c *qt.C) {
-		var n int
-		expect := [][]*contentNode{
-			[]*contentNode{home},
-			[]*contentNode{home, blog},
-			[]*contentNode{home, blog, blog_sub},
-			[]*contentNode{home, blog, blog_sub2},
-			[]*contentNode{home, docs},
-			[]*contentNode{home, docs, docs_sub},
-			[]*contentNode{home, docs, docs_sub2},
-			[]*contentNode{home, docs, docs_sub2, docs_sub2_sub},
-		}
-		q := sectionMapQuery{
-			Branch: sectionMapQueryCallBacks{
-				Key: newSectionMapQueryKey("", true),
-			},
-			SectionsFunc: func(sections []*contentBranchNode) {
-				c.Assert(len(expect) > n, qt.Equals, true)
-				for i, nm := range sections {
-					c.Assert(len(expect[n]) > i, qt.Equals, true, qt.Commentf("n-%d-%d", n, i))
-					c.Assert(nm.n.path, qt.Equals, expect[n][i].path, qt.Commentf("n-%d-%d", n, i))
-				}
-				n++
-			},
-		}
-
-		c.Assert(m.Walk(q), qt.IsNil)
-	})
-
-	c.Run("Sections start one level down", func(c *qt.C) {
-		var n int
-		expect := [][]*contentNode{
-			[]*contentNode{blog},
-			[]*contentNode{blog, blog_sub},
-			[]*contentNode{blog, blog_sub2},
-		}
-		q := sectionMapQuery{
-			Branch: sectionMapQueryCallBacks{
-				Key: newSectionMapQueryKey("/blog", true),
-			},
-			SectionsFunc: func(sections []*contentBranchNode) {
-				c.Assert(len(expect) > n, qt.Equals, true)
-				for i, nm := range sections {
-					c.Assert(len(expect[n]) > i, qt.Equals, true, qt.Commentf("n-%d-%d", n, i))
-					c.Assert(nm.n.path, qt.Equals, expect[n][i].path, qt.Commentf("n-%d-%d", n, i))
-				}
-				n++
-			},
-		}
-
-		c.Assert(m.Walk(q), qt.IsNil)
-	})
-
 	type querySpec struct {
 		key              string
 		isBranchKey      bool

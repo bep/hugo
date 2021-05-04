@@ -166,55 +166,6 @@ func (c *PageCollections) getPageNew(context page.Page, ref string) (page.Page, 
 	return n.p, nil
 }
 
-func (c *PageCollections) getSectionOrPage(ref string) (*contentNode, string) {
-	panic("TODO1")
-	/*
-		var n *contentNode
-
-		pref := helpers.AddTrailingSlash(ref)
-		s, v, found := c.pageMap.sections.Pages.LongestPrefix(pref)
-
-		if found {
-			n = v.(*contentNode)
-		}
-
-		if found && s == pref {
-			// A section
-			return n, ""
-		}
-
-		m := c.pageMap
-
-		filename := strings.TrimPrefix(strings.TrimPrefix(ref, s), "/")
-		langSuffix := "." + m.s.Lang()
-
-		// Trim both extension and any language code.
-		name := helpers.PathNoExt(filename)
-		name = strings.TrimSuffix(name, langSuffix)
-
-		// These are reserved bundle names and will always be stored by their owning
-		// folder name.
-		name = strings.TrimSuffix(name, "/index")
-		name = strings.TrimSuffix(name, "/_index")
-		if name == "index" || name == "_index" {
-			name = ""
-		}
-
-		if !found {
-			return nil, name
-		}
-
-		// Check if it's a section with filename provided.
-		if !n.p.File().IsZero() && n.p.File().LogicalName() == filename {
-			return n, name
-		}
-
-		return m.getPage(s, name), name
-
-	*/
-
-}
-
 // For Ref/Reflink and .Site.GetPage do simple name lookups for the potentially ambigous myarticle.md and /myarticle.md,
 // but not when we get ./myarticle*, section/myarticle.
 func shouldDoSimpleLookup(ref string) bool {

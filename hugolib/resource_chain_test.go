@@ -1023,6 +1023,7 @@ class-in-b {
 
 	b.Assert(os.Chdir(workDir), qt.IsNil)
 	cmd, err := hexec.SafeCommand("npm", "install")
+	b.Assert(err, qt.IsNil)
 	_, err = cmd.CombinedOutput()
 	b.Assert(err, qt.IsNil)
 	b.Build(BuildCfg{})

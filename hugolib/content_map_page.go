@@ -146,33 +146,6 @@ func (m *pageMap) Len() int {
 	return 0
 }
 
-func (m *pageMap) createMissingTaxonomyNodes() error {
-	if m.cfg.taxonomyDisabled {
-		return nil
-	}
-	//panic("TODO1")
-	return nil
-	/*
-		m.taxonomyEntries.Pages.Walk(func(s string, v interface{}) bool {
-			n := v.(*contentNode)
-			vi := n.viewInfo
-			k := cleanTreeKey(vi.name.plural + "/" + vi.termKey)
-
-			if _, found := m.taxonomies.Pages.Get(k); !found {
-				vic := &contentBundleViewInfo{
-					name:       vi.name,
-					termKey:    vi.termKey,
-					termOrigin: vi.termOrigin,
-				}
-				m.taxonomies.Pages.Insert(k, &contentNode{viewInfo: vic})
-			}
-			return false
-		})
-	*/
-
-	return nil
-}
-
 func (m *pageMap) newPageFromContentNode(
 	s *Site,
 	n *contentNode, parentBucket *pagesMapBucket, owner *pageState) (*pageState, error) {
@@ -444,96 +417,17 @@ const (
 	sectionZeroKey = "ZERO"
 )
 
-func (m *pageMap) assembleSections() error {
-	/*
-		var sectionsToDelete []string
-		var err error
-
-		m.sections.Pages.Walk(func(s string, v interface{}) bool {
-			n := v.(*contentNode)
-			var shouldBuild bool
-
-			defer func() {
-				// Make sure we always rebuild the view cache.
-				if shouldBuild && err == nil && n.p != nil {
-					m.attachPageToViews(s, n)
-					if n.p.IsHome() {
-						m.s.home = n.p
-					}
-				}
-			}()
-
-			sections := m.splitKey(s)
-
-			if n.p != nil {
-				if n.p.IsHome() {
-					m.s.home = n.p
-				}
-				shouldBuild = true
-				return false
-			}
-
-			var parent *contentNode
-			var parentBucket *pagesMapBucket
-
-			const homeKey = ""
-
-			if s != homeKey {
-				_, parent = m.getSection(s)
-				if parent == nil || parent.p == nil {
-					panic(fmt.Sprintf("BUG: parent not set for %q", s))
-				}
-			}
-
-			if parent != nil {
-				parentBucket = parent.p.bucket
-			}
-
-			kind := page.KindSection
-			if s == homeKey {
-				kind = page.KindHome
-			}
-
-			if n.fi != nil {
-				n.p, err = m.newPageFromContentNode(n, parentBucket, nil)
-				if err != nil {
-					return true
-				}
-			} else {
-				n.p = m.s.newPage(n, parentBucket, kind, "", sections...)
-			}
-
-			shouldBuild = m.s.shouldBuild(n.p)
-			if !shouldBuild {
-				sectionsToDelete = append(sectionsToDelete, s)
-				return false
-			}
-
-
-			if err = m.assembleResources(s, n.p, parentBucket); err != nil {
-				return true
-			}
-
-			return false
-		})
-
-		for _, s := range sectionsToDelete {
-			m.deleteSectionByPath(s)
-		}
-
-		return err
-	*/
-	//	panic("TODO1")
-	return nil
-}
-
 func (m *pageMap) assemblePages() error {
 	// TODO1 distinguish between 1st and 2nd... builds (re check p nil etc.)
-	m.WalkTaxonomyTerms(func(s string, b *contentBranchNode) bool {
-		b.terms.nodes.DeletePrefix("")
-		return false
-	})
+	isRebuild := m.cfg.isRebuild
 	var err error
+
+	if isRebuild {
+		m.WalkTaxonomyTerms(func(s string, b *contentBranchNode) bool {
+			b.terms.nodes.DeletePrefix("")
+			return false
+		})
+	}
 
 	// Holds references to sections or pages to exlude from the build
 	// because front matter dictated it (e.g. a draft).
@@ -565,8 +459,7 @@ func (m *pageMap) assemblePages() error {
 			return false
 		}
 
-		var section *contentBranchNode
-		section = branch // TODO1
+		section := branch
 		var bucket *pagesMapBucket
 		var kind string
 		if s == "" {
@@ -720,8 +613,7 @@ func (m *pageMap) assemblePages() error {
 	// First pass.
 	m.Walk(
 		sectionMapQuery{
-			Exclude:      func(s string, n *contentNode) bool { return n.p != nil },
-			SectionsFunc: nil,
+			Exclude: func(s string, n *contentNode) bool { return n.p != nil },
 			Branch: sectionMapQueryCallBacks{
 				Key:      newSectionMapQueryKey(contentMapRoot, true),
 				Page:     handleBranch,
@@ -842,6 +734,10 @@ func (m *pageMap) assemblePages() error {
 						}
 					}
 
+					if bv == nil {
+
+					}
+
 					termBranch.terms.nodes.Insert(s, bv)
 					termBranch.n.p.m.calculated.UpdateDateAndLastmodIfAfter(n.p.m.userProvided)
 
@@ -937,139 +833,9 @@ func (m *pageMap) assemblePages() error {
 	return nil
 }
 
-// TODO1 error handling
-/*
-func (b *contentBranchNode) assembleResources(key string, p *pageState, parentBucket *pagesMapBucket) error {
-	var err error
-
-	tree := b.pageResources
-	s := p.s
-
-	tree.nodes.WalkPrefix(key, func(key2 string, v interface{}) bool {
-		n := v.(*contentNode)
-		meta := n.fi.Meta()
-		classifier := meta.Classifier()
-		var r resource.Resource
-		switch classifier {
-		case files.ContentClassContent:
-			var rp *pageState
-			rp, err = n.newPageFromContentNode(s, n, parentBucket, p)
-			if err != nil {
-				return true
-			}
-			rp.m.resourcePath = filepath.ToSlash(strings.TrimPrefix(rp.Path(), p.File().Dir()))
-			r = rp
-
-		case files.ContentClassFile:
-			r, err = n.newResource(n.fi, p)
-			if err != nil {
-				return true
-			}
-		default:
-			panic(fmt.Sprintf("invalid classifier: %q", classifier))
-		}
-
-		p.resources = append(p.resources, r)
-		return false
-	})
-
-	return err
-}
-TODO1 remove
-*/
-
 // TODO1 consolidate
 func (m *pageMap) assembleTaxonomies() error {
 	return m.createSiteTaxonomies()
-}
-
-type pageMapQueryKey struct {
-	Key string
-
-	isSet    bool
-	isPrefix bool
-}
-
-func (q pageMapQueryKey) IsPrefix() bool {
-	return !q.IsZero() && q.isPrefix
-}
-
-func (q pageMapQueryKey) Eq(key string) bool {
-	if q.IsZero() || q.isPrefix {
-		return false
-	}
-	return q.Key == key
-}
-
-func (q pageMapQueryKey) IsZero() bool {
-	return !q.isSet
-}
-
-func (q pageMapQuery) IsFiltered(s string, n *contentNode) bool {
-	return q.Filter != nil && q.Filter(s, n)
-}
-
-type pageMapQuery struct {
-	Leaf   pageMapQueryKey
-	Branch pageMapQueryKey
-	Filter contentTreeNodeFilter
-}
-
-func (m *pageMap) collectPages(query pageMapQuery, fn func(c *contentNode)) error {
-	panic("TODO1 collectPages")
-	/*
-		if query.Filter == nil {
-			query.Filter = contentTreeNoListAlwaysFilter
-		}
-
-		m.pages.WalkQuery(query, func(s string, n *contentNode) bool {
-			fn(n)
-			return false
-		})
-	*/
-
-	return nil
-}
-
-func (m *pageMap) collectPagesAndSections(query pageMapQuery, fn func(c *contentNode)) error {
-	panic("TODO1 collectPagesAndSections")
-	if err := m.collectSections(query, fn); err != nil {
-		return err
-	}
-
-	if err := m.collectPages(query, fn); err != nil {
-		return err
-	}
-
-	return nil
-}
-
-func (m *pageMap) collectSections(query pageMapQuery, fn func(c *contentNode)) error {
-	panic("TODO1 collectSections")
-	/*
-		m.sections.WalkQuery(query, func(s string, n *contentNode) bool {
-			fn(n)
-			return false
-		})
-	*/
-	return nil
-}
-
-func (m *pageMap) collectSectionsRecursiveIncludingSelf(query pageMapQuery, fn func(c *contentNode)) error {
-	// TODO1
-	return nil
-
-}
-
-func (m *pageMap) collectTaxonomies(prefix string, fn func(c *contentNode)) error {
-	panic("TODO1 collectTaxo")
-	/*
-		m.taxonomies.WalkQuery(pageMapQuery{Prefix: prefix}, func(s string, n *contentNode) bool {
-			fn(n)
-			return false
-		})
-	*/
-	return nil
 }
 
 // withEveryBundlePage applies fn to every Page, including those bundled inside
@@ -1124,49 +890,10 @@ func (m *pageMaps) deleteSection(s string) {
 
 func (m *pageMaps) AssemblePages() error {
 	return m.withMaps(func(pm *pageMap) error {
-		/*if err := pm.CreateMissingNodes(); err != nil {
-			return err
-		}*/
 
 		if err := pm.assemblePages(); err != nil {
 			return err
 		}
-
-		/*
-			if err := pm.createMissingTaxonomyNodes(); err != nil {
-				return err
-			}
-		*/
-		// Handle any new sections created in the step above.
-		// TODO1 remove?
-		/*if err := pm.assembleSections(); err != nil {
-			return err
-		}*/
-
-		/*if err := pm.assembleTaxonomies(); err != nil {
-			return err
-		}
-
-		if err := pm.createSiteTaxonomies(); err != nil {
-			return err
-		}*/
-
-		/* TODO1
-
-		sw := &sectionWalker{m: pm.sectionMaps}
-		a := sw.applyAggregates()
-		_, mainSectionsSet := pm.s.s.Info.Params()["mainsections"]
-		if !mainSectionsSet && a.mainSection != "" {
-			mainSections := []string{strings.TrimRight(a.mainSection, "/")}
-			pm.s.s.Info.Params()["mainSections"] = mainSections
-			pm.s.s.Info.Params()["mainsections"] = mainSections
-		}
-
-		pm.s.lastmod = a.datesAll.Lastmod()
-		if resource.IsZeroDates(pm.s.home) {
-			pm.s.home.m.Dates = a.datesAll
-		}
-		*/
 
 		return nil
 	})
@@ -1292,168 +1019,6 @@ func (b *pagesMapBucket) getTaxonomyEntries() page.Pages {
 	})
 	page.SortByDefault(pas)
 	return pas
-}
-
-type sectionAggregate struct {
-	datesAll             resource.Dates
-	datesSection         resource.Dates
-	pageCount            int
-	mainSection          string
-	mainSectionPageCount int
-}
-
-type sectionAggregateHandler struct {
-	sectionAggregate
-	sectionPageCount int
-
-	// Section
-	b *contentNode
-	s string
-}
-
-func (h *sectionAggregateHandler) String() string {
-	return "TODO1" // fmt.Sprintf("%s/%s - %d - %s", h.sectionAggregate.datesAll, h.sectionAggregate.datesSection, h.sectionPageCount, h.s)
-}
-
-func (h *sectionAggregateHandler) isRootSection() bool {
-	return h.s != "/" && strings.Count(h.s, "/") == 2
-}
-
-func (h *sectionAggregateHandler) handleNested(v sectionWalkHandler) error {
-	nested := v.(*sectionAggregateHandler)
-	h.sectionPageCount += nested.pageCount
-	h.pageCount += h.sectionPageCount
-	h.datesAll.UpdateDateAndLastmodIfAfter(nested.datesAll)
-	h.datesSection.UpdateDateAndLastmodIfAfter(nested.datesAll)
-	return nil
-}
-
-func (h *sectionAggregateHandler) handlePage(s string, n *contentNode) error {
-	h.sectionPageCount++
-
-	var d resource.Dated
-	if n.p != nil {
-		d = n.p
-	} else if n.viewInfo != nil && n.viewInfo.ref != nil {
-		d = n.viewInfo.ref.p
-	} else {
-		return nil
-	}
-
-	h.datesAll.UpdateDateAndLastmodIfAfter(d)
-	h.datesSection.UpdateDateAndLastmodIfAfter(d)
-	return nil
-}
-
-func (h *sectionAggregateHandler) handleSectionPost() error {
-	if h.sectionPageCount > h.mainSectionPageCount && h.isRootSection() {
-		h.mainSectionPageCount = h.sectionPageCount
-		h.mainSection = strings.TrimPrefix(h.s, "/")
-	}
-
-	if resource.IsZeroDates(h.b.p) {
-		//h.b.p.m.Dates = h.datesSection
-	}
-
-	h.datesSection = resource.Dates{}
-
-	return nil
-}
-
-func (h *sectionAggregateHandler) handleSectionPre(s string, b *contentNode) error {
-	h.s = s
-	h.b = b
-	h.sectionPageCount = 0
-	h.datesAll.UpdateDateAndLastmodIfAfter(b.p)
-	return nil
-}
-
-type sectionWalkHandler interface {
-	handleNested(v sectionWalkHandler) error
-	handlePage(s string, b *contentNode) error
-	handleSectionPost() error
-	handleSectionPre(s string, b *contentNode) error
-}
-
-type sectionWalker struct {
-	err error
-}
-
-func (w *sectionWalker) applyAggregates() *sectionAggregateHandler {
-	return w.walkLevel("/", func() sectionWalkHandler {
-		return &sectionAggregateHandler{}
-	}).(*sectionAggregateHandler)
-}
-
-func (w *sectionWalker) walkLevel(prefix string, createVisitor func() sectionWalkHandler) sectionWalkHandler {
-	// TODO1
-	/*
-		level := strings.Count(prefix, "/")
-		prefix = helpers.AddTrailingSlash(prefix)
-
-		visitor := createVisitor()
-
-		for _, stree := range w.m.pageTrees {
-			w.m.taxonomies.Sections.WalkPrefix(prefix, func(s string, v interface{}) bool {
-				currentLevel := strings.Count(s, "/")
-
-				if currentLevel > level+1 {
-					return false
-				}
-
-				n := v.(*contentNode)
-				tree := v.(*sectionTreePages)
-
-				if w.err = visitor.handleSectionPre(s, n); w.err != nil {
-					return true
-				}
-
-				tree.pages.Walk(func(ss string, v interface{}) bool {
-					n := v.(*contentNode)
-					w.err = visitor.handlePage(ss, n)
-					return w.err != nil
-				})
-
-				w.err = visitor.handleSectionPost()
-
-				return w.err != nil
-			})
-		}
-
-		w.m.sections.Pages.WalkPrefix(prefix, func(s string, v interface{}) bool {
-			currentLevel := strings.Count(s, "/")
-			if currentLevel > level+1 {
-				return false
-			}
-
-			n := v.(*contentNode)
-
-			if w.err = visitor.handleSectionPre(s, n); w.err != nil {
-				return true
-			}
-
-			w.m.pages.Pages.WalkPrefix(s+contentMapNodeSeparator, func(s string, v interface{}) bool {
-				w.err = visitor.handlePage(s, v.(*contentNode))
-				return w.err != nil
-			})
-
-			if w.err != nil {
-				return true
-			}
-
-			nested := w.walkLevel(s, createVisitor)
-			if w.err = visitor.handleNested(nested); w.err != nil {
-				return true
-			}
-
-			w.err = visitor.handleSectionPost()
-
-			return w.err != nil
-		})
-
-		return visitor
-	*/
-	return nil
 }
 
 type viewName struct {
