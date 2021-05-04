@@ -151,7 +151,6 @@ func (p *pageState) GitInfo() *gitmap.GitInfo {
 // GetTerms gets the terms defined on this page in the given taxonomy.
 // The pages returned will be ordered according to the front matter.
 func (p *pageState) GetTerms(taxonomy string) page.Pages {
-	defer herrors.Recover()
 	if p.treeRef == nil {
 		return nil
 	}
@@ -176,46 +175,18 @@ func (p *pageState) MarshalJSON() ([]byte, error) {
 	return page.MarshalPageToJSON(p)
 }
 
-func (p *pageState) getRegularPagesRecursive() page.Pages {
-	b := p.bucket
-	if b == nil {
-		return nil
-	}
-	return b.getRegularPagesRecursive()
-}
-
-func (p *pageState) getRegularPages() page.Pages {
-	b := p.bucket
-	if b == nil {
-		return nil
-	}
-	return b.getRegularPages()
-}
-
-func (p *pageState) getPagesAndSections() page.Pages {
-	b := p.bucket
-	if b == nil {
-		return nil
-	}
-	return b.getPagesAndSections()
-}
-
 func (p *pageState) RegularPagesRecursive() page.Pages {
 	p.regularPagesRecursiveInit.Do(func() {
 		var pages page.Pages
 		switch p.Kind() {
 		case page.KindSection:
-			pages = p.getRegularPagesRecursive()
+			pages = p.bucket.getRegularPagesRecursive()
 		default:
 			pages = p.RegularPages()
 		}
 		p.regularPagesRecursive = pages
 	})
 	return p.regularPagesRecursive
-}
-
-func (p *pageState) PagesRecursive() page.Pages {
-	return nil
 }
 
 func (p *pageState) RegularPages() page.Pages {
@@ -225,7 +196,7 @@ func (p *pageState) RegularPages() page.Pages {
 		switch p.Kind() {
 		case page.KindPage:
 		case page.KindSection, page.KindHome, page.KindTaxonomy:
-			pages = p.getRegularPages()
+			pages = p.bucket.getRegularPages()
 		case page.KindTerm:
 			all := p.Pages()
 			for _, p := range all {
@@ -249,7 +220,7 @@ func (p *pageState) Pages() page.Pages {
 		switch p.Kind() {
 		case page.KindPage:
 		case page.KindSection, page.KindHome:
-			pages = p.getPagesAndSections()
+			pages = p.bucket.getPagesAndSections()
 		case page.KindTerm:
 			pages = p.bucket.getTaxonomyEntries()
 		case page.KindTaxonomy:

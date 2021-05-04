@@ -946,29 +946,40 @@ type pagesMapBucketPages struct {
 }
 
 func (b *pagesMapBucket) getRegularPagesRecursive() page.Pages {
+	if b == nil {
+		return nil
+	}
 	pages := b.self.treeRef.getRegularPagesRecursive()
 	page.SortByDefault(pages)
 	return pages
 }
 
 func (b *pagesMapBucket) getRegularPages() page.Pages {
+	if b == nil {
+		return nil
+	}
 	pages := b.self.treeRef.getRegularPages()
 	page.SortByDefault(pages)
 	return pages
 }
+
 func (b *pagesMapBucket) getPagesAndSections() page.Pages {
+	if b == nil {
+		return nil
+	}
+
 	b.pagesAndSectionsInit.Do(func() {
-
-		if b.self.treeRef == nil {
-			panic("TODO1 nil get for " + b.self.Kind())
-		}
-
 		b.pagesAndSections = b.self.treeRef.getPagesAndSections()
 	})
+
 	return b.pagesAndSections
 }
 
 func (b *pagesMapBucket) getSections() page.Pages {
+	if b == nil {
+		return nil
+	}
+
 	b.sectionsInit.Do(func() {
 		if b.self.treeRef == nil {
 			return
@@ -980,7 +991,10 @@ func (b *pagesMapBucket) getSections() page.Pages {
 }
 
 func (b *pagesMapBucket) getTaxonomies() page.Pages {
-	// TODO1 b.sections/init, remove some superflous code.
+	if b == nil {
+		return nil
+	}
+
 	ref := b.self.treeRef
 	if ref == nil {
 		return nil
@@ -996,6 +1010,10 @@ func (b *pagesMapBucket) getTaxonomies() page.Pages {
 }
 
 func (b *pagesMapBucket) getTaxonomyEntries() page.Pages {
+	if b == nil {
+		return nil
+	}
+
 	ref := b.self.treeRef
 	if ref == nil {
 		return nil
