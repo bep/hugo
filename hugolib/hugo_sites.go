@@ -759,21 +759,20 @@ func (h *HugoSites) removePageByFilename(filename string) error {
 
 	}
 
-	return h.getContentMaps().withMaps(func(m *pageMap) error {
-		// TODO1 consolidate these delete constructs?
+	return h.getContentMaps().withMaps(func(runner para.Runner, m *pageMap) error {
 		var sectionsToDelete []string
 		var pagesToDelete []*contentTreeRef
 
-		q := sectionMapQuery{
+		q := branchMapQuery{
 			Exclude: exclude,
-			Branch: sectionMapQueryCallBacks{
-				Key: newSectionMapQueryKey("", true),
+			Branch: branchMapQueryCallBacks{
+				Key: newBranchMapQueryKey("", true),
 				Page: func(branch, owner *contentBranchNode, s string, n *contentNode) bool {
 					sectionsToDelete = append(sectionsToDelete, s)
 					return false
 				},
 			},
-			Leaf: sectionMapQueryCallBacks{
+			Leaf: branchMapQueryCallBacks{
 				Page: func(branch, owner *contentBranchNode, s string, n *contentNode) bool {
 					pagesToDelete = append(pagesToDelete, n.p.treeRef)
 					return false
@@ -796,8 +795,8 @@ func (h *HugoSites) removePageByFilename(filename string) error {
 		}
 
 		for _, s := range sectionsToDelete {
-			m.sections.Delete(s)
-			m.sections.DeletePrefix(s + "/")
+			m.branches.Delete(s)
+			m.branches.DeletePrefix(s + "/")
 		}
 
 		return nil

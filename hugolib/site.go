@@ -29,6 +29,10 @@ import (
 	"strings"
 	"time"
 
+	"github.com/gohugoio/hugo/parser/pageparser"
+
+	"github.com/gohugoio/hugo/common/hugio"
+
 	"github.com/gohugoio/hugo/common/constants"
 
 	"github.com/gohugoio/hugo/common/loggers"
@@ -1833,30 +1837,173 @@ func (s *Site) newPage(
 	n *contentNode,
 	parentbBucket *pagesMapBucket,
 	kind, title string,
-	sections ...string) *pageState {
-	m := map[string]interface{}{}
+	sections ...string,
+) *pageState {
+
+	m := make(map[string]interface{})
 	if title != "" {
 		m["title"] = title
 	}
 
 	if kind == page.KindHome && len(sections) > 0 {
-		panic("TODO1 home has no sections")
+		panic("invalid state: home has no sections")
 	}
 
 	p, err := newPageFromMeta(
-		n,
-		parentbBucket,
-		m,
+		n, parentbBucket, m,
 		&pageMeta{
 			s:        s,
 			kind:     kind,
 			sections: sections,
 		})
+
 	if err != nil {
 		panic(err)
 	}
 
 	return p
+}
+
+func (s *Site) newPageFromContentNode(
+	n *contentNode,
+	parentBucket *pagesMapBucket,
+	owner *pageState,
+) (*pageState, error) {
+	if n.fi == nil {
+		panic("FileInfo must (currently) be set")
+	}
+
+	f, err := newFileInfo(s.SourceSpec, n.fi)
+	if err != nil {
+		return nil, err
+	}
+
+	meta := n.fi.Meta()
+	content := func() (hugio.ReadSeekCloser, error) {
+		return meta.Open()
+	}
+
+	bundled := owner != nil
+
+	sections := s.sectionsFromFile(f)
+
+	kind := s.kindFromFileInfoOrSections(f, sections)
+	if kind == page.KindTerm {
+		s.PathSpec.MakePathsSanitized(sections)
+	}
+
+	metaProvider := &pageMeta{kind: kind, sections: sections, bundled: bundled, s: s, f: f}
+
+	ps, err := newPageBase(metaProvider)
+	if err != nil {
+		return nil, err
+	}
+
+	if n.fi.Meta().GetBool(walkIsRootFileMetaKey) {
+		// Make sure that the bundle/section we start walking from is always
+		// rendered.
+		// This is only relevant in server fast render mode.
+		ps.forceRender = true
+	}
+
+	n.p = ps
+	if ps.IsNode() {
+		ps.bucket = newPageBucket(parentBucket, ps)
+	}
+
+	gi, err := s.h.gitInfoForPage(ps)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to load Git data")
+	}
+	ps.gitInfo = gi
+
+	r, err := content()
+	if err != nil {
+		return nil, err
+	}
+	defer r.Close()
+
+	parseResult, err := pageparser.Parse(
+		r,
+		pageparser.Config{EnableEmoji: s.siteCfg.enableEmoji},
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	ps.pageContent = pageContent{
+		source: rawPageContent{
+			parsed:         parseResult,
+			posMainContent: -1,
+			posSummaryEnd:  -1,
+			posBodyStart:   -1,
+		},
+	}
+
+	ps.shortcodeState = newShortcodeHandler(ps, ps.s, nil)
+
+	if err := ps.mapContent(parentBucket, metaProvider); err != nil {
+		return nil, ps.wrapError(err)
+	}
+
+	if err := metaProvider.applyDefaultValues(n); err != nil {
+		return nil, err
+	}
+
+	ps.init.Add(func() (interface{}, error) {
+		pp, err := newPagePaths(s, ps, metaProvider)
+		if err != nil {
+			return nil, err
+		}
+
+		outputFormatsForPage := ps.m.outputFormats()
+
+		// Prepare output formats for all sites.
+		// We do this even if this page does not get rendered on
+		// its own. It may be referenced via .Site.GetPage and
+		// it will then need an output format.
+		ps.pageOutputs = make([]*pageOutput, len(ps.s.h.renderFormats))
+		created := make(map[string]*pageOutput)
+		shouldRenderPage := !ps.m.noRender()
+
+		for i, f := range ps.s.h.renderFormats {
+			if po, found := created[f.Name]; found {
+				ps.pageOutputs[i] = po
+				continue
+			}
+
+			render := shouldRenderPage
+			if render {
+				_, render = outputFormatsForPage.GetByName(f.Name)
+			}
+
+			po := newPageOutput(ps, pp, f, render)
+
+			// Create a content provider for the first,
+			// we may be able to reuse it.
+			if i == 0 {
+				contentProvider, err := newPageContentOutput(ps, po)
+				if err != nil {
+					return nil, err
+				}
+				po.initContentProvider(contentProvider)
+			}
+
+			ps.pageOutputs[i] = po
+			created[f.Name] = po
+
+		}
+
+		if err := ps.initCommonProviders(pp); err != nil {
+			return nil, err
+		}
+
+		return nil, nil
+	})
+
+	ps.parent = owner
+
+	return ps, nil
 }
 
 func (s *Site) shouldBuild(p page.Page) bool {

@@ -20,10 +20,10 @@ import (
 	qt "github.com/frankban/quicktest"
 )
 
-func TestSectionMap(t *testing.T) {
+func TestBranchMap(t *testing.T) {
 	c := qt.New(t)
 
-	m := newSectionMap(nil)
+	m := newBranchMap(nil)
 
 	c.Run("Tree relation", func(c *qt.C) {
 		for _, test := range []struct {
@@ -37,12 +37,10 @@ func TestSectionMap(t *testing.T) {
 			{"Child", "/blog/sub1", "/blog/sub1/sub2", 0},
 			{"New root", "/blog/sub1", "/docs/sub2", -1},
 		} {
-
 			c.Run(test.name, func(c *qt.C) {
 				c.Assert(m.treeRelation(test.s1, test.s2), qt.Equals, test.expect)
 			})
 		}
-
 	})
 
 	home, blog, blog_sub, blog_sub2, docs, docs_sub := &contentNode{path: "/"}, &contentNode{path: "/blog"}, &contentNode{path: "/blog/sub"}, &contentNode{path: "/blog/sub2"}, &contentNode{path: "/docs"}, &contentNode{path: "/docs/sub"}
@@ -54,22 +52,21 @@ func TestSectionMap(t *testing.T) {
 	json1, json2, json3 := &contentNode{}, &contentNode{}, &contentNode{}
 	xml1, xml2 := &contentNode{}, &contentNode{}
 
-	c.Assert(m.InsertSection("", home), qt.Not(qt.IsNil))
-	c.Assert(m.InsertSection("/docs", docs), qt.Not(qt.IsNil))
+	c.Assert(m.InsertBranch("", home), qt.Not(qt.IsNil))
+	c.Assert(m.InsertBranch("/docs", docs), qt.Not(qt.IsNil))
 	c.Assert(m.InsertResource("/docs/data1.json", json1), qt.IsNil)
-	c.Assert(m.InsertSection("/docs/sub", docs_sub), qt.Not(qt.IsNil))
+	c.Assert(m.InsertBranch("/docs/sub", docs_sub), qt.Not(qt.IsNil))
 	c.Assert(m.InsertResource("/docs/sub/data2.json", json2), qt.IsNil)
-	c.Assert(m.InsertSection("/docs/sub2", docs_sub2), qt.Not(qt.IsNil))
+	c.Assert(m.InsertBranch("/docs/sub2", docs_sub2), qt.Not(qt.IsNil))
 	c.Assert(m.InsertResource("/docs/sub2/data1.xml", xml1), qt.IsNil)
-	c.Assert(m.InsertSection("/docs/sub2/sub", docs_sub2_sub), qt.Not(qt.IsNil))
+	c.Assert(m.InsertBranch("/docs/sub2/sub", docs_sub2_sub), qt.Not(qt.IsNil))
 	c.Assert(m.InsertResource("/docs/sub2/sub/data2.xml", xml2), qt.IsNil)
-	c.Assert(m.InsertSection("/blog", blog), qt.Not(qt.IsNil))
+	c.Assert(m.InsertBranch("/blog", blog), qt.Not(qt.IsNil))
 	c.Assert(m.InsertResource("/blog/logo.png", image3), qt.IsNil)
-	c.Assert(m.InsertSection("/blog/sub", blog_sub), qt.Not(qt.IsNil))
-	c.Assert(m.InsertSection("/blog/sub2", blog_sub2), qt.Not(qt.IsNil))
+	c.Assert(m.InsertBranch("/blog/sub", blog_sub), qt.Not(qt.IsNil))
+	c.Assert(m.InsertBranch("/blog/sub2", blog_sub2), qt.Not(qt.IsNil))
 	c.Assert(m.InsertResource("/blog/sub2/data3.json", json3), qt.IsNil)
 
-	// TODO1 filter tests
 	blogSection := m.Get("/blog")
 	c.Assert(blogSection.n, qt.Equals, blog)
 
@@ -93,7 +90,7 @@ func TestSectionMap(t *testing.T) {
 	}
 
 	type queryResult struct {
-		query  sectionMapQuery
+		query  branchMapQuery
 		result []string
 	}
 
@@ -110,14 +107,14 @@ func TestSectionMap(t *testing.T) {
 			handleLeafResource   func(branch *contentBranchNode, owner *contentNode, s string, n *contentNode) bool
 			handleBranchResource func(branch *contentBranchNode, owner *contentNode, s string, n *contentNode) bool
 
-			keyBranch sectionMapQueryKey
-			keyLeaf   sectionMapQueryKey
+			keyBranch branchMapQueryKey
+			keyLeaf   branchMapQueryKey
 		)
 
 		if spec.isBranchKey {
-			keyBranch = newSectionMapQueryKey(spec.key, spec.isPrefix)
+			keyBranch = newBranchMapQueryKey(spec.key, spec.isPrefix)
 		} else {
-			keyLeaf = newSectionMapQueryKey(spec.key, spec.isPrefix)
+			keyLeaf = newBranchMapQueryKey(spec.key, spec.isPrefix)
 		}
 
 		if spec.doBranch {
@@ -148,14 +145,14 @@ func TestSectionMap(t *testing.T) {
 			}
 		}
 
-		qr.query = sectionMapQuery{
+		qr.query = branchMapQuery{
 			NoRecurse: spec.noRecurse,
-			Branch: sectionMapQueryCallBacks{
+			Branch: branchMapQueryCallBacks{
 				Key:      keyBranch,
 				Page:     handleSection,
 				Resource: handleBranchResource,
 			},
-			Leaf: sectionMapQueryCallBacks{
+			Leaf: branchMapQueryCallBacks{
 				Key:      keyLeaf,
 				Page:     handlePage,
 				Resource: handleLeafResource,
@@ -163,7 +160,6 @@ func TestSectionMap(t *testing.T) {
 		}
 
 		return qr
-
 	}
 
 	for _, test := range []struct {

@@ -1024,21 +1024,6 @@ func dumpSPages(pages ...*pageState) {
 	}
 }
 
-func dumpPageMaps(h *HugoSites) {
-	panic("TODO1")
-	/*
-		for _, s := range h.Sites {
-			fmt.Println("________", s.Lang())
-			m := s.pageMap
-			fmt.Println("\nSections:\n____")
-			m.sections.printKeys()
-			fmt.Println("\nPages:\n____")
-			m.pages.printKeys()
-
-		}
-	*/
-}
-
 func printStringIndexes(s string) {
 	lines := strings.Split(s, "\n")
 	i := 0
@@ -1103,4 +1088,16 @@ func captureStdout(f func() error) (string, error) {
 	var buf bytes.Buffer
 	io.Copy(&buf, r)
 	return buf.String(), err
+}
+
+func TestMain(m *testing.M) {
+	code := m.Run()
+	if testValues != nil {
+		testValues = helpers.UniqueStringsSorted(testValues)
+		fmt.Println("Test values collected:")
+		for _, s := range testValues {
+			fmt.Println(s)
+		}
+	}
+	os.Exit(code)
 }

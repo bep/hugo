@@ -40,12 +40,6 @@ func (p *pageData) Data() interface{} {
 		switch p.Kind() {
 		case page.KindTerm:
 			b := p.treeRef.n
-			if b == nil {
-				panic("TODO1 non")
-			}
-			if b.viewInfo == nil {
-				panic("TODO1 viewInfo nil for " + p.treeRef.key)
-			}
 			name := b.viewInfo.name
 			termKey := b.viewInfo.termKey
 

@@ -372,16 +372,6 @@ NOT FOUND
 	b.AssertFileContent("public/en/index.html", `NOT FOUND`)
 }
 
-func TestShouldDoSimpleLookup(t *testing.T) {
-	// TODO1
-	//c := qt.New(t)
-
-	/*	c.Assert(shouldDoSimpleLookup("foo.md"), qt.Equals, true)
-		c.Assert(shouldDoSimpleLookup("/foo.md"), qt.Equals, true)
-		c.Assert(shouldDoSimpleLookup("./foo.md"), qt.Equals, false)
-		c.Assert(shouldDoSimpleLookup("docs/foo.md"), qt.Equals, false)*/
-}
-
 func TestRegularPagesRecursive(t *testing.T) {
 	b := newTestSitesBuilder(t)
 

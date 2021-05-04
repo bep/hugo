@@ -166,29 +166,10 @@ func (c *PageCollections) getPageNew(context page.Page, ref string) (page.Page, 
 	return n.p, nil
 }
 
-// For Ref/Reflink and .Site.GetPage do simple name lookups for the potentially ambigous myarticle.md and /myarticle.md,
-// but not when we get ./myarticle*, section/myarticle.
-func shouldDoSimpleLookup(ref string) bool {
-	if ref[0] == '.' {
-		return false
-	}
-
-	slashCount := strings.Count(ref, "/")
-
-	if slashCount > 1 {
-		return false
-	}
-
-	return slashCount == 0 || ref[0] == '/'
-
-}
-
 func (c *PageCollections) getContentNode(context page.Page, isReflink bool, ref string) (*contentNode, error) {
 	navUp := strings.HasPrefix(ref, "..")
 	inRef := ref
 	m := c.pageMap
-
-	// TODO1 major cleanup.
 
 	cleanRef := func(s string) (string, bundleDirType) {
 		key := cleanTreeKey(s)
@@ -289,8 +270,8 @@ func (c *PageCollections) getContentNode(context page.Page, isReflink bool, ref 
 
 	}
 
-	// Page relative, no need to look further.
 	if strings.HasPrefix(ref, ".") {
+		// Page relative, no need to look further.
 		return nil, nil
 	}
 
@@ -301,7 +282,10 @@ func (c *PageCollections) getContentNode(context page.Page, isReflink bool, ref 
 
 	var doSimpleLookup bool
 	if isReflink || context == nil {
-		doSimpleLookup = shouldDoSimpleLookup(inRef)
+		slashCount := strings.Count(inRef, "/")
+		if slashCount <= 1 {
+			doSimpleLookup = slashCount == 0 || ref[0] == '/'
+		}
 	}
 
 	if !doSimpleLookup {
@@ -325,4 +309,17 @@ func (*PageCollections) findPagesByKindIn(kind string, inPages page.Pages) page.
 		}
 	}
 	return pages
+}
+
+var (
+	// Only used during development.
+	testValuesMu sync.Mutex
+	testValues   []string
+)
+
+// TODO1 check usage
+func collectTestValue(s string) {
+	testValuesMu.Lock()
+	defer testValuesMu.Unlock()
+	testValues = append(testValues, s)
 }

@@ -177,7 +177,7 @@ func (p *pageState) MarshalJSON() ([]byte, error) {
 
 func (p *pageState) RegularPagesRecursive() page.Pages {
 	switch p.Kind() {
-	case page.KindSection:
+	case page.KindSection, page.KindHome:
 		return p.bucket.getRegularPagesRecursive()
 	default:
 		return p.RegularPages()
@@ -190,7 +190,7 @@ func (p *pageState) RegularPages() page.Pages {
 	case page.KindSection, page.KindHome, page.KindTaxonomy:
 		return p.bucket.getRegularPages()
 	case page.KindTerm:
-		return p.bucket.getRegularTaxonomyEntries()
+		return p.bucket.getRegularPagesInTerm()
 	default:
 		return p.s.RegularPages()
 	}
@@ -203,7 +203,7 @@ func (p *pageState) Pages() page.Pages {
 	case page.KindSection, page.KindHome:
 		return p.bucket.getPagesAndSections()
 	case page.KindTerm:
-		return p.bucket.getTaxonomyEntries()
+		return p.bucket.getPagesInTerm()
 	case page.KindTaxonomy:
 		return p.bucket.getTaxonomies()
 	default:
@@ -393,8 +393,7 @@ func (p *pageState) getLayoutDescriptor() output.LayoutDescriptor {
 				section = sections[0]
 			}
 		case page.KindTaxonomy, page.KindTerm:
-			// TODO1 b := p.getTreeRef().n
-			section = "foo" //b.n.viewInfo.name.singular
+			section = p.getTreeRef().n.viewInfo.name.singular
 		default:
 		}
 

@@ -17,12 +17,11 @@ import (
 	"path"
 	"strings"
 
-	"github.com/gohugoio/hugo/common/herrors"
-
 	"github.com/gohugoio/hugo/common/types"
 	"github.com/gohugoio/hugo/resources/page"
 )
 
+// pageTree holds the treen navigational method for a Page.
 type pageTree struct {
 	p *pageState
 }
@@ -56,7 +55,7 @@ func (pt pageTree) IsAncestor(other interface{}) (bool, error) {
 		return true, nil
 	}
 
-	return strings.HasPrefix(ref2.key, ref1.key+contentMapNodeSeparator), nil
+	return strings.HasPrefix(ref2.key, ref1.key+"/"), nil
 }
 
 func (pt pageTree) CurrentSection() page.Page {
@@ -98,7 +97,7 @@ func (pt pageTree) IsDescendant(other interface{}) (bool, error) {
 		return true, nil
 	}
 
-	return strings.HasPrefix(ref1.key, ref2.key+contentMapNodeSeparator), nil
+	return strings.HasPrefix(ref1.key, ref2.key+"/"), nil
 }
 
 func (pt pageTree) FirstSection() page.Page {
@@ -150,8 +149,6 @@ func (pt pageTree) Page() page.Page {
 }
 
 func (pt pageTree) Parent() page.Page {
-	defer herrors.Recover() // TODO1
-
 	p := pt.p
 
 	if pt.p.parent != nil {
@@ -173,10 +170,5 @@ func (pt pageTree) Parent() page.Page {
 }
 
 func (pt pageTree) Sections() page.Pages {
-	defer herrors.Recover() // TODO1
-	if pt.p.bucket == nil {
-		return nil
-	}
-
 	return pt.p.bucket.getSections()
 }
