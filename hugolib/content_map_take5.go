@@ -307,14 +307,13 @@ func (m *sectionMap) WalkPagesLeafsPrefixSection(
 	return m.Walk(q)
 }
 
-func (m *sectionMap) WalkPagesPrefixSection(
+func (m *sectionMap) WalkPagesPrefixSectionNoRecurse(
 	prefix string,
-	noRecurse bool,
 	branchExclude, exclude contentTreeNodeCallback,
 	callback contentTreeOwnerBranchNodeCallback) error {
 
 	q := sectionMapQuery{
-		NoRecurse:     noRecurse,
+		NoRecurse:     true,
 		BranchExclude: branchExclude,
 		Exclude:       exclude,
 		Branch: sectionMapQueryCallBacks{

@@ -357,29 +357,6 @@ func (c *contentTreeRef) isSection() bool {
 	return c.branch != nil && c.branch != c.owner
 }
 
-func (c *contentTreeRef) getRegularPages() page.Pages {
-	var pas page.Pages
-
-	q := sectionMapQuery{
-		Exclude: c.n.p.m.getListFilter(true),
-		Branch: sectionMapQueryCallBacks{
-			Key: newSectionMapQueryKey(c.key, false),
-		},
-		Leaf: sectionMapQueryCallBacks{
-			Page: func(branch, owner *contentBranchNode, s string, n *contentNode) bool {
-				pas = append(pas, n.p)
-				return false
-			},
-		},
-	}
-
-	c.m.Walk(q)
-
-	page.SortByDefault(pas)
-
-	return pas
-}
-
 func (c *contentTreeRef) getRegularPagesRecursive() page.Pages {
 	var pas page.Pages
 
@@ -403,12 +380,34 @@ func (c *contentTreeRef) getRegularPagesRecursive() page.Pages {
 	return pas
 }
 
-func (c *contentTreeRef) getPagesAndSections(noRecurse bool) page.Pages {
+func (c *contentTreeRef) getRegularPages() page.Pages {
 	var pas page.Pages
 
-	c.m.WalkPagesPrefixSection(
+	q := sectionMapQuery{
+		Exclude: c.n.p.m.getListFilter(true),
+		Branch: sectionMapQueryCallBacks{
+			Key: newSectionMapQueryKey(c.key, false),
+		},
+		Leaf: sectionMapQueryCallBacks{
+			Page: func(branch, owner *contentBranchNode, s string, n *contentNode) bool {
+				pas = append(pas, n.p)
+				return false
+			},
+		},
+	}
+
+	c.m.Walk(q)
+
+	page.SortByDefault(pas)
+
+	return pas
+}
+
+func (c *contentTreeRef) getPagesAndSections() page.Pages {
+	var pas page.Pages
+
+	c.m.WalkPagesPrefixSectionNoRecurse(
 		c.key+"/",
-		noRecurse,
 		noTaxonomiesFilter,
 		c.n.p.m.getListFilter(true),
 		func(branch, owner *contentBranchNode, s string, n *contentNode) bool {
