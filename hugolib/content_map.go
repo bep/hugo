@@ -350,15 +350,11 @@ func (c *contentTreeRef) getCurrentSection() *contentBranchNode {
 	if c.isSection() {
 		return c.owner
 	}
-	return c.getSection()
+	return c.branch
 }
 
 func (c *contentTreeRef) isSection() bool {
 	return c.branch != nil && c.branch != c.owner
-}
-
-func (c *contentTreeRef) getSection() *contentBranchNode {
-	return c.branch
 }
 
 func (c *contentTreeRef) getRegularPagesRecursive() page.Pages {
