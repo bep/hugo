@@ -159,12 +159,10 @@ func (p *pageState) GetTerms(taxonomy string) page.Pages {
 	var pas page.Pages
 	taxonomyKey := cleanTreeKey(taxonomy)
 	p.s.pageMap.WalkBranchesPrefix(taxonomyKey+"/", func(s string, b *contentBranchNode) bool {
-		if v, found := b.terms.nodes.Get(p.treeRef.key); found {
-			n := v.(*contentNode)
-			vi := n.viewInfo
-			pas = append(pas, pageWithOrdinal{pageState: b.n.p, ordinal: vi.ordinal})
+		v, found := b.refs[p]
+		if found {
+			pas = append(pas, pageWithOrdinal{pageState: b.n.p, ordinal: v.ordinal})
 		}
-
 		return false
 	})
 

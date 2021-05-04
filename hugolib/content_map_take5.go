@@ -30,7 +30,7 @@ func newContentBranchNode(key string, n *contentNode) *contentBranchNode {
 		resources:     &contentBranchNodeTree{nodes: newNodeTree("resources")},
 		pages:         &contentBranchNodeTree{nodes: newNodeTree("pages")},
 		pageResources: &contentBranchNodeTree{nodes: newNodeTree("pageResources")},
-		terms:         &contentBranchNodeTree{nodes: newNodeTree("terms")},
+		refs:          make(map[interface{}]ordinalWeight),
 	}
 }
 
@@ -156,7 +156,8 @@ type contentBranchNode struct {
 	resources     *contentBranchNodeTree
 	pages         *contentBranchNodeTree
 	pageResources *contentBranchNodeTree
-	terms         *contentBranchNodeTree // rename
+
+	refs map[interface{}]ordinalWeight
 }
 
 func (b *contentBranchNode) InsertPage(key string, n *contentNode) {

@@ -338,11 +338,11 @@ func (m *pageMap) createSiteTaxonomies() error {
 		taxonomy := make(Taxonomy)
 		m.s.taxonomies[viewName.plural] = taxonomy
 		m.WalkBranchesPrefix(viewName.pluralTreeKey+"/", func(s string, b *contentBranchNode) bool {
-			b.terms.Walk(func(s string, n *contentNode) bool {
-				info := n.viewInfo
-				taxonomy.add(info.termKey, page.NewWeightedPage(info.weight, info.ref.p, b.n.p))
-				return false
-			})
+			info := b.n.viewInfo
+			for k, v := range b.refs {
+				taxonomy.add(info.termKey, page.NewWeightedPage(v.weight, k.(*pageState), b.n.p))
+			}
+
 			return false
 		})
 	}
@@ -417,6 +417,11 @@ const (
 	sectionZeroKey = "ZERO"
 )
 
+type ordinalWeight struct {
+	ordinal int
+	weight  int
+}
+
 func (m *pageMap) assemblePages() error {
 	// TODO1 distinguish between 1st and 2nd... builds (re check p nil etc.)
 	isRebuild := m.cfg.isRebuild
@@ -424,7 +429,7 @@ func (m *pageMap) assemblePages() error {
 
 	if isRebuild {
 		m.WalkTaxonomyTerms(func(s string, b *contentBranchNode) bool {
-			b.terms.nodes.DeletePrefix("")
+			b.refs = make(map[interface{}]ordinalWeight)
 			return false
 		})
 	}
@@ -694,18 +699,6 @@ func (m *pageMap) assemblePages() error {
 				for i, v := range vals {
 					term := m.s.getTaxonomyKey(v)
 
-					bv := &contentNode{
-						p: n.p,
-						viewInfo: &contentBundleViewInfo{
-							ordinal:    i,
-							name:       viewName,
-							termKey:    term,
-							termOrigin: v,
-							weight:     weight,
-							ref:        n,
-						},
-					}
-
 					termKey := cleanTreeKey(term)
 					taxonomyTermKey := taxonomy.key + termKey
 
@@ -734,11 +727,7 @@ func (m *pageMap) assemblePages() error {
 						}
 					}
 
-					if bv == nil {
-
-					}
-
-					termBranch.terms.nodes.Insert(s, bv)
+					termBranch.refs[n.p] = ordinalWeight{ordinal: i, weight: weight}
 					termBranch.n.p.m.calculated.UpdateDateAndLastmodIfAfter(n.p.m.userProvided)
 
 				}
@@ -1013,10 +1002,10 @@ func (b *pagesMapBucket) getTaxonomyEntries() page.Pages {
 	}
 	var pas page.Pages
 
-	ref.owner.terms.Walk(func(s string, n *contentNode) bool {
-		pas = append(pas, n.p)
-		return false
-	})
+	for k, _ := range ref.owner.refs {
+		pas = append(pas, k.(*pageState))
+	}
+
 	page.SortByDefault(pas)
 	return pas
 }
