@@ -138,10 +138,7 @@ func (pt pageTree) InSection(other interface{}) (bool, error) {
 		return ref1.n.p.IsHome(), nil
 	}
 
-	b1 := ref1.getCurrentSection()
-	b2 := ref2.getCurrentSection()
-
-	return b1 == b2, nil
+	return ref1.owner == ref2.owner, nil
 }
 
 func (pt pageTree) Page() page.Page {

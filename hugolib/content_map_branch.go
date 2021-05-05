@@ -300,8 +300,7 @@ func (m *branchMap) Walk(q branchMapQuery) error {
 		if depth <= depthBranch {
 			var parentBranch *contentBranchNode
 			if s != "" {
-				d := path.Dir(s)
-				_, parentBranch = m.LongestPrefix(d)
+				_, parentBranch = m.LongestPrefix(path.Dir(s))
 			}
 
 			if q.Branch.Page != nil && q.Branch.Page(parentBranch, bn, s, bn.n) {

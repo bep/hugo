@@ -179,6 +179,10 @@ func (m *pageMap) createSiteTaxonomies() error {
 	return nil
 }
 
+type pageDescriptor struct {
+	treeRef *contentTreeRef
+}
+
 func (m *pageMap) assemblePages() error {
 	isRebuild := m.cfg.isRebuild
 	var err error

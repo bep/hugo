@@ -180,19 +180,15 @@ type contentTreeOwnerNodeCallback func(
 ) bool
 
 // contentTreeRef points to a node in the given map.
+// section sections.Get key
+// page branch.Get key
+// resource
 type contentTreeRef struct {
 	m      *pageMap
-	branch *contentBranchNode
-	owner  *contentBranchNode
+	owner  *contentBranchNode // The owning branch.
+	branch *contentBranchNode //
 	key    string
 	n      *contentNode
-}
-
-func (c *contentTreeRef) getCurrentSection() *contentBranchNode {
-	if c.isSection() {
-		return c.owner
-	}
-	return c.branch
 }
 
 func (c *contentTreeRef) getPagesAndSections() page.Pages {
