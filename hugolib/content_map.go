@@ -19,6 +19,8 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/gohugoio/hugo/common/types"
+
 	"github.com/gohugoio/hugo/helpers"
 
 	"github.com/gohugoio/hugo/resources/page"
@@ -27,6 +29,73 @@ import (
 
 	"github.com/gohugoio/hugo/hugofs"
 )
+
+type contentTreeBranchNodeCallback func(s string, current *contentBranchNode) bool
+
+type contentTreeNodeCallback func(s string, n *contentNode) bool
+
+type contentNodeProvider interface {
+	types.Identifier
+	contentGetNodeProvider
+}
+
+type contentGetNodeProvider interface {
+	GetNode() *contentNode
+}
+
+type contentGetBranchProvider interface {
+	GetBranch() *contentBranchNode
+}
+
+type contentGetOwnerNodeProvider interface {
+	GetOwnerNode() *contentNode
+}
+
+type contentGetOwnerBranchProvider interface {
+	GetOwnerBranch() *contentBranchNode
+}
+
+type contentTreeNodeCallbackNew func(node contentNodeProvider) bool
+
+type contentTreeOwnerBranchNodeCallback func(
+	// The branch in which n belongs.
+	branch *contentBranchNode,
+
+	// Owner of n.
+	owner *contentBranchNode,
+
+	// The key
+	key string,
+
+	// The content node, either a Page or a Resource.
+	n *contentNode,
+) bool
+
+type contentTreeOwnerNodeCallback func(
+	// The branch in which n belongs.
+	branch *contentBranchNode,
+
+	// Owner of n.
+	owner *contentNode,
+
+	// The key
+	key string,
+
+	// The content node, either a Page or a Resource.
+	n *contentNode,
+) bool
+
+// contentTreeRef points to a node in the given map.
+// section sections.Get key
+// page branch.Get key
+// resource
+type contentTreeRef struct {
+	m      *pageMap
+	owner  *contentBranchNode // The owning branch.
+	branch *contentBranchNode //
+	key    string
+	n      *contentNode
+}
 
 // Used to mark ambiguous keys in reverse index lookups.
 var ambiguousContentNode = &contentNode{}
@@ -130,6 +199,14 @@ type contentNode struct {
 	path string
 }
 
+func (b *contentNode) GetNode() *contentNode {
+	return b
+}
+
+func (b *contentNode) GetOwnerNode() *contentNode {
+	return b
+}
+
 // Returns whether this is a view node (a taxonomy or a term).
 func (b *contentNode) isView() bool {
 	return b.viewInfo != nil
@@ -147,50 +224,6 @@ func (b *contentNode) rootSection() string {
 	return b.path[:firstSlash]
 }
 
-type contentTreeBranchNodeCallback func(s string, current *contentBranchNode) bool
-
-type contentTreeNodeCallback func(s string, n *contentNode) bool
-
-type contentTreeOwnerBranchNodeCallback func(
-	// The branch in which n belongs.
-	branch *contentBranchNode,
-
-	// Owner of n.
-	owner *contentBranchNode,
-
-	// The key
-	key string,
-
-	// The content node, either a Page or a Resource.
-	n *contentNode,
-) bool
-
-type contentTreeOwnerNodeCallback func(
-	// The branch in which n belongs.
-	branch *contentBranchNode,
-
-	// Owner of n.
-	owner *contentNode,
-
-	// The key
-	key string,
-
-	// The content node, either a Page or a Resource.
-	n *contentNode,
-) bool
-
-// contentTreeRef points to a node in the given map.
-// section sections.Get key
-// page branch.Get key
-// resource
-type contentTreeRef struct {
-	m      *pageMap
-	owner  *contentBranchNode // The owning branch.
-	branch *contentBranchNode //
-	key    string
-	n      *contentNode
-}
-
 func (c *contentTreeRef) getPagesAndSections() page.Pages {
 	var pas page.Pages
 
@@ -198,8 +231,8 @@ func (c *contentTreeRef) getPagesAndSections() page.Pages {
 		c.key+"/",
 		noTaxonomiesFilter,
 		c.n.p.m.getListFilter(true),
-		func(branch, owner *contentBranchNode, s string, n *contentNode) bool {
-			pas = append(pas, n.p)
+		func(n contentNodeProvider) bool {
+			pas = append(pas, n.GetNode().p)
 			return false
 		},
 	)
@@ -218,8 +251,8 @@ func (c *contentTreeRef) getRegularPages() page.Pages {
 			Key: newBranchMapQueryKey(c.key, false),
 		},
 		Leaf: branchMapQueryCallBacks{
-			Page: func(branch, owner *contentBranchNode, s string, n *contentNode) bool {
-				pas = append(pas, n.p)
+			Page: func(n contentNodeProvider) bool {
+				pas = append(pas, n.GetNode().p)
 				return false
 			},
 		},
@@ -241,8 +274,8 @@ func (c *contentTreeRef) getRegularPagesRecursive() page.Pages {
 			Key: newBranchMapQueryKey(c.key+"/", true),
 		},
 		Leaf: branchMapQueryCallBacks{
-			Page: func(branch, owner *contentBranchNode, s string, n *contentNode) bool {
-				pas = append(pas, n.p)
+			Page: func(n contentNodeProvider) bool {
+				pas = append(pas, n.GetNode().p)
 				return false
 			},
 		},
@@ -268,8 +301,8 @@ func (c *contentTreeRef) getSections() page.Pages {
 		BranchExclude: noTaxonomiesFilter,
 		Branch: branchMapQueryCallBacks{
 			Key: newBranchMapQueryKey(c.key+"/", true),
-			Page: func(branch, owner *contentBranchNode, s string, n *contentNode) bool {
-				pas = append(pas, n.p)
+			Page: func(n contentNodeProvider) bool {
+				pas = append(pas, n.GetNode().p)
 				return false
 			},
 		},

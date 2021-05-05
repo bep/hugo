@@ -28,9 +28,9 @@ import (
 
 	"github.com/gohugoio/hugo/hugofs"
 
+	"github.com/gohugoio/hugo/common/types"
 	"github.com/gohugoio/hugo/media"
 	"github.com/gohugoio/hugo/source"
-
 	"github.com/pkg/errors"
 
 	"github.com/gohugoio/hugo/common/hugio"
@@ -50,7 +50,7 @@ var (
 	_ resource.Cloner                  = (*genericResource)(nil)
 	_ resource.ResourcesLanguageMerger = (*resource.Resources)(nil)
 	_ permalinker                      = (*genericResource)(nil)
-	_ resource.Identifier              = (*genericResource)(nil)
+	_ types.Identifier                 = (*genericResource)(nil)
 	_ fileInfo                         = (*genericResource)(nil)
 )
 
@@ -121,7 +121,7 @@ type baseResourceResource interface {
 	resource.Cloner
 	resource.ContentProvider
 	resource.Resource
-	resource.Identifier
+	types.Identifier
 }
 
 type baseResourceInternal interface {

@@ -76,7 +76,8 @@ func (s *Site) renderPages(ctx *siteRenderContext) error {
 
 	cfg := ctx.cfg
 
-	s.pageMap.WalkPagesAllPrefixSection("", nil, nil, func(branch, owner *contentBranchNode, ss string, n *contentNode) bool {
+	s.pageMap.WalkPagesAllPrefixSection("", nil, nil, func(np contentNodeProvider) bool {
+		n := np.GetNode()
 		if cfg.shouldRender(n.p) {
 			select {
 			case <-s.h.Done():
@@ -319,7 +320,8 @@ func (s *Site) renderRobotsTXT() error {
 func (s *Site) renderAliases() error {
 	var err error
 
-	s.pageMap.WalkPagesAllPrefixSection("", nil, contentTreeNoLinkFilter, func(branch, owner *contentBranchNode, ss string, n *contentNode) bool {
+	s.pageMap.WalkPagesAllPrefixSection("", nil, contentTreeNoLinkFilter, func(np contentNodeProvider) bool {
+		n := np.GetNode()
 		p := n.p
 
 		if len(p.Aliases()) == 0 {

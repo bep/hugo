@@ -54,8 +54,9 @@ type pageCommon struct {
 	s *Site
 	m *pageMeta
 
-	bucket  *pagesMapBucket // Set for the branch nodes.
-	treeRef *contentTreeRef // Set for all nodes.
+	bucket   *pagesMapBucket // Set for the branch nodes.
+	treeRef  *contentTreeRef // Set for all nodes. TODO1 remove
+	treeRef2 contentNodeProvider
 
 	// Lazily initialized dependencies.
 	init *lazy.Init

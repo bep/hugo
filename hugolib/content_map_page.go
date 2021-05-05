@@ -63,13 +63,13 @@ func newPageMap(s *Site) *pageMap {
 
 	m.pageReverseIndex = &contentTreeReverseIndex{
 		initFn: func(rm map[interface{}]*contentNode) {
-			m.WalkPagesAllPrefixSection("", nil, contentTreeNoListAlwaysFilter, func(branch, owner *contentBranchNode, s string, n *contentNode) bool {
-				k := cleanTreeKey(path.Base(s))
+			m.WalkPagesAllPrefixSection("", nil, contentTreeNoListAlwaysFilter, func(n contentNodeProvider) bool {
+				k := cleanTreeKey(path.Base(n.Key()))
 				existing, found := rm[k]
 				if found && existing != ambiguousContentNode {
 					rm[k] = ambiguousContentNode
 				} else if !found {
-					rm[k] = n
+					rm[k] = n.GetNode()
 				}
 				return false
 			})
@@ -141,9 +141,10 @@ func (m *pageMap) WalkTaxonomyTerms(fn func(s string, b *contentBranchNode) bool
 func (m *pageMap) createListAllPages() page.Pages {
 	pages := make(page.Pages, 0)
 
-	m.WalkPagesAllPrefixSection("", nil, contentTreeNoListAlwaysFilter, func(branch, owner *contentBranchNode, s string, n *contentNode) bool {
+	m.WalkPagesAllPrefixSection("", nil, contentTreeNoListAlwaysFilter, func(np contentNodeProvider) bool {
+		n := np.GetNode()
 		if n.p == nil {
-			panic(fmt.Sprintf("BUG: page not set for %q", s))
+			panic(fmt.Sprintf("BUG: page not set for %q", np.Key()))
 		}
 		pages = append(pages, n.p)
 		return false
@@ -201,7 +202,12 @@ func (m *pageMap) assemblePages() error {
 		pagesToDelete    []*contentTreeRef
 	)
 
-	handleBranch := func(branch, owner *contentBranchNode, s string, n *contentNode) bool {
+	handleBranch := func(np contentNodeProvider) bool {
+		n := np.GetNode()
+		s := np.Key()
+		branch := np.(contentGetBranchProvider).GetBranch()
+		owner := np.(contentGetOwnerBranchProvider).GetOwnerBranch()
+
 		if n.p != nil {
 			// Page already set, nothing more to do.
 			if n.p.IsHome() {
@@ -223,12 +229,12 @@ func (m *pageMap) assemblePages() error {
 		}
 
 		if n.fi != nil {
-			n.p, err = m.s.newPageFromContentNode(n, branch.n.p.bucket, nil)
+			n.p, err = m.s.newPageFromContentNode(n, owner.n.p.bucket, nil)
 			if err != nil {
 				return true
 			}
 		} else {
-			n.p = m.s.newPage(n, branch.n.p.bucket, kind, "", m.splitKey(s)...)
+			n.p = m.s.newPage(n, owner.n.p.bucket, kind, "", m.splitKey(s)...)
 		}
 
 		n.p.treeRef = &contentTreeRef{
@@ -238,6 +244,7 @@ func (m *pageMap) assemblePages() error {
 			key:    s,
 			n:      n,
 		}
+		n.p.treeRef2 = np
 
 		if n.p.IsHome() {
 			m.s.home = n.p
@@ -256,14 +263,19 @@ func (m *pageMap) assemblePages() error {
 		return false
 	}
 
-	handlePage := func(branch, owner *contentBranchNode, s string, n *contentNode) bool {
+	handlePage := func(np contentNodeProvider) bool {
+		n := np.GetNode()
+		s := np.Key()
+		branch := np.(contentGetBranchProvider).GetBranch()
+		owner := np.(contentGetOwnerBranchProvider).GetOwnerBranch()
+
 		if n.fi != nil {
 			n.p, err = m.s.newPageFromContentNode(n, branch.n.p.bucket, nil)
 			if err != nil {
 				return true
 			}
 		} else {
-			n.p = m.s.newPage(n, branch.n.p.bucket, page.KindPage, "", m.splitKey(s)...)
+			n.p = m.s.newPage(n, owner.n.p.bucket, page.KindPage, "", m.splitKey(s)...)
 		}
 
 		tref := &contentTreeRef{
@@ -273,7 +285,6 @@ func (m *pageMap) assemblePages() error {
 			key:    s,
 			n:      n,
 		}
-
 		n.p.treeRef = tref
 
 		if !m.s.shouldBuild(n.p) {
@@ -286,7 +297,11 @@ func (m *pageMap) assemblePages() error {
 		return false
 	}
 
-	handleResource := func(branch *contentBranchNode, owner *contentNode, s string, n *contentNode) bool {
+	handleResource := func(np contentNodeProvider) bool {
+		n := np.GetNode()
+		branch := np.(contentGetBranchProvider).GetBranch()
+		owner := np.(contentGetOwnerNodeProvider).GetOwnerNode()
+
 		if owner.p == nil {
 			panic("invalid state, page not set on resource owner")
 		}
@@ -348,6 +363,7 @@ func (m *pageMap) assemblePages() error {
 			key:    "",
 			n:      hn.n,
 		}
+		hn.n.p.treeRef2 = m.newNodeProviderPage("", hn.n, nil, nil, false)
 
 	}
 
@@ -356,6 +372,7 @@ func (m *pageMap) assemblePages() error {
 	// First pass.
 	m.Walk(
 		branchMapQuery{
+			Deep:    true, // Need the branch tree
 			Exclude: func(s string, n *contentNode) bool { return n.p != nil },
 			Branch: branchMapQueryCallBacks{
 				Key:      newBranchMapQueryKey("", true),
@@ -409,15 +426,20 @@ func (m *pageMap) assemblePages() error {
 
 				n.p.treeRef = &contentTreeRef{
 					m:      m,
-					branch: hn,
-					owner:  taxonomy,
+					owner:  hn,
+					branch: taxonomy,
 					key:    key,
 					n:      n,
 				}
 
+				n.p.treeRef2 = m.newNodeProviderPage(key, n, hn, taxonomy, true)
+
 			}
 
-			handleTaxonomyEntries := func(b, owner *contentBranchNode, s string, n *contentNode) bool {
+			handleTaxonomyEntries := func(np contentNodeProvider) bool {
+				n := np.GetNode()
+				s := np.Key()
+
 				if m.cfg.taxonomyTermDisabled {
 					return false
 				}
@@ -459,11 +481,13 @@ func (m *pageMap) assemblePages() error {
 
 						n.p.treeRef = &contentTreeRef{
 							m:      m,
-							branch: taxonomy,
-							owner:  termBranch,
+							owner:  taxonomy,
+							branch: termBranch,
 							key:    taxonomyTermKey,
 							n:      n,
 						}
+						n.p.treeRef2 = np
+
 					}
 
 					termBranch.refs[n.p] = ordinalWeight{ordinal: i, weight: weight}
@@ -497,7 +521,12 @@ func (m *pageMap) assemblePages() error {
 			rootSectionCounters = make(map[string]int)
 		}
 
-		handleAggregatedValues := func(branch, owner *contentBranchNode, s string, n *contentNode) bool {
+		handleAggregatedValues := func(np contentNodeProvider) bool {
+			n := np.GetNode()
+			s := np.Key()
+			branch := np.(contentGetBranchProvider).GetBranch()
+			owner := np.(contentGetOwnerBranchProvider).GetOwnerBranch()
+
 			if s == "" {
 				return false
 			}
@@ -509,10 +538,10 @@ func (m *pageMap) assemblePages() error {
 				if firstSlash != -1 {
 					rootSection = rootSection[:firstSlash]
 				}
-				rootSectionCounters[rootSection] += owner.pages.nodes.Len()
+				rootSectionCounters[rootSection] += branch.pages.nodes.Len()
 			}
 
-			parent := branch.n.p
+			parent := owner.n.p
 			for parent != nil {
 				parent.m.calculated.UpdateDateAndLastmodIfAfter(n.p.m.calculated)
 
@@ -532,6 +561,7 @@ func (m *pageMap) assemblePages() error {
 
 		m.Walk(
 			branchMapQuery{
+				Deep:         true, // Need the branch relations
 				OnlyBranches: true,
 				Branch: branchMapQueryCallBacks{
 					Key:  newBranchMapQueryKey("", true),
@@ -562,12 +592,12 @@ func (m *pageMap) assemblePages() error {
 }
 
 func (m *pageMap) withEveryBundleNode(fn func(n *contentNode) bool) error {
-	callbackPage := func(branch, owner *contentBranchNode, s string, n *contentNode) bool {
-		return fn(n)
+	callbackPage := func(np contentNodeProvider) bool {
+		return fn(np.GetNode())
 	}
 
-	callbackResource := func(branch *contentBranchNode, owner *contentNode, s string, n *contentNode) bool {
-		return fn(n)
+	callbackResource := func(np contentNodeProvider) bool {
+		return fn(np.GetNode())
 	}
 
 	q := branchMapQuery{
@@ -622,8 +652,8 @@ func (m *pageMaps) deleteSection(s string) {
 
 func (m *pageMaps) walkBranchesPrefix(prefix string, fn func(s string, n *contentNode) bool) error {
 	return m.withMaps(func(runner para.Runner, pm *pageMap) error {
-		callbackPage := func(branch, owner *contentBranchNode, s string, n *contentNode) bool {
-			return fn(s, n)
+		callbackPage := func(np contentNodeProvider) bool {
+			return fn(np.Key(), np.GetNode())
 		}
 
 		q := branchMapQuery{
@@ -688,7 +718,7 @@ func (b *pagesMapBucket) getPagesInTerm() page.Pages {
 			return
 		}
 
-		for k := range ref.owner.refs {
+		for k := range ref.branch.refs {
 			b.pagesInTerm = append(b.pagesInTerm, k.(*pageState))
 		}
 

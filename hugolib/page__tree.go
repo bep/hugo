@@ -138,7 +138,7 @@ func (pt pageTree) InSection(other interface{}) (bool, error) {
 		return ref1.n.p.IsHome(), nil
 	}
 
-	return ref1.owner == ref2.owner, nil
+	return ref1.branch == ref2.branch, nil
 }
 
 func (pt pageTree) Page() page.Page {
@@ -159,11 +159,11 @@ func (pt pageTree) Parent() page.Page {
 		return p.s.home
 	}
 
-	if tree.branch == nil {
+	if tree.owner == nil {
 		return nil
 	}
 
-	return tree.branch.n.p
+	return tree.owner.n.p
 }
 
 func (pt pageTree) Sections() page.Pages {

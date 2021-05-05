@@ -102,10 +102,10 @@ func TestBranchMap(t *testing.T) {
 		}
 
 		var (
-			handleSection        func(branch, owner *contentBranchNode, s string, n *contentNode) bool
-			handlePage           func(branch, owner *contentBranchNode, s string, n *contentNode) bool
-			handleLeafResource   func(branch *contentBranchNode, owner *contentNode, s string, n *contentNode) bool
-			handleBranchResource func(branch *contentBranchNode, owner *contentNode, s string, n *contentNode) bool
+			handleSection        func(np contentNodeProvider) bool
+			handlePage           func(np contentNodeProvider) bool
+			handleLeafResource   func(np contentNodeProvider) bool
+			handleBranchResource func(np contentNodeProvider) bool
 
 			keyBranch branchMapQueryKey
 			keyLeaf   branchMapQueryKey
@@ -118,29 +118,29 @@ func TestBranchMap(t *testing.T) {
 		}
 
 		if spec.doBranch {
-			handleSection = func(branch, owner *contentBranchNode, s string, n *contentNode) bool {
-				addResult("section", s)
+			handleSection = func(np contentNodeProvider) bool {
+				addResult("section", np.Key())
 				return false
 			}
 		}
 
 		if spec.doPage {
-			handlePage = func(branch, owner *contentBranchNode, s string, n *contentNode) bool {
-				addResult("page", s)
+			handlePage = func(np contentNodeProvider) bool {
+				addResult("page", np.Key())
 				return false
 			}
 		}
 
 		if spec.doPageResource {
-			handleLeafResource = func(branch *contentBranchNode, owner *contentNode, s string, n *contentNode) bool {
-				addResult("resource", s)
+			handleLeafResource = func(np contentNodeProvider) bool {
+				addResult("resource", np.Key())
 				return false
 			}
 		}
 
 		if spec.doBranchResource {
-			handleBranchResource = func(branch *contentBranchNode, owner *contentNode, s string, n *contentNode) bool {
-				addResult("resource-branch", s)
+			handleBranchResource = func(np contentNodeProvider) bool {
+				addResult("resource-branch", np.Key())
 				return false
 			}
 		}

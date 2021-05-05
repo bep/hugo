@@ -19,6 +19,8 @@ import (
 	"path"
 	"strings"
 
+	"github.com/gohugoio/hugo/common/types"
+
 	"github.com/gohugoio/hugo/common/hugio"
 	"github.com/gohugoio/hugo/resources"
 
@@ -69,6 +71,14 @@ type contentBranchNode struct {
 	pageResources *contentBranchNodeTree
 
 	refs map[interface{}]ordinalWeight
+}
+
+func (b *contentBranchNode) GetBranch() *contentBranchNode {
+	return b
+}
+
+func (b *contentBranchNode) GetOwnerBranch() *contentBranchNode {
+	return b
 }
 
 func (b *contentBranchNode) InsertPage(key string, n *contentNode) {
@@ -232,6 +242,40 @@ func (m *branchMap) LongestPrefix(key string) (string, *contentBranchNode) {
 	return k, v.(*contentBranchNode)
 }
 
+func (m *branchMap) newNodeProviderPage(s string, n *contentNode, owner, branch *contentBranchNode, deep bool) contentNodeProvider {
+	var np contentNodeProvider
+	if !deep {
+		np = struct {
+			types.Identifier
+			contentGetNodeProvider
+		}{
+			types.KeyString(s),
+			n,
+		}
+	} else {
+		if owner == nil {
+			if s != "" {
+				_, owner = m.LongestPrefix(path.Dir(s))
+			}
+		}
+
+		np = struct {
+			types.Identifier
+			contentGetNodeProvider
+			contentGetOwnerBranchProvider
+			contentGetBranchProvider
+		}{
+			types.KeyString(s),
+			n,
+			owner,
+			branch,
+		}
+	}
+
+	return np
+
+}
+
 func (m *branchMap) Walk(q branchMapQuery) error {
 	if q.Branch.Key.IsZero() == q.Leaf.Key.IsZero() {
 		return errors.New("must set at most one Key")
@@ -243,29 +287,29 @@ func (m *branchMap) Walk(q branchMapQuery) error {
 
 	if q.Exclude != nil {
 		// Apply global node filters.
-		applyFilterPage := func(c contentTreeOwnerBranchNodeCallback) contentTreeOwnerBranchNodeCallback {
+		applyFilterPage := func(c contentTreeNodeCallbackNew) contentTreeNodeCallbackNew {
 			if c == nil {
 				return nil
 			}
-			return func(branch, owner *contentBranchNode, s string, n *contentNode) bool {
-				if q.Exclude(s, n) {
+			return func(n contentNodeProvider) bool {
+				if q.Exclude(n.Key(), n.GetNode()) {
 					// Skip this node, but continue walk.
 					return false
 				}
-				return c(branch, owner, s, n)
+				return c(n)
 			}
 		}
 
-		applyFilterResource := func(c contentTreeOwnerNodeCallback) contentTreeOwnerNodeCallback {
+		applyFilterResource := func(c contentTreeNodeCallbackNew) contentTreeNodeCallbackNew {
 			if c == nil {
 				return nil
 			}
-			return func(branch *contentBranchNode, owner *contentNode, s string, n *contentNode) bool {
-				if q.Exclude(s, n) {
+			return func(n contentNodeProvider) bool {
+				if q.Exclude(n.Key(), n.GetNode()) {
 					// Skip this node, but continue walk.
 					return false
 				}
-				return c(branch, owner, s, n)
+				return c(n)
 			}
 		}
 
@@ -278,11 +322,11 @@ func (m *branchMap) Walk(q branchMapQuery) error {
 
 	if q.BranchExclude != nil {
 		cb := q.Branch.Page
-		q.Branch.Page = func(branch, owner *contentBranchNode, s string, n *contentNode) bool {
-			if q.BranchExclude(s, n) {
+		q.Branch.Page = func(n contentNodeProvider) bool {
+			if q.BranchExclude(n.Key(), n.GetNode()) {
 				return true
 			}
-			return cb(branch, owner, s, n)
+			return cb(n)
 		}
 	}
 
@@ -294,24 +338,46 @@ func (m *branchMap) Walk(q branchMapQuery) error {
 		depthLeaf
 	)
 
+	newNodeProviderResource := func(s string, n, owner *contentNode, b *contentBranchNode) contentNodeProvider {
+		var np contentNodeProvider
+		if !q.Deep {
+			np = struct {
+				types.Identifier
+				contentGetNodeProvider
+			}{
+				types.KeyString(s),
+				n,
+			}
+		} else {
+			np = struct {
+				types.Identifier
+				contentGetNodeProvider
+				contentGetOwnerNodeProvider
+				contentGetBranchProvider
+			}{
+				types.KeyString(s),
+				n,
+				owner,
+				b,
+			}
+		}
+
+		return np
+	}
+
 	handleBranchPage := func(depth depthType, s string, v interface{}) bool {
 		bn := v.(*contentBranchNode)
 
 		if depth <= depthBranch {
-			var parentBranch *contentBranchNode
-			if s != "" {
-				_, parentBranch = m.LongestPrefix(path.Dir(s))
-			}
 
-			if q.Branch.Page != nil && q.Branch.Page(parentBranch, bn, s, bn.n) {
+			if q.Branch.Page != nil && q.Branch.Page(m.newNodeProviderPage(s, bn.n, nil, bn, q.Deep)) {
 				return false
 			}
 
 			if q.Branch.Resource != nil {
 				bn.resources.nodes.Walk(func(s string, v interface{}) bool {
-					// Note: We're passing the owning branch as the branch
-					// to this branch's resources.
-					return q.Branch.Resource(bn, bn.n, s, v.(*contentNode))
+					n := v.(*contentNode)
+					return q.Branch.Resource(newNodeProviderResource(s, n, bn.n, bn))
 				})
 			}
 		}
@@ -323,13 +389,13 @@ func (m *branchMap) Walk(q branchMapQuery) error {
 		if q.Leaf.Page != nil || q.Leaf.Resource != nil {
 			bn.pages.nodes.Walk(func(s string, v interface{}) bool {
 				n := v.(*contentNode)
-				if q.Leaf.Page != nil && q.Leaf.Page(bn, bn, s, n) {
+				if q.Leaf.Page != nil && q.Leaf.Page(m.newNodeProviderPage(s, n, bn, bn, q.Deep)) {
 					return true
 				}
 				if q.Leaf.Resource != nil {
 					// Interleave the Page's resources.
 					bn.pageResources.nodes.WalkPrefix(s+"/", func(s string, v interface{}) bool {
-						return q.Leaf.Resource(bn, n, s, v.(*contentNode))
+						return q.Leaf.Resource(newNodeProviderResource(s, v.(*contentNode), n, bn))
 					})
 				}
 				return false
@@ -404,14 +470,13 @@ func (m *branchMap) Walk(q branchMapQuery) error {
 	if !found {
 		return nil
 	}
-
-	if q.Leaf.Page != nil && q.Leaf.Page(section, section, q.Leaf.Key.Value, v.(*contentNode)) {
+	if q.Leaf.Page != nil && q.Leaf.Page(m.newNodeProviderPage(q.Leaf.Key.Value, v.(*contentNode), section, section, q.Deep)) {
 		return nil
 	}
 
 	if q.Leaf.Resource != nil {
 		section.pageResources.nodes.WalkPrefix(q.Leaf.Key.Value+"/", func(s string, v interface{}) bool {
-			return q.Leaf.Resource(section, section.n, s, v.(*contentNode))
+			return q.Leaf.Resource(newNodeProviderResource(s, v.(*contentNode), section.n, section))
 		})
 	}
 
@@ -433,7 +498,7 @@ func (m *branchMap) WalkBranchesPrefix(prefix string, cb func(s string, n *conte
 func (m *branchMap) WalkPagesAllPrefixSection(
 	prefix string,
 	branchExclude, exclude contentTreeNodeCallback,
-	callback contentTreeOwnerBranchNodeCallback) error {
+	callback contentTreeNodeCallbackNew) error {
 	q := branchMapQuery{
 		BranchExclude: branchExclude,
 		Exclude:       exclude,
@@ -451,7 +516,7 @@ func (m *branchMap) WalkPagesAllPrefixSection(
 func (m *branchMap) WalkPagesLeafsPrefixSection(
 	prefix string,
 	branchExclude, exclude contentTreeNodeCallback,
-	callback contentTreeOwnerBranchNodeCallback) error {
+	callback contentTreeNodeCallbackNew) error {
 	q := branchMapQuery{
 		BranchExclude: branchExclude,
 		Exclude:       exclude,
@@ -469,7 +534,7 @@ func (m *branchMap) WalkPagesLeafsPrefixSection(
 func (m *branchMap) WalkPagesPrefixSectionNoRecurse(
 	prefix string,
 	branchExclude, exclude contentTreeNodeCallback,
-	callback contentTreeOwnerBranchNodeCallback) error {
+	callback contentTreeNodeCallbackNew) error {
 	q := branchMapQuery{
 		NoRecurse:     true,
 		BranchExclude: branchExclude,
@@ -560,6 +625,8 @@ func (m *branchMap) treeRelation(s1, s2 string) int {
 type branchMapQuery struct {
 	// Restrict query to one level.
 	NoRecurse bool
+	// Deep/full callback objects.
+	Deep bool
 	// Do not navigate down to the leaf nodes.
 	OnlyBranches bool
 	// Global node filter. Return true to skip.
@@ -574,8 +641,8 @@ type branchMapQuery struct {
 
 type branchMapQueryCallBacks struct {
 	Key      branchMapQueryKey
-	Page     contentTreeOwnerBranchNodeCallback
-	Resource contentTreeOwnerNodeCallback
+	Page     contentTreeNodeCallbackNew
+	Resource contentTreeNodeCallbackNew
 }
 
 func (q branchMapQueryCallBacks) HasCallback() bool {

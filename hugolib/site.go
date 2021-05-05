@@ -358,7 +358,8 @@ func (s *Site) initRenderFormats() {
 	formatSet := make(map[string]bool)
 	formats := output.Formats{}
 
-	s.pageMap.WalkPagesAllPrefixSection("", nil, contentTreeNoRenderFilter, func(branch, owner *contentBranchNode, s string, n *contentNode) bool {
+	s.pageMap.WalkPagesAllPrefixSection("", nil, contentTreeNoRenderFilter, func(np contentNodeProvider) bool {
+		n := np.GetNode()
 		for _, f := range n.p.m.configuredOutputFormats {
 			if !formatSet[f.Name] {
 				formats = append(formats, f)
@@ -1471,7 +1472,10 @@ func (s *Site) assembleMenus() {
 	sectionPagesMenu := s.Info.sectionPagesMenu
 
 	if sectionPagesMenu != "" {
-		s.pageMap.WalkPagesAllPrefixSection("", noTaxonomiesFilter, contentTreeNoListAlwaysFilter, func(branch, owner *contentBranchNode, s string, n *contentNode) bool {
+		s.pageMap.WalkPagesAllPrefixSection("", noTaxonomiesFilter, contentTreeNoListAlwaysFilter, func(np contentNodeProvider) bool {
+			s := np.Key()
+			n := np.GetNode()
+
 			if s == "" {
 				return false
 			}
@@ -1500,7 +1504,8 @@ func (s *Site) assembleMenus() {
 	}
 
 	// Add menu entries provided by pages
-	s.pageMap.WalkPagesAllPrefixSection("", noTaxonomiesFilter, contentTreeNoRenderFilter, func(branch, owner *contentBranchNode, ss string, n *contentNode) bool {
+	s.pageMap.WalkPagesAllPrefixSection("", noTaxonomiesFilter, contentTreeNoRenderFilter, func(np contentNodeProvider) bool {
+		n := np.GetNode()
 		p := n.p
 
 		for name, me := range p.pageMenus.menus() {

@@ -16,6 +16,8 @@ package resource
 import (
 	"image"
 
+	"github.com/gohugoio/hugo/common/types"
+
 	"github.com/gohugoio/hugo/common/maps"
 	"github.com/gohugoio/hugo/langs"
 	"github.com/gohugoio/hugo/media"
@@ -123,11 +125,6 @@ type ResourcesLanguageMerger interface {
 	MergeByLanguageInterface(other interface{}) (interface{}, error)
 }
 
-// Identifier identifies a resource.
-type Identifier interface {
-	Key() string
-}
-
 // ContentResource represents a Resource that provides a way to get to its content.
 // Most Resource types in Hugo implements this interface, including Page.
 type ContentResource interface {
@@ -181,7 +178,7 @@ type TranslationKeyProvider interface {
 // UnmarshableResource represents a Resource that can be unmarshaled to some other format.
 type UnmarshableResource interface {
 	ReadSeekCloserResource
-	Identifier
+	types.Identifier
 }
 
 type resourceTypesHolder struct {

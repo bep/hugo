@@ -767,13 +767,14 @@ func (h *HugoSites) removePageByFilename(filename string) error {
 			Exclude: exclude,
 			Branch: branchMapQueryCallBacks{
 				Key: newBranchMapQueryKey("", true),
-				Page: func(branch, owner *contentBranchNode, s string, n *contentNode) bool {
-					sectionsToDelete = append(sectionsToDelete, s)
+				Page: func(np contentNodeProvider) bool {
+					sectionsToDelete = append(sectionsToDelete, np.Key())
 					return false
 				},
 			},
 			Leaf: branchMapQueryCallBacks{
-				Page: func(branch, owner *contentBranchNode, s string, n *contentNode) bool {
+				Page: func(np contentNodeProvider) bool {
+					n := np.GetNode()
 					pagesToDelete = append(pagesToDelete, n.p.treeRef)
 					return false
 				},

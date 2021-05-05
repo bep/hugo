@@ -24,10 +24,10 @@ import (
 
 	"github.com/pkg/errors"
 
+	bp "github.com/gohugoio/hugo/bufferpool"
+	"github.com/gohugoio/hugo/common/types"
 	"github.com/gohugoio/hugo/resources/images/exif"
 	"github.com/spf13/afero"
-
-	bp "github.com/gohugoio/hugo/bufferpool"
 
 	"github.com/gohugoio/hugo/common/herrors"
 	"github.com/gohugoio/hugo/common/hugio"
@@ -44,7 +44,7 @@ var (
 	_ resource.ReadSeekCloserResource = (*resourceAdapter)(nil)
 	_ resource.Resource               = (*resourceAdapter)(nil)
 	_ resource.Source                 = (*resourceAdapter)(nil)
-	_ resource.Identifier             = (*resourceAdapter)(nil)
+	_ types.Identifier                = (*resourceAdapter)(nil)
 	_ resource.ResourceMetaProvider   = (*resourceAdapter)(nil)
 )
 
@@ -192,7 +192,7 @@ func (r *resourceAdapter) Exif() *exif.Exif {
 
 func (r *resourceAdapter) Key() string {
 	r.init(false, false)
-	return r.target.(resource.Identifier).Key()
+	return r.target.(types.Identifier).Key()
 }
 
 func (r *resourceAdapter) MediaType() media.Type {
@@ -586,7 +586,7 @@ type transformableResource interface {
 
 	resource.ContentProvider
 	resource.Resource
-	resource.Identifier
+	types.Identifier
 }
 
 type transformationUpdate struct {
