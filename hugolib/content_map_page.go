@@ -61,6 +61,8 @@ func newPageMap(s *Site) *pageMap {
 		branchMap: newBranchMap(createBranchNode),
 	}
 
+	m.nav = pageMapNavigation{m: m}
+
 	m.pageReverseIndex = &contentTreeReverseIndex{
 		initFn: func(rm map[interface{}]*contentNode) {
 			m.WalkPagesAllPrefixSection("", nil, contentTreeNoListAlwaysFilter, func(n contentNodeProvider) bool {
@@ -124,10 +126,16 @@ type pageMap struct {
 	cfg contentMapConfig
 	s   *Site
 
+	nav pageMapNavigation
+
 	*branchMap
 
 	// A reverse index used as a fallback in GetPage for short references.
 	pageReverseIndex *contentTreeReverseIndex
+}
+
+type pageMapNavigation struct {
+	m *pageMap
 }
 
 func (m *pageMap) WalkTaxonomyTerms(fn func(s string, b *contentBranchNode) bool) {
@@ -205,8 +213,9 @@ func (m *pageMap) assemblePages() error {
 	handleBranch := func(np contentNodeProvider) bool {
 		n := np.GetNode()
 		s := np.Key()
-		branch := np.(contentGetBranchProvider).GetBranch()
-		owner := np.(contentGetOwnerBranchProvider).GetOwnerBranch()
+		tref := np.(contentTreeRefProvider)
+		branch := tref.GetBranch()
+		owner := np.(contentGetContainerBranchProvider).GetContainerBranch()
 
 		if n.p != nil {
 			// Page already set, nothing more to do.
@@ -237,14 +246,7 @@ func (m *pageMap) assemblePages() error {
 			n.p = m.s.newPage(n, owner.n.p.bucket, kind, "", m.splitKey(s)...)
 		}
 
-		n.p.treeRef = &contentTreeRef{
-			m:      m,
-			branch: branch,
-			owner:  owner,
-			key:    s,
-			n:      n,
-		}
-		n.p.treeRef2 = np
+		n.p.treeRef2 = tref
 
 		if n.p.IsHome() {
 			m.s.home = n.p
@@ -266,8 +268,9 @@ func (m *pageMap) assemblePages() error {
 	handlePage := func(np contentNodeProvider) bool {
 		n := np.GetNode()
 		s := np.Key()
+		tref2 := np.(contentTreeRefProvider)
 		branch := np.(contentGetBranchProvider).GetBranch()
-		owner := np.(contentGetOwnerBranchProvider).GetOwnerBranch()
+		owner := np.(contentGetContainerBranchProvider).GetContainerBranch()
 
 		if n.fi != nil {
 			n.p, err = m.s.newPageFromContentNode(n, branch.n.p.bucket, nil)
@@ -285,7 +288,8 @@ func (m *pageMap) assemblePages() error {
 			key:    s,
 			n:      n,
 		}
-		n.p.treeRef = tref
+
+		n.p.treeRef2 = tref2
 
 		if !m.s.shouldBuild(n.p) {
 			pagesToDelete = append(pagesToDelete, tref)
@@ -300,7 +304,8 @@ func (m *pageMap) assemblePages() error {
 	handleResource := func(np contentNodeProvider) bool {
 		n := np.GetNode()
 		branch := np.(contentGetBranchProvider).GetBranch()
-		owner := np.(contentGetOwnerNodeProvider).GetOwnerNode()
+		owner := np.(contentGetContainerNodeProvider).GetContainerNode()
+		tref2 := np.(contentTreeRefProvider)
 
 		if owner.p == nil {
 			panic("invalid state, page not set on resource owner")
@@ -317,6 +322,7 @@ func (m *pageMap) assemblePages() error {
 			if err != nil {
 				return true
 			}
+			rp.treeRef2 = tref2
 			rp.m.resourcePath = filepath.ToSlash(strings.TrimPrefix(rp.Path(), p.File().Dir()))
 			r = rp
 
@@ -356,15 +362,7 @@ func (m *pageMap) assemblePages() error {
 			return nil
 		}
 
-		hn.n.p.treeRef = &contentTreeRef{
-			m:      m,
-			branch: nil,
-			owner:  nil,
-			key:    "",
-			n:      hn.n,
-		}
-		hn.n.p.treeRef2 = m.newNodeProviderPage("", hn.n, nil, nil, false)
-
+		hn.n.p.treeRef2 = m.newNodeProviderPage("", hn.n, nil, nil, true).(contentTreeRefProvider)
 	}
 
 	m.s.home = hn.n.p
@@ -424,15 +422,7 @@ func (m *pageMap) assemblePages() error {
 				taxonomy = m.InsertBranch(key, n)
 				n.p = m.s.newPage(n, m.s.home.bucket, page.KindTaxonomy, "", viewName.plural)
 
-				n.p.treeRef = &contentTreeRef{
-					m:      m,
-					owner:  hn,
-					branch: taxonomy,
-					key:    key,
-					n:      n,
-				}
-
-				n.p.treeRef2 = m.newNodeProviderPage(key, n, hn, taxonomy, true)
+				n.p.treeRef2 = m.newNodeProviderPage(key, n, hn, taxonomy, true).(contentTreeRefProvider)
 
 			}
 
@@ -479,14 +469,7 @@ func (m *pageMap) assemblePages() error {
 
 						termBranch = m.InsertBranch(taxonomyTermKey, n)
 
-						n.p.treeRef = &contentTreeRef{
-							m:      m,
-							owner:  taxonomy,
-							branch: termBranch,
-							key:    taxonomyTermKey,
-							n:      n,
-						}
-						n.p.treeRef2 = np
+						n.p.treeRef2 = m.newNodeProviderPage(taxonomyTermKey, n, taxonomy, termBranch, true).(contentTreeRefProvider)
 
 					}
 
@@ -525,7 +508,7 @@ func (m *pageMap) assemblePages() error {
 			n := np.GetNode()
 			s := np.Key()
 			branch := np.(contentGetBranchProvider).GetBranch()
-			owner := np.(contentGetOwnerBranchProvider).GetOwnerBranch()
+			owner := np.(contentGetContainerBranchProvider).GetContainerBranch()
 
 			if s == "" {
 				return false
@@ -701,7 +684,7 @@ func (b *pagesMapBucket) getPagesAndSections() page.Pages {
 	}
 
 	b.pagesAndSectionsInit.Do(func() {
-		b.pagesAndSections = b.self.treeRef.getPagesAndSections()
+		b.pagesAndSections = b.self.s.pageMap.nav.getPagesAndSections(b.self.treeRef2)
 	})
 
 	return b.pagesAndSections
@@ -713,12 +696,8 @@ func (b *pagesMapBucket) getPagesInTerm() page.Pages {
 	}
 
 	b.pagesInTermInit.Do(func() {
-		ref := b.self.treeRef
-		if ref == nil {
-			return
-		}
-
-		for k := range ref.branch.refs {
+		branch := b.self.treeRef2.(contentGetBranchProvider).GetBranch()
+		for k := range branch.refs {
 			b.pagesInTerm = append(b.pagesInTerm, k.(*pageState))
 		}
 
@@ -734,8 +713,7 @@ func (b *pagesMapBucket) getRegularPages() page.Pages {
 	}
 
 	b.regularPagesInit.Do(func() {
-		b.regularPages = b.self.treeRef.getRegularPages()
-		page.SortByDefault(b.regularPages)
+		b.regularPages = b.self.s.pageMap.nav.getRegularPages(b.self.treeRef2)
 	})
 
 	return b.regularPages
@@ -765,8 +743,7 @@ func (b *pagesMapBucket) getRegularPagesRecursive() page.Pages {
 	}
 
 	b.regularPagesRecursiveInit.Do(func() {
-		b.regularPagesRecursive = b.self.treeRef.getRegularPagesRecursive()
-		page.SortByDefault(b.regularPagesRecursive)
+		b.regularPagesRecursive = b.self.s.pageMap.nav.getRegularPagesRecursive(b.self.treeRef2)
 	})
 
 	return b.regularPagesRecursive
@@ -778,10 +755,7 @@ func (b *pagesMapBucket) getSections() page.Pages {
 	}
 
 	b.sectionsInit.Do(func() {
-		if b.self.treeRef == nil {
-			return
-		}
-		b.sections = b.self.treeRef.getSections()
+		b.sections = b.self.s.pageMap.nav.getSections(b.self.treeRef2)
 	})
 
 	return b.sections
@@ -793,12 +767,9 @@ func (b *pagesMapBucket) getTaxonomies() page.Pages {
 	}
 
 	b.taxonomiesInit.Do(func() {
-		ref := b.self.treeRef
-		if ref == nil {
-			return
-		}
+		ref := b.self.treeRef2
 
-		b.self.s.pageMap.WalkBranchesPrefix(ref.key+"/", func(s string, branch *contentBranchNode) bool {
+		b.self.s.pageMap.WalkBranchesPrefix(ref.Key()+"/", func(s string, branch *contentBranchNode) bool {
 			b.taxonomies = append(b.taxonomies, branch.n.p)
 			return false
 		})

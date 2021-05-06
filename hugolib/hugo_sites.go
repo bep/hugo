@@ -761,7 +761,7 @@ func (h *HugoSites) removePageByFilename(filename string) error {
 
 	return h.getContentMaps().withMaps(func(runner para.Runner, m *pageMap) error {
 		var sectionsToDelete []string
-		var pagesToDelete []*contentTreeRef
+		var pagesToDelete []contentTreeRefProvider
 
 		q := branchMapQuery{
 			Exclude: exclude,
@@ -775,7 +775,7 @@ func (h *HugoSites) removePageByFilename(filename string) error {
 			Leaf: branchMapQueryCallBacks{
 				Page: func(np contentNodeProvider) bool {
 					n := np.GetNode()
-					pagesToDelete = append(pagesToDelete, n.p.treeRef)
+					pagesToDelete = append(pagesToDelete, n.p.treeRef2)
 					return false
 				},
 			},
@@ -787,13 +787,13 @@ func (h *HugoSites) removePageByFilename(filename string) error {
 
 		// Delete pages and sections marked for deletion.
 		for _, p := range pagesToDelete {
-			p.branch.pages.nodes.Delete(p.key)
-			p.branch.pageResources.nodes.Delete(p.key + "/")
-			if p.branch.n.fi == nil && p.branch.pages.nodes.Len() == 0 {
+			p.GetBranch().pages.nodes.Delete(p.Key())
+			p.GetBranch().pageResources.nodes.Delete(p.Key() + "/")
+			if p.GetBranch().n.fi == nil && p.GetBranch().pages.nodes.Len() == 0 {
 				// Delete orphan section.
-				sectionsToDelete = append(sectionsToDelete, p.branch.key)
+				sectionsToDelete = append(sectionsToDelete, p.GetBranch().key)
 			}
-		}
+			}
 
 		for _, s := range sectionsToDelete {
 			m.branches.Delete(s)

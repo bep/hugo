@@ -151,10 +151,6 @@ func (p *pageState) GitInfo() *gitmap.GitInfo {
 // GetTerms gets the terms defined on this page in the given taxonomy.
 // The pages returned will be ordered according to the front matter.
 func (p *pageState) GetTerms(taxonomy string) page.Pages {
-	if p.treeRef == nil {
-		return nil
-	}
-
 	var pas page.Pages
 	taxonomyKey := cleanTreeKey(taxonomy)
 	p.s.pageMap.WalkBranchesPrefix(taxonomyKey+"/", func(s string, b *contentBranchNode) bool {
@@ -393,7 +389,7 @@ func (p *pageState) getLayoutDescriptor() output.LayoutDescriptor {
 				section = sections[0]
 			}
 		case page.KindTaxonomy, page.KindTerm:
-			section = p.getTreeRef().n.viewInfo.name.singular
+			section = p.getTreeRef().GetNode().viewInfo.name.singular
 		default:
 		}
 

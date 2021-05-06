@@ -34,6 +34,12 @@ type contentTreeBranchNodeCallback func(s string, current *contentBranchNode) bo
 
 type contentTreeNodeCallback func(s string, n *contentNode) bool
 
+type contentTreeRefProvider interface {
+	contentNodeProvider
+	contentGetBranchProvider
+	contentGetContainerNodeProvider
+}
+
 type contentNodeProvider interface {
 	types.Identifier
 	contentGetNodeProvider
@@ -47,12 +53,14 @@ type contentGetBranchProvider interface {
 	GetBranch() *contentBranchNode
 }
 
-type contentGetOwnerNodeProvider interface {
-	GetOwnerNode() *contentNode
+type contentGetContainerNodeProvider interface {
+	// GetContainerNode returns the container for resources.
+	GetContainerNode() *contentNode
 }
 
-type contentGetOwnerBranchProvider interface {
-	GetOwnerBranch() *contentBranchNode
+type contentGetContainerBranchProvider interface {
+	// GetContainerBranch returns the container for pages and sections.
+	GetContainerBranch() *contentBranchNode
 }
 
 type contentTreeNodeCallbackNew func(node contentNodeProvider) bool
@@ -203,7 +211,7 @@ func (b *contentNode) GetNode() *contentNode {
 	return b
 }
 
-func (b *contentNode) GetOwnerNode() *contentNode {
+func (b *contentNode) GetContainerNode() *contentNode {
 	return b
 }
 
@@ -242,6 +250,56 @@ func (c *contentTreeRef) getPagesAndSections() page.Pages {
 	return pas
 }
 
+// TODO1 move these
+func (nav pageMapNavigation) getPagesAndSections(in contentNodeProvider) page.Pages {
+	if in == nil {
+		return nil
+	}
+
+	var pas page.Pages
+
+	nav.m.WalkPagesPrefixSectionNoRecurse(
+		in.Key()+"/",
+		noTaxonomiesFilter,
+		in.GetNode().p.m.getListFilter(true),
+		func(n contentNodeProvider) bool {
+			pas = append(pas, n.GetNode().p)
+			return false
+		},
+	)
+
+	page.SortByDefault(pas)
+
+	return pas
+}
+
+func (nav pageMapNavigation) getRegularPages(in contentNodeProvider) page.Pages {
+	if in == nil {
+		return nil
+	}
+
+	var pas page.Pages
+
+	q := branchMapQuery{
+		Exclude: in.GetNode().p.m.getListFilter(true),
+		Branch: branchMapQueryCallBacks{
+			Key: newBranchMapQueryKey(in.Key(), false),
+		},
+		Leaf: branchMapQueryCallBacks{
+			Page: func(n contentNodeProvider) bool {
+				pas = append(pas, n.GetNode().p)
+				return false
+			},
+		},
+	}
+
+	nav.m.Walk(q)
+
+	page.SortByDefault(pas)
+
+	return pas
+}
+
 func (c *contentTreeRef) getRegularPages() page.Pages {
 	var pas page.Pages
 
@@ -259,6 +317,33 @@ func (c *contentTreeRef) getRegularPages() page.Pages {
 	}
 
 	c.m.Walk(q)
+
+	page.SortByDefault(pas)
+
+	return pas
+}
+
+func (nav pageMapNavigation) getRegularPagesRecursive(in contentNodeProvider) page.Pages {
+	if in == nil {
+		return nil
+	}
+
+	var pas page.Pages
+
+	q := branchMapQuery{
+		Exclude: in.GetNode().p.m.getListFilter(true),
+		Branch: branchMapQueryCallBacks{
+			Key: newBranchMapQueryKey(in.Key()+"/", true),
+		},
+		Leaf: branchMapQueryCallBacks{
+			Page: func(n contentNodeProvider) bool {
+				pas = append(pas, n.GetNode().p)
+				return false
+			},
+		},
+	}
+
+	nav.m.Walk(q)
 
 	page.SortByDefault(pas)
 
@@ -290,6 +375,32 @@ func (c *contentTreeRef) getRegularPagesRecursive() page.Pages {
 
 func (c *contentTreeRef) isSection() bool {
 	return c.branch != nil && c.branch != c.owner
+}
+
+func (nav pageMapNavigation) getSections(in contentNodeProvider) page.Pages {
+	if in == nil {
+		return nil
+	}
+	var pas page.Pages
+
+	q := branchMapQuery{
+		NoRecurse:     true,
+		Exclude:       in.GetNode().p.m.getListFilter(true),
+		BranchExclude: noTaxonomiesFilter,
+		Branch: branchMapQueryCallBacks{
+			Key: newBranchMapQueryKey(in.Key()+"/", true),
+			Page: func(n contentNodeProvider) bool {
+				pas = append(pas, n.GetNode().p)
+				return false
+			},
+		},
+	}
+
+	nav.m.Walk(q)
+
+	page.SortByDefault(pas)
+
+	return pas
 }
 
 func (c *contentTreeRef) getSections() page.Pages {

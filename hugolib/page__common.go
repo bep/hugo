@@ -27,11 +27,11 @@ import (
 )
 
 type treeRefProvider interface {
-	getTreeRef() *contentTreeRef
+	getTreeRef() contentTreeRefProvider
 }
 
-func (p *pageCommon) getTreeRef() *contentTreeRef {
-	return p.treeRef
+func (p *pageCommon) getTreeRef() contentTreeRefProvider {
+	return p.treeRef2
 }
 
 type nextPrevProvider interface {
@@ -54,9 +54,8 @@ type pageCommon struct {
 	s *Site
 	m *pageMeta
 
-	bucket   *pagesMapBucket // Set for the branch nodes.
-	treeRef  *contentTreeRef // Set for all nodes. TODO1 remove
-	treeRef2 contentNodeProvider
+	bucket   *pagesMapBucket        // Set for the branch nodes.
+	treeRef2 contentTreeRefProvider // Set for all nodes.
 
 	// Lazily initialized dependencies.
 	init *lazy.Init

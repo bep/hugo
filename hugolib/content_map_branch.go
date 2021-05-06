@@ -77,7 +77,7 @@ func (b *contentBranchNode) GetBranch() *contentBranchNode {
 	return b
 }
 
-func (b *contentBranchNode) GetOwnerBranch() *contentBranchNode {
+func (b *contentBranchNode) GetContainerBranch() *contentBranchNode {
 	return b
 }
 
@@ -259,15 +259,22 @@ func (m *branchMap) newNodeProviderPage(s string, n *contentNode, owner, branch 
 			}
 		}
 
+		var ownerNode *contentNode
+		if owner != nil {
+			ownerNode = owner.n
+		}
+
 		np = struct {
 			types.Identifier
 			contentGetNodeProvider
-			contentGetOwnerBranchProvider
+			contentGetContainerBranchProvider
+			contentGetContainerNodeProvider
 			contentGetBranchProvider
 		}{
 			types.KeyString(s),
 			n,
 			owner,
+			ownerNode,
 			branch,
 		}
 	}
@@ -352,7 +359,7 @@ func (m *branchMap) Walk(q branchMapQuery) error {
 			np = struct {
 				types.Identifier
 				contentGetNodeProvider
-				contentGetOwnerNodeProvider
+				contentGetContainerNodeProvider
 				contentGetBranchProvider
 			}{
 				types.KeyString(s),
