@@ -238,7 +238,7 @@ func (m *pageMap) assemblePages() error {
 		}
 
 		if n.fi != nil {
-			n.p, err = m.s.newPageFromContentNode(n, owner.n.p.bucket, nil)
+			n.p, err = m.s.newPageFromTreeRef(tref)
 			if err != nil {
 				return true
 			}
@@ -246,6 +246,7 @@ func (m *pageMap) assemblePages() error {
 			n.p = m.s.newPage(n, owner.n.p.bucket, kind, "", m.splitKey(s)...)
 		}
 
+		// TODO1 remove me
 		n.p.treeRef2 = tref
 
 		if n.p.IsHome() {
@@ -273,7 +274,7 @@ func (m *pageMap) assemblePages() error {
 		owner := np.(contentGetContainerBranchProvider).GetContainerBranch()
 
 		if n.fi != nil {
-			n.p, err = m.s.newPageFromContentNode(n, branch.n.p.bucket, nil)
+			n.p, err = m.s.newPageFromTreeRef(tref2)
 			if err != nil {
 				return true
 			}
@@ -303,6 +304,8 @@ func (m *pageMap) assemblePages() error {
 
 	handleResource := func(np contentNodeProvider) bool {
 		n := np.GetNode()
+
+		// TODO1 Consider merging GetBranch() GetContainer?
 		branch := np.(contentGetBranchProvider).GetBranch()
 		owner := np.(contentGetContainerNodeProvider).GetContainerNode()
 		tref2 := np.(contentTreeRefProvider)
@@ -318,11 +321,10 @@ func (m *pageMap) assemblePages() error {
 		switch classifier {
 		case files.ContentClassContent:
 			var rp *pageState
-			rp, err = m.s.newPageFromContentNode(n, branch.n.p.bucket, p)
+			rp, err = m.s.newPageFromTreeRef(tref2)
 			if err != nil {
 				return true
 			}
-			rp.treeRef2 = tref2
 			rp.m.resourcePath = filepath.ToSlash(strings.TrimPrefix(rp.Path(), p.File().Dir()))
 			r = rp
 
@@ -348,8 +350,10 @@ func (m *pageMap) assemblePages() error {
 	}
 
 	if hn.n.p == nil {
+		// TODO1
+		tref := m.newNodeProviderPage("", hn.n, nil, nil, true).(contentTreeRefProvider)
 		if hn.n.fi != nil {
-			hn.n.p, err = m.s.newPageFromContentNode(hn.n, nil, nil)
+			hn.n.p, err = m.s.newPageFromTreeRef(tref)
 			if err != nil {
 				return err
 			}
@@ -362,7 +366,7 @@ func (m *pageMap) assemblePages() error {
 			return nil
 		}
 
-		hn.n.p.treeRef2 = m.newNodeProviderPage("", hn.n, nil, nil, true).(contentTreeRefProvider)
+		hn.n.p.treeRef2 = tref
 	}
 
 	m.s.home = hn.n.p

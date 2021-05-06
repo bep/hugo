@@ -1869,11 +1869,9 @@ func (s *Site) newPage(
 	return p
 }
 
-func (s *Site) newPageFromContentNode(
-	n *contentNode,
-	parentBucket *pagesMapBucket,
-	owner *pageState,
-) (*pageState, error) {
+func (s *Site) newPageFromTreeRef(np contentTreeRefProvider) (*pageState, error) {
+	n := np.GetNode()
+
 	if n.fi == nil {
 		panic("FileInfo must (currently) be set")
 	}
@@ -1888,8 +1886,9 @@ func (s *Site) newPageFromContentNode(
 		return meta.Open()
 	}
 
-	bundled := owner != nil
-
+	container := np.GetContainerNode()
+	branch := np.GetBranch()
+	bundled := container != nil && container.p.IsPage()
 	sections := s.sectionsFromFile(f)
 
 	kind := s.kindFromFileInfoOrSections(f, sections)
@@ -1903,12 +1902,20 @@ func (s *Site) newPageFromContentNode(
 	if err != nil {
 		return nil, err
 	}
+	ps.treeRef2 = np
 
 	if n.fi.Meta().GetBool(walkIsRootFileMetaKey) {
 		// Make sure that the bundle/section we start walking from is always
 		// rendered.
 		// This is only relevant in server fast render mode.
 		ps.forceRender = true
+	}
+
+	var parentBucket *pagesMapBucket
+	if bundled {
+		parentBucket = branch.n.p.bucket
+	} else if container != nil {
+		parentBucket = container.p.bucket
 	}
 
 	n.p = ps
@@ -2005,8 +2012,6 @@ func (s *Site) newPageFromContentNode(
 
 		return nil, nil
 	})
-
-	ps.parent = owner
 
 	return ps, nil
 }
