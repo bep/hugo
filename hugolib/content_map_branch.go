@@ -255,7 +255,8 @@ func (m *branchMap) newNodeProviderPage(s string, n *contentNode, owner, branch 
 	} else {
 		if owner == nil {
 			if s != "" {
-				_, owner = m.LongestPrefix(path.Dir(s))
+				var ss string
+				ss, owner = m.LongestPrefix(path.Dir(s))
 			}
 		}
 
@@ -415,7 +416,6 @@ func (m *branchMap) Walk(q branchMapQuery) error {
 	if !q.Branch.Key.IsZero() {
 		// Filter by section.
 		if q.Branch.Key.IsPrefix() {
-
 			if q.Branch.Key.Value != "" && q.Leaf.Page != nil {
 				// Need to include the leaf pages of the owning branch.
 				s := q.Branch.Key.Value[:len(q.Branch.Key.Value)-1]

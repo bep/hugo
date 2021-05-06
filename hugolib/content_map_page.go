@@ -225,6 +225,7 @@ func (m *pageMap) assemblePages() error {
 		}
 
 		// Determine Page Kind.
+		// TODO1 remove?
 		var kind string
 		if s == "" {
 			kind = page.KindHome
@@ -234,6 +235,11 @@ func (m *pageMap) assemblePages() error {
 			if kind == "" {
 				kind = page.KindSection
 			}
+		}
+
+		// TODO1 remove
+		if kind == page.KindTaxonomy && !tref.GetContainerNode().p.IsHome() {
+			//panic("Taxo container should be home: " + s + ", was " + tref.GetContainerNode().p.Path())
 		}
 
 		var sections []string
