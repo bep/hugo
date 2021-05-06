@@ -917,6 +917,7 @@ func (p *pageState) shiftToOutputFormat(isRenderingSite bool, idx int) error {
 // absolute path rooted in this site's content dir.
 // For pages that do not (sections without content page etc.), it returns the
 // virtual path, consistent with where you would add a source file.
+// TODO1 only used in tests, remove
 func (p *pageState) sourceRef() string {
 	if !p.File().IsZero() {
 		sourcePath := p.File().Path()

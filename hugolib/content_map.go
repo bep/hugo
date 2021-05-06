@@ -153,12 +153,12 @@ func newcontentTreeNodeCallbackChain(callbacks ...contentTreeNodeCallback) conte
 }
 
 type contentBundleViewInfo struct {
-	ordinal    int
+	ordinal    int // TODO1
 	name       viewName
 	termKey    string
 	termOrigin string
 	weight     int
-	ref        *contentNode
+	ref        *contentNode // TODO1
 }
 
 func (c *contentBundleViewInfo) term() string {

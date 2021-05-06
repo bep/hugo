@@ -21,7 +21,6 @@ import (
 	"mime"
 	"net/url"
 	"os"
-	"path"
 	"path/filepath"
 	"regexp"
 	"sort"
@@ -1802,42 +1801,6 @@ func (s *Site) publish(statCounter *uint64, path string, r io.Reader) (err error
 	return helpers.WriteToDisk(filepath.Clean(path), r, s.BaseFs.PublishFs)
 }
 
-func (s *Site) kindFromFileInfoOrSections(fi *fileInfo, sections []string) string {
-	if fi.TranslationBaseName() == "_index" {
-		if fi.Dir() == "" {
-			return page.KindHome
-		}
-
-		return s.kindFromSections(sections)
-
-	}
-
-	return page.KindPage
-}
-
-func (s *Site) kindFromSections(sections []string) string {
-	if len(sections) == 0 {
-		return page.KindHome
-	}
-
-	return s.kindFromSectionPath(path.Join(sections...))
-}
-
-func (s *Site) kindFromSectionPath(sectionPath string) string {
-	for _, plural := range s.siteCfg.taxonomiesConfig {
-		if plural == sectionPath {
-			return page.KindTaxonomy
-		}
-
-		if strings.HasPrefix(sectionPath, plural) {
-			return page.KindTerm
-		}
-
-	}
-
-	return page.KindSection
-}
-
 func (s *Site) newPage(
 	n *contentNode,
 	parentbBucket *pagesMapBucket,
@@ -1869,29 +1832,43 @@ func (s *Site) newPage(
 	return p
 }
 
-func (s *Site) newPageFromTreeRef(np contentTreeRefProvider) (*pageState, error) {
+func (s *Site) newPageFromTreeRef(np contentTreeRefProvider, sections ...string) (*pageState, error) {
 	n := np.GetNode()
+	var f source.File
+	var content func() (hugio.ReadSeekCloser, error)
 
-	if n.fi == nil {
-		panic("FileInfo must (currently) be set")
-	}
+	if n.fi != nil {
+		var err error
+		f, err = newFileInfo(s.SourceSpec, n.fi)
+		if err != nil {
+			return nil, err
+		}
 
-	f, err := newFileInfo(s.SourceSpec, n.fi)
-	if err != nil {
-		return nil, err
-	}
+		sections = s.sectionsFromFile(f)
 
-	meta := n.fi.Meta()
-	content := func() (hugio.ReadSeekCloser, error) {
-		return meta.Open()
+		meta := n.fi.Meta()
+		content = func() (hugio.ReadSeekCloser, error) {
+			return meta.Open()
+		}
+	} else {
+		f = page.NewZeroFile(s.DistinctWarningLog)
 	}
 
 	container := np.GetContainerNode()
 	branch := np.GetBranch()
 	bundled := container != nil && container.p.IsPage()
-	sections := s.sectionsFromFile(f)
 
-	kind := s.kindFromFileInfoOrSections(f, sections)
+	kind := page.KindPage
+	if np.Key() == "" {
+		kind = page.KindHome
+	} else if container != nil && container.isView() {
+		kind = page.KindTerm
+	} else if n.isView() {
+		kind = page.KindTaxonomy
+	} else if branch.n != container {
+		kind = page.KindSection
+	}
+
 	if kind == page.KindTerm {
 		s.PathSpec.MakePathsSanitized(sections)
 	}
@@ -1902,9 +1879,11 @@ func (s *Site) newPageFromTreeRef(np contentTreeRefProvider) (*pageState, error)
 	if err != nil {
 		return nil, err
 	}
-	ps.treeRef2 = np
 
-	if n.fi.Meta().GetBool(walkIsRootFileMetaKey) {
+	ps.treeRef2 = np
+	n.p = ps
+
+	if n.fi != nil && n.fi.Meta().GetBool(walkIsRootFileMetaKey) {
 		// Make sure that the bundle/section we start walking from is always
 		// rendered.
 		// This is only relevant in server fast render mode.
@@ -1918,44 +1897,45 @@ func (s *Site) newPageFromTreeRef(np contentTreeRefProvider) (*pageState, error)
 		parentBucket = container.p.bucket
 	}
 
-	n.p = ps
 	if ps.IsNode() {
 		ps.bucket = newPageBucket(parentBucket, ps)
 	}
 
-	gi, err := s.h.gitInfoForPage(ps)
-	if err != nil {
-		return nil, errors.Wrap(err, "failed to load Git data")
-	}
-	ps.gitInfo = gi
+	if n.fi != nil {
+		gi, err := s.h.gitInfoForPage(ps)
+		if err != nil {
+			return nil, errors.Wrap(err, "failed to load Git data")
+		}
+		ps.gitInfo = gi
 
-	r, err := content()
-	if err != nil {
-		return nil, err
-	}
-	defer r.Close()
+		r, err := content()
+		if err != nil {
+			return nil, err
+		}
+		defer r.Close()
 
-	parseResult, err := pageparser.Parse(
-		r,
-		pageparser.Config{EnableEmoji: s.siteCfg.enableEmoji},
-	)
-	if err != nil {
-		return nil, err
-	}
+		parseResult, err := pageparser.Parse(
+			r,
+			pageparser.Config{EnableEmoji: s.siteCfg.enableEmoji},
+		)
+		if err != nil {
+			return nil, err
+		}
 
-	ps.pageContent = pageContent{
-		source: rawPageContent{
-			parsed:         parseResult,
-			posMainContent: -1,
-			posSummaryEnd:  -1,
-			posBodyStart:   -1,
-		},
-	}
+		ps.pageContent = pageContent{
+			source: rawPageContent{
+				parsed:         parseResult,
+				posMainContent: -1,
+				posSummaryEnd:  -1,
+				posBodyStart:   -1,
+			},
+		}
 
-	ps.shortcodeState = newShortcodeHandler(ps, ps.s, nil)
+		ps.shortcodeState = newShortcodeHandler(ps, ps.s, nil)
 
-	if err := ps.mapContent(parentBucket, metaProvider); err != nil {
-		return nil, ps.wrapError(err)
+		if err := ps.mapContent(parentBucket, metaProvider); err != nil {
+			return nil, ps.wrapError(err)
+		}
 	}
 
 	if err := metaProvider.applyDefaultValues(n); err != nil {

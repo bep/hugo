@@ -215,7 +215,6 @@ func (m *pageMap) assemblePages() error {
 		s := np.Key()
 		tref := np.(contentTreeRefProvider)
 		branch := tref.GetBranch()
-		owner := np.(contentGetContainerBranchProvider).GetContainerBranch()
 
 		if n.p != nil {
 			// Page already set, nothing more to do.
@@ -237,13 +236,14 @@ func (m *pageMap) assemblePages() error {
 			}
 		}
 
-		if n.fi != nil {
-			n.p, err = m.s.newPageFromTreeRef(tref)
-			if err != nil {
-				return true
-			}
-		} else {
-			n.p = m.s.newPage(n, owner.n.p.bucket, kind, "", m.splitKey(s)...)
+		var sections []string
+		if n.fi == nil {
+			sections = m.splitKey(s)
+		}
+
+		n.p, err = m.s.newPageFromTreeRef(tref, sections...)
+		if err != nil {
+			return true
 		}
 
 		// TODO1 remove me
