@@ -652,7 +652,9 @@ func (p *pageState) getContentConverter() converter.Converter {
 	return p.m.contentConverter
 }
 
-func (p *pageState) mapContent(bucket *pagesMapBucket, meta *pageMeta) error {
+func (p *pageState) mapContent(bucket *pagesMapBucket, meta *pageMeta) (map[string]interface{}, error) {
+	var result map[string]interface{}
+
 	s := p.shortcodeState
 
 	rn := &pageContentMap{
@@ -669,7 +671,6 @@ func (p *pageState) mapContent(bucket *pagesMapBucket, meta *pageMeta) error {
 	// … it's safe to keep some "global" state
 	var currShortcode shortcode
 	var ordinal int
-	var frontMatterSet bool
 
 Loop:
 	for {
@@ -679,20 +680,15 @@ Loop:
 		case it.Type == pageparser.TypeIgnore:
 		case it.IsFrontMatter():
 			f := pageparser.FormatFromFrontMatterType(it.Type)
-			m, err := metadecoders.Default.UnmarshalToMap(it.Val, f)
+			var err error
+			result, err = metadecoders.Default.UnmarshalToMap(it.Val, f)
 			if err != nil {
 				if fe, ok := err.(herrors.FileError); ok {
-					return herrors.ToFileErrorWithOffset(fe, iter.LineNumber()-1)
+					return nil, herrors.ToFileErrorWithOffset(fe, iter.LineNumber()-1)
 				} else {
-					return err
+					return nil, err
 				}
 			}
-
-			if err := meta.setMetadata(bucket, p, m); err != nil {
-				return err
-			}
-
-			frontMatterSet = true
 
 			next := iter.Peek()
 			if !next.IsDone() {
@@ -701,7 +697,7 @@ Loop:
 
 			if !p.s.shouldBuild(p) {
 				// Nothing more to do.
-				return nil
+				return result, nil
 			}
 
 		case it.Type == pageparser.TypeLeadSummaryDivider:
@@ -738,7 +734,7 @@ Loop:
 
 			currShortcode, err := s.extractShortcode(ordinal, 0, iter)
 			if err != nil {
-				return fail(errors.Wrap(err, "failed to extract shortcode"), it)
+				return nil, fail(errors.Wrap(err, "failed to extract shortcode"), it)
 			}
 
 			currShortcode.pos = it.Pos
@@ -773,24 +769,16 @@ Loop:
 		case it.IsError():
 			err := fail(errors.WithStack(errors.New(it.ValStr())), it)
 			currShortcode.err = err
-			return err
+			return nil, err
 
 		default:
 			rn.AddBytes(it)
 		}
 	}
 
-	if !frontMatterSet {
-		// Page content without front matter. Assign default front matter from
-		// cascades etc.
-		if err := meta.setMetadata(bucket, p, nil); err != nil {
-			return err
-		}
-	}
-
 	p.cmap = rn
 
-	return nil
+	return result, nil
 }
 
 func (p *pageState) errorf(err error, format string, a ...interface{}) error {

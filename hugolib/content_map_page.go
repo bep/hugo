@@ -377,6 +377,31 @@ func (m *pageMap) assemblePages() error {
 
 	m.s.home = hn.n.p
 
+	if !m.cfg.taxonomyDisabled {
+		// Create the top level taxonomy nodes if they don't exist.
+		for _, viewName := range m.cfg.taxonomyConfig.views {
+			key := viewName.pluralTreeKey
+			if sectionsToDelete[key] {
+				continue
+			}
+
+			taxonomy := m.Get(key)
+			if taxonomy == nil {
+				n := &contentNode{
+					viewInfo: &contentBundleViewInfo{
+						name: viewName,
+					},
+				}
+
+				taxonomy = m.InsertBranch(key, n)
+				n.p = m.s.newPage(n, m.s.home.bucket, page.KindTaxonomy, "", viewName.plural)
+
+				n.p.treeRef2 = m.newNodeProviderPage(key, n, hn, taxonomy, true).(contentTreeRefProvider)
+
+			}
+		}
+	}
+
 	// First pass.
 	m.Walk(
 		branchMapQuery{
@@ -407,49 +432,32 @@ func (m *pageMap) assemblePages() error {
 		}
 	}
 
-	for s := range sectionsToDelete {
-		m.branches.Delete(s)
-		m.branches.DeletePrefix(s + "/")
-	}
-
 	// Attach pages to views.
 	if !m.cfg.taxonomyDisabled {
-		for _, viewName := range m.cfg.taxonomyConfig.views {
 
-			key := cleanTreeKey(viewName.plural)
-			if sectionsToDelete[key] {
-				continue
+		handleTaxonomyEntries := func(np contentNodeProvider) bool {
+			if m.cfg.taxonomyTermDisabled {
+				return false
 			}
 
-			taxonomy := m.Get(key)
-			if taxonomy == nil {
-				n := &contentNode{
-					viewInfo: &contentBundleViewInfo{
-						name: viewName,
-					},
+			for _, viewName := range m.cfg.taxonomyConfig.views {
+				if sectionsToDelete[viewName.pluralTreeKey] {
+					continue
 				}
 
-				taxonomy = m.InsertBranch(key, n)
-				n.p = m.s.newPage(n, m.s.home.bucket, page.KindTaxonomy, "", viewName.plural)
+				taxonomy := m.Get(viewName.pluralTreeKey)
 
-				n.p.treeRef2 = m.newNodeProviderPage(key, n, hn, taxonomy, true).(contentTreeRefProvider)
-
-			}
-
-			handleTaxonomyEntries := func(np contentNodeProvider) bool {
 				n := np.GetNode()
 				s := np.Key()
 
-				if m.cfg.taxonomyTermDisabled {
-					return false
-				}
 				if n.p == nil {
 					panic("page is nil: " + s)
 				}
 				vals := types.ToStringSlicePreserveString(getParam(n.p, viewName.plural, false))
 				if vals == nil {
-					return false
+					continue
 				}
+
 				w := getParamToLower(n.p, viewName.plural+"_weight")
 				weight, err := cast.ToIntE(w)
 				if err != nil {
@@ -485,100 +493,111 @@ func (m *pageMap) assemblePages() error {
 
 					termBranch.refs[n.p] = ordinalWeight{ordinal: i, weight: weight}
 					termBranch.n.p.m.calculated.UpdateDateAndLastmodIfAfter(n.p.m.userProvided)
-
-				}
-				return false
-			}
-
-			m.Walk(
-				branchMapQuery{
-					Branch: branchMapQueryCallBacks{
-						Key:  newBranchMapQueryKey("", true),
-						Page: handleTaxonomyEntries,
-					},
-					Leaf: branchMapQueryCallBacks{
-						Page: handleTaxonomyEntries,
-					},
-				},
-			)
-		}
-
-		// Finally, collect aggregate values from the content tree.
-		var (
-			siteLastChanged     time.Time
-			rootSectionCounters map[string]int
-		)
-
-		_, mainSectionsSet := m.s.s.Info.Params()["mainsections"]
-		if !mainSectionsSet {
-			rootSectionCounters = make(map[string]int)
-		}
-
-		handleAggregatedValues := func(np contentNodeProvider) bool {
-			n := np.GetNode()
-			s := np.Key()
-			branch := np.(contentGetBranchProvider).GetBranch()
-			owner := np.(contentGetContainerBranchProvider).GetContainerBranch()
-
-			if s == "" {
-				return false
-			}
-
-			if rootSectionCounters != nil {
-				// Keep track of the page count per root section
-				rootSection := s[1:]
-				firstSlash := strings.Index(rootSection, "/")
-				if firstSlash != -1 {
-					rootSection = rootSection[:firstSlash]
-				}
-				rootSectionCounters[rootSection] += branch.pages.nodes.Len()
-			}
-
-			parent := owner.n.p
-			for parent != nil {
-				parent.m.calculated.UpdateDateAndLastmodIfAfter(n.p.m.calculated)
-
-				if n.p.m.calculated.Lastmod().After(siteLastChanged) {
-					siteLastChanged = n.p.m.calculated.Lastmod()
 				}
 
-				if parent.bucket.parent == nil {
-					break
-				}
-
-				parent = parent.bucket.parent.self
 			}
-
 			return false
+
 		}
 
 		m.Walk(
 			branchMapQuery{
-				Deep:         true, // Need the branch relations
-				OnlyBranches: true,
 				Branch: branchMapQueryCallBacks{
 					Key:  newBranchMapQueryKey("", true),
-					Page: handleAggregatedValues,
+					Page: handleTaxonomyEntries,
+				},
+				Leaf: branchMapQueryCallBacks{
+					Page: handleTaxonomyEntries,
 				},
 			},
 		)
 
-		m.s.lastmod = siteLastChanged
-		if rootSectionCounters != nil {
-			var mainSection string
-			var mainSectionCount int
+	}
+	for s := range sectionsToDelete {
+		m.branches.Delete(s)
+		m.branches.DeletePrefix(s + "/")
+	}
 
-			for k, v := range rootSectionCounters {
-				if v > mainSectionCount {
-					mainSection = k
-					mainSectionCount = v
-				}
+	// Finally, collect aggregate values from the content tree.
+	var (
+		siteLastChanged     time.Time
+		rootSectionCounters map[string]int
+	)
+
+	_, mainSectionsSet := m.s.s.Info.Params()["mainsections"]
+	if !mainSectionsSet {
+		rootSectionCounters = make(map[string]int)
+	}
+
+	handleAggregatedValues := func(np contentNodeProvider) bool {
+		n := np.GetNode()
+		s := np.Key()
+		branch := np.(contentGetBranchProvider).GetBranch()
+		owner := np.(contentGetContainerBranchProvider).GetContainerBranch()
+
+		if s == "" {
+			return false
+		}
+
+		if rootSectionCounters != nil {
+			// Keep track of the page count per root section
+			rootSection := s[1:]
+			firstSlash := strings.Index(rootSection, "/")
+			if firstSlash != -1 {
+				rootSection = rootSection[:firstSlash]
+			}
+			rootSectionCounters[rootSection] += branch.pages.nodes.Len()
+		}
+
+		parent := owner.n.p
+		for parent != nil {
+			parent.m.calculated.UpdateDateAndLastmodIfAfter(n.p.m.calculated)
+
+			if n.p.m.calculated.Lastmod().After(siteLastChanged) {
+				siteLastChanged = n.p.m.calculated.Lastmod()
 			}
 
-			mainSections := []string{mainSection}
-			m.s.s.Info.Params()["mainSections"] = mainSections
-			m.s.s.Info.Params()["mainsections"] = mainSections
+			if parent.bucket == nil {
+				panic("bucket not set")
+			}
+
+			if parent.bucket.parent == nil {
+				break
+			}
+
+			parent = parent.bucket.parent.self
 		}
+
+		return false
+	}
+
+	m.Walk(
+		branchMapQuery{
+			Deep:         true, // Need the branch relations
+			OnlyBranches: true,
+			Branch: branchMapQueryCallBacks{
+				Key:  newBranchMapQueryKey("", true),
+				Page: handleAggregatedValues,
+			},
+		},
+	)
+
+	m.s.lastmod = siteLastChanged
+	if rootSectionCounters != nil {
+		var mainSection string
+		var mainSectionCount int
+
+		for k, v := range rootSectionCounters {
+			if v > mainSectionCount {
+				mainSection = k
+				mainSectionCount = v
+			}
+		}
+
+		mainSections := []string{mainSection}
+		m.s.s.Info.Params()["mainSections"] = mainSections
+		m.s.s.Info.Params()["mainsections"] = mainSections
+
 	}
 
 	return nil

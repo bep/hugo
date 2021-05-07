@@ -49,7 +49,7 @@ func newContentBranchNode(key string, n *contentNode) *contentBranchNode {
 func newNodeTree(name string) nodeTree {
 	// TODO(bep) configure
 	return radix.New()
-	// return &nodeTreeUpdateTracer{name: name, nodeTree: radix.New()}
+	//return &nodeTreeUpdateTracer{name: name, nodeTree: radix.New()}
 }
 
 func newBranchMap(createBranchNode func(key string) *contentNode) *branchMap {
@@ -255,9 +255,10 @@ func (m *branchMap) newNodeProviderPage(s string, n *contentNode, owner, branch 
 	} else {
 		if owner == nil {
 			if s != "" {
-				var ss string
-				ss, owner = m.LongestPrefix(path.Dir(s))
+				_, owner = m.LongestPrefix(path.Dir(s))
+
 			}
+
 		}
 
 		var ownerNode *contentNode
@@ -284,6 +285,7 @@ func (m *branchMap) newNodeProviderPage(s string, n *contentNode, owner, branch 
 
 }
 
+// TODO1 bep1
 func (m *branchMap) Walk(q branchMapQuery) error {
 	if q.Branch.Key.IsZero() == q.Leaf.Key.IsZero() {
 		return errors.New("must set at most one Key")

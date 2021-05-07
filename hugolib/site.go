@@ -1901,7 +1901,11 @@ func (s *Site) newPageFromTreeRef(np contentTreeRefProvider, sections ...string)
 		ps.bucket = newPageBucket(parentBucket, ps)
 	}
 
-	if n.fi != nil {
+	if n.fi == nil {
+		if err := metaProvider.setMetadata(parentBucket, ps, nil); err != nil {
+			return nil, ps.wrapError(err)
+		}
+	} else {
 		gi, err := s.h.gitInfoForPage(ps)
 		if err != nil {
 			return nil, errors.Wrap(err, "failed to load Git data")
@@ -1932,10 +1936,15 @@ func (s *Site) newPageFromTreeRef(np contentTreeRefProvider, sections ...string)
 		}
 
 		ps.shortcodeState = newShortcodeHandler(ps, ps.s, nil)
-
-		if err := ps.mapContent(parentBucket, metaProvider); err != nil {
+		meta, err := ps.mapContent(parentBucket, metaProvider)
+		if err != nil {
 			return nil, ps.wrapError(err)
 		}
+
+		if err := metaProvider.setMetadata(parentBucket, ps, meta); err != nil {
+			return nil, ps.wrapError(err)
+		}
+
 	}
 
 	if err := metaProvider.applyDefaultValues(n); err != nil {
