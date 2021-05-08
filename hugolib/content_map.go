@@ -93,18 +93,6 @@ type contentTreeOwnerNodeCallback func(
 	n *contentNode,
 ) bool
 
-// contentTreeRef points to a node in the given map.
-// section sections.Get key
-// page branch.Get key
-// resource
-type contentTreeRef struct {
-	m      *pageMap
-	owner  *contentBranchNode // The owning branch.
-	branch *contentBranchNode //
-	key    string
-	n      *contentNode
-}
-
 // Used to mark ambiguous keys in reverse index lookups.
 var ambiguousContentNode = &contentNode{}
 
@@ -232,24 +220,6 @@ func (b *contentNode) rootSection() string {
 	return b.path[:firstSlash]
 }
 
-func (c *contentTreeRef) getPagesAndSections() page.Pages {
-	var pas page.Pages
-
-	c.m.WalkPagesPrefixSectionNoRecurse(
-		c.key+"/",
-		noTaxonomiesFilter,
-		c.n.p.m.getListFilter(true),
-		func(n contentNodeProvider) bool {
-			pas = append(pas, n.GetNode().p)
-			return false
-		},
-	)
-
-	page.SortByDefault(pas)
-
-	return pas
-}
-
 // TODO1 move these
 func (nav pageMapNavigation) getPagesAndSections(in contentNodeProvider) page.Pages {
 	if in == nil {
@@ -300,29 +270,6 @@ func (nav pageMapNavigation) getRegularPages(in contentNodeProvider) page.Pages 
 	return pas
 }
 
-func (c *contentTreeRef) getRegularPages() page.Pages {
-	var pas page.Pages
-
-	q := branchMapQuery{
-		Exclude: c.n.p.m.getListFilter(true),
-		Branch: branchMapQueryCallBacks{
-			Key: newBranchMapQueryKey(c.key, false),
-		},
-		Leaf: branchMapQueryCallBacks{
-			Page: func(n contentNodeProvider) bool {
-				pas = append(pas, n.GetNode().p)
-				return false
-			},
-		},
-	}
-
-	c.m.Walk(q)
-
-	page.SortByDefault(pas)
-
-	return pas
-}
-
 func (nav pageMapNavigation) getRegularPagesRecursive(in contentNodeProvider) page.Pages {
 	if in == nil {
 		return nil
@@ -350,33 +297,6 @@ func (nav pageMapNavigation) getRegularPagesRecursive(in contentNodeProvider) pa
 	return pas
 }
 
-func (c *contentTreeRef) getRegularPagesRecursive() page.Pages {
-	var pas page.Pages
-
-	q := branchMapQuery{
-		Exclude: c.n.p.m.getListFilter(true),
-		Branch: branchMapQueryCallBacks{
-			Key: newBranchMapQueryKey(c.key+"/", true),
-		},
-		Leaf: branchMapQueryCallBacks{
-			Page: func(n contentNodeProvider) bool {
-				pas = append(pas, n.GetNode().p)
-				return false
-			},
-		},
-	}
-
-	c.m.Walk(q)
-
-	page.SortByDefault(pas)
-
-	return pas
-}
-
-func (c *contentTreeRef) isSection() bool {
-	return c.branch != nil && c.branch != c.owner
-}
-
 func (nav pageMapNavigation) getSections(in contentNodeProvider) page.Pages {
 	if in == nil {
 		return nil
@@ -397,29 +317,6 @@ func (nav pageMapNavigation) getSections(in contentNodeProvider) page.Pages {
 	}
 
 	nav.m.Walk(q)
-
-	page.SortByDefault(pas)
-
-	return pas
-}
-
-func (c *contentTreeRef) getSections() page.Pages {
-	var pas page.Pages
-
-	q := branchMapQuery{
-		NoRecurse:     true,
-		Exclude:       c.n.p.m.getListFilter(true),
-		BranchExclude: noTaxonomiesFilter,
-		Branch: branchMapQueryCallBacks{
-			Key: newBranchMapQueryKey(c.key+"/", true),
-			Page: func(n contentNodeProvider) bool {
-				pas = append(pas, n.GetNode().p)
-				return false
-			},
-		},
-	}
-
-	c.m.Walk(q)
 
 	page.SortByDefault(pas)
 

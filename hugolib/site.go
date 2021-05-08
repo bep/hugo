@@ -1865,7 +1865,7 @@ func (s *Site) newPageFromTreeRef(np contentTreeRefProvider, sections ...string)
 		kind = page.KindTerm
 	} else if n.isView() {
 		kind = page.KindTaxonomy
-	} else if branch.n != container {
+	} else if branch.n == n {
 		kind = page.KindSection
 	}
 

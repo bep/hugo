@@ -188,10 +188,6 @@ func (m *pageMap) createSiteTaxonomies() error {
 	return nil
 }
 
-type pageDescriptor struct {
-	treeRef *contentTreeRef
-}
-
 func (m *pageMap) assemblePages() error {
 	isRebuild := m.cfg.isRebuild
 	var err error
@@ -207,7 +203,7 @@ func (m *pageMap) assemblePages() error {
 	// because front matter dictated it (e.g. a draft).
 	var (
 		sectionsToDelete = make(map[string]bool)
-		pagesToDelete    []*contentTreeRef
+		pagesToDelete    []contentTreeRefProvider
 	)
 
 	handleBranch := func(np contentNodeProvider) bool {
@@ -252,9 +248,6 @@ func (m *pageMap) assemblePages() error {
 			return true
 		}
 
-		// TODO1 remove me
-		n.p.treeRef2 = tref
-
 		if n.p.IsHome() {
 			m.s.home = n.p
 		}
@@ -277,29 +270,19 @@ func (m *pageMap) assemblePages() error {
 		s := np.Key()
 		tref2 := np.(contentTreeRefProvider)
 		branch := np.(contentGetBranchProvider).GetBranch()
-		owner := np.(contentGetContainerBranchProvider).GetContainerBranch()
 
-		if n.fi != nil {
-			n.p, err = m.s.newPageFromTreeRef(tref2)
-			if err != nil {
-				return true
-			}
-		} else {
-			n.p = m.s.newPage(n, owner.n.p.bucket, page.KindPage, "", m.splitKey(s)...)
+		// TODO1 can we always use this?
+		var sections []string
+		if n.fi == nil {
+			sections = m.splitKey(s)
 		}
-
-		tref := &contentTreeRef{
-			m:      m,
-			branch: branch,
-			owner:  owner,
-			key:    s,
-			n:      n,
+		n.p, err = m.s.newPageFromTreeRef(tref2, sections...)
+		if err != nil {
+			return true
 		}
-
-		n.p.treeRef2 = tref2
 
 		if !m.s.shouldBuild(n.p) {
-			pagesToDelete = append(pagesToDelete, tref)
+			pagesToDelete = append(pagesToDelete, tref2)
 			return false
 		}
 
@@ -358,13 +341,9 @@ func (m *pageMap) assemblePages() error {
 	if hn.n.p == nil {
 		// TODO1
 		tref := m.newNodeProviderPage("", hn.n, nil, nil, true).(contentTreeRefProvider)
-		if hn.n.fi != nil {
-			hn.n.p, err = m.s.newPageFromTreeRef(tref)
-			if err != nil {
-				return err
-			}
-		} else {
-			hn.n.p = m.s.newPage(hn.n, nil, page.KindHome, "")
+		hn.n.p, err = m.s.newPageFromTreeRef(tref)
+		if err != nil {
+			return err
 		}
 
 		if !m.s.shouldBuild(hn.n.p) {
@@ -372,7 +351,6 @@ func (m *pageMap) assemblePages() error {
 			return nil
 		}
 
-		hn.n.p.treeRef2 = tref
 	}
 
 	m.s.home = hn.n.p
@@ -424,17 +402,21 @@ func (m *pageMap) assemblePages() error {
 
 	// Delete pages and sections marked for deletion.
 	for _, p := range pagesToDelete {
-		p.branch.pages.nodes.Delete(p.key)
-		p.branch.pageResources.nodes.Delete(p.key + "/")
-		if p.branch.n.fi == nil && p.branch.pages.nodes.Len() == 0 {
+		p.GetBranch().pages.nodes.Delete(p.Key())
+		p.GetBranch().pageResources.nodes.Delete(p.Key() + "/")
+		if p.GetBranch().n.fi == nil && p.GetBranch().pages.nodes.Len() == 0 {
 			// Delete orphan section.
-			sectionsToDelete[p.branch.key] = true
+			sectionsToDelete[p.GetBranch().key] = true
 		}
+	}
+
+	for s := range sectionsToDelete {
+		m.branches.Delete(s)
+		m.branches.DeletePrefix(s + "/")
 	}
 
 	// Attach pages to views.
 	if !m.cfg.taxonomyDisabled {
-
 		handleTaxonomyEntries := func(np contentNodeProvider) bool {
 			if m.cfg.taxonomyTermDisabled {
 				return false
@@ -469,6 +451,7 @@ func (m *pageMap) assemblePages() error {
 					term := m.s.getTaxonomyKey(v)
 
 					termKey := cleanTreeKey(term)
+
 					taxonomyTermKey := taxonomy.key + termKey
 
 					// It may have been added with the content files
@@ -512,10 +495,6 @@ func (m *pageMap) assemblePages() error {
 			},
 		)
 
-	}
-	for s := range sectionsToDelete {
-		m.branches.Delete(s)
-		m.branches.DeletePrefix(s + "/")
 	}
 
 	// Finally, collect aggregate values from the content tree.
