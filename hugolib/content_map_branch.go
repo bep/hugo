@@ -48,8 +48,9 @@ func newContentBranchNode(key string, n *contentNode) *contentBranchNode {
 
 func newNodeTree(name string) nodeTree {
 	// TODO(bep) configure
-	return radix.New()
-	//return &nodeTreeUpdateTracer{name: name, nodeTree: radix.New()}
+	tree := &defaultNodeTree{nodeTree: radix.New()}
+	return tree
+	//return &nodeTreeUpdateTracer{name: name, nodeTree: tree}
 }
 
 func newBranchMap(createBranchNode func(key string) *contentNode) *branchMap {
@@ -204,6 +205,7 @@ func (m *branchMap) InsertBranch(key string, n *contentNode) *contentBranchNode 
 	mustValidateSectionMapKey(key)
 	if v, found := m.branches.Get(key); found {
 		// Update existing.
+		n.key = key
 		branch := v.(*contentBranchNode)
 		branch.n = n
 		return branch
@@ -245,13 +247,7 @@ func (m *branchMap) LongestPrefix(key string) (string, *contentBranchNode) {
 func (m *branchMap) newNodeProviderPage(s string, n *contentNode, owner, branch *contentBranchNode, deep bool) contentNodeProvider {
 	var np contentNodeProvider
 	if !deep {
-		np = struct {
-			types.Identifier
-			contentGetNodeProvider
-		}{
-			types.KeyString(s),
-			n,
-		}
+		np = n
 	} else {
 		if owner == nil {
 			if s != "" {
@@ -273,7 +269,7 @@ func (m *branchMap) newNodeProviderPage(s string, n *contentNode, owner, branch 
 			contentGetContainerNodeProvider
 			contentGetBranchProvider
 		}{
-			types.KeyString(s),
+			n,
 			n,
 			owner,
 			ownerNode,
@@ -351,13 +347,7 @@ func (m *branchMap) Walk(q branchMapQuery) error {
 	newNodeProviderResource := func(s string, n, owner *contentNode, b *contentBranchNode) contentNodeProvider {
 		var np contentNodeProvider
 		if !q.Deep {
-			np = struct {
-				types.Identifier
-				contentGetNodeProvider
-			}{
-				types.KeyString(s),
-				n,
-			}
+			np = n
 		} else {
 			np = struct {
 				types.Identifier
@@ -365,7 +355,7 @@ func (m *branchMap) Walk(q branchMapQuery) error {
 				contentGetContainerNodeProvider
 				contentGetBranchProvider
 			}{
-				types.KeyString(s),
+				n,
 				n,
 				owner,
 				b,
@@ -722,6 +712,28 @@ type nodeTree interface {
 	Walk(fn radix.WalkFn)
 	WalkPrefix(prefix string, fn radix.WalkFn)
 	Get(s string) (interface{}, bool)
+}
+
+type defaultNodeTree struct {
+	nodeTree
+}
+
+func (t *defaultNodeTree) Delete(s string) (interface{}, bool) {
+	return t.nodeTree.Delete(s)
+}
+
+func (t *defaultNodeTree) DeletePrefix(s string) int {
+	return t.nodeTree.DeletePrefix(s)
+}
+
+func (t *defaultNodeTree) Insert(s string, v interface{}) (interface{}, bool) {
+	switch n := v.(type) {
+	case *contentNode:
+		n.key = s
+	case *contentBranchNode:
+		n.n.key = s
+	}
+	return t.nodeTree.Insert(s, v)
 }
 
 type nodeTreeUpdateTracer struct {

@@ -181,7 +181,8 @@ func (cfg contentMapConfig) getTaxonomyConfig(s string) (v viewName) {
 }
 
 type contentNode struct {
-	p *pageState
+	key string
+	p   *pageState
 
 	// Set for taxonomy nodes.
 	viewInfo *contentBundleViewInfo
@@ -193,6 +194,10 @@ type contentNode struct {
 	// The source path. Unix slashes. No leading slash.
 	// TODO(bep) get rid of this.
 	path string
+}
+
+func (b *contentNode) Key() string {
+	return b.key
 }
 
 func (b *contentNode) GetNode() *contentNode {
