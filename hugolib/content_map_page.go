@@ -252,14 +252,7 @@ func (m *pageMap) assemblePages() error {
 			m.s.home = n.p
 		}
 
-		if !m.s.shouldBuild(n.p) {
-			sectionsToDelete[s] = true
-			if s == "" {
-				// Home page, abort.
-				return true
-			}
-		}
-
+		// TODO1
 		branch.n.p.m.calculated.UpdateDateAndLastmodIfAfter(n.p.m.userProvided)
 
 		return false
@@ -279,11 +272,6 @@ func (m *pageMap) assemblePages() error {
 		n.p, err = m.s.newPageFromTreeRef(tref2, sections...)
 		if err != nil {
 			return true
-		}
-
-		if !m.s.shouldBuild(n.p) {
-			pagesToDelete = append(pagesToDelete, tref2)
-			return false
 		}
 
 		branch.n.p.m.calculated.UpdateDateAndLastmodIfAfter(n.p.m.userProvided)
@@ -346,11 +334,6 @@ func (m *pageMap) assemblePages() error {
 			return err
 		}
 
-		if !m.s.shouldBuild(hn.n.p) {
-			m.branches.DeletePrefix("")
-			return nil
-		}
-
 	}
 
 	m.s.home = hn.n.p
@@ -400,6 +383,95 @@ func (m *pageMap) assemblePages() error {
 		return err
 	}
 
+	// Attach pages to views.
+	handleTaxonomyEntries := func(np contentNodeProvider) bool {
+		n := np.GetNode()
+		s := np.Key()
+		if n.p == nil {
+			panic("page is nil: " + s)
+		}
+		p := n.p
+		if !m.s.shouldBuild(p) {
+			if p.IsNode() {
+				sectionsToDelete[s] = true
+			} else {
+				pagesToDelete = append(pagesToDelete, np.(contentTreeRefProvider))
+			}
+
+			return false
+		}
+
+		if m.cfg.taxonomyDisabled || m.cfg.taxonomyTermDisabled {
+			return false
+		}
+
+		for _, viewName := range m.cfg.taxonomyConfig.views {
+			if sectionsToDelete[viewName.pluralTreeKey] {
+				continue
+			}
+
+			taxonomy := m.Get(viewName.pluralTreeKey)
+
+			vals := types.ToStringSlicePreserveString(getParam(n.p, viewName.plural, false))
+			if vals == nil {
+				continue
+			}
+
+			w := getParamToLower(n.p, viewName.plural+"_weight")
+			weight, err := cast.ToIntE(w)
+			if err != nil {
+				m.s.Log.Errorf("Unable to convert taxonomy weight %#v to int for %q", w, n.p.Path())
+				// weight will equal zero, so let the flow continue
+			}
+
+			for i, v := range vals {
+				term := m.s.getTaxonomyKey(v)
+
+				termKey := cleanTreeKey(term)
+
+				taxonomyTermKey := taxonomy.key + termKey
+
+				// It may have been added with the content files
+				termBranch := m.Get(taxonomyTermKey)
+
+				if termBranch == nil {
+
+					vic := &contentBundleViewInfo{
+						name:       viewName,
+						termKey:    term,
+						termOrigin: v,
+					}
+
+					n := &contentNode{viewInfo: vic}
+					n.p = m.s.newPage(n, taxonomy.n.p.bucket, page.KindTerm, vic.term(), viewName.plural, term)
+
+					termBranch = m.InsertBranch(taxonomyTermKey, n)
+
+					n.p.treeRef2 = m.newNodeProviderPage(taxonomyTermKey, n, taxonomy, termBranch, true).(contentTreeRefProvider)
+
+				}
+
+				termBranch.refs[n.p] = ordinalWeight{ordinal: i, weight: weight}
+				termBranch.n.p.m.calculated.UpdateDateAndLastmodIfAfter(n.p.m.userProvided)
+			}
+
+		}
+		return false
+
+	}
+
+	m.Walk(
+		branchMapQuery{
+			Branch: branchMapQueryCallBacks{
+				Key:  newBranchMapQueryKey("", true),
+				Page: handleTaxonomyEntries,
+			},
+			Leaf: branchMapQueryCallBacks{
+				Page: handleTaxonomyEntries,
+			},
+		},
+	)
+
 	// Delete pages and sections marked for deletion.
 	for _, p := range pagesToDelete {
 		p.GetBranch().pages.nodes.Delete(p.Key())
@@ -413,88 +485,6 @@ func (m *pageMap) assemblePages() error {
 	for s := range sectionsToDelete {
 		m.branches.Delete(s)
 		m.branches.DeletePrefix(s + "/")
-	}
-
-	// Attach pages to views.
-	if !m.cfg.taxonomyDisabled {
-		handleTaxonomyEntries := func(np contentNodeProvider) bool {
-			if m.cfg.taxonomyTermDisabled {
-				return false
-			}
-
-			for _, viewName := range m.cfg.taxonomyConfig.views {
-				if sectionsToDelete[viewName.pluralTreeKey] {
-					continue
-				}
-
-				taxonomy := m.Get(viewName.pluralTreeKey)
-
-				n := np.GetNode()
-				s := np.Key()
-
-				if n.p == nil {
-					panic("page is nil: " + s)
-				}
-				vals := types.ToStringSlicePreserveString(getParam(n.p, viewName.plural, false))
-				if vals == nil {
-					continue
-				}
-
-				w := getParamToLower(n.p, viewName.plural+"_weight")
-				weight, err := cast.ToIntE(w)
-				if err != nil {
-					m.s.Log.Errorf("Unable to convert taxonomy weight %#v to int for %q", w, n.p.Path())
-					// weight will equal zero, so let the flow continue
-				}
-
-				for i, v := range vals {
-					term := m.s.getTaxonomyKey(v)
-
-					termKey := cleanTreeKey(term)
-
-					taxonomyTermKey := taxonomy.key + termKey
-
-					// It may have been added with the content files
-					termBranch := m.Get(taxonomyTermKey)
-
-					if termBranch == nil {
-
-						vic := &contentBundleViewInfo{
-							name:       viewName,
-							termKey:    term,
-							termOrigin: v,
-						}
-
-						n := &contentNode{viewInfo: vic}
-						n.p = m.s.newPage(n, taxonomy.n.p.bucket, page.KindTerm, vic.term(), viewName.plural, term)
-
-						termBranch = m.InsertBranch(taxonomyTermKey, n)
-
-						n.p.treeRef2 = m.newNodeProviderPage(taxonomyTermKey, n, taxonomy, termBranch, true).(contentTreeRefProvider)
-
-					}
-
-					termBranch.refs[n.p] = ordinalWeight{ordinal: i, weight: weight}
-					termBranch.n.p.m.calculated.UpdateDateAndLastmodIfAfter(n.p.m.userProvided)
-				}
-
-			}
-			return false
-
-		}
-
-		m.Walk(
-			branchMapQuery{
-				Branch: branchMapQueryCallBacks{
-					Key:  newBranchMapQueryKey("", true),
-					Page: handleTaxonomyEntries,
-				},
-				Leaf: branchMapQueryCallBacks{
-					Page: handleTaxonomyEntries,
-				},
-			},
-		)
-
 	}
 
 	// Finally, collect aggregate values from the content tree.
