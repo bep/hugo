@@ -129,31 +129,48 @@ type pageMeta struct {
 }
 
 type pageMetaDates struct {
+	datesInit sync.Once
+	dates     resource.Dates
+
 	calculated   resource.Dates
 	userProvided resource.Dates
 }
 
-func (d *pageMetaDates) getDates() resource.Dates {
+// If not user provided, the calculated dates may change,
+// but this will be good enough for determining if we should
+// not build a given page (publishDate in the future, expiryDate in the past).
+func (d *pageMetaDates) getTemporaryDates() resource.Dates {
 	if !resource.IsZeroDates(d.userProvided) {
 		return d.userProvided
 	}
 	return d.calculated
 }
 
+func (d *pageMetaDates) initDates() resource.Dates {
+	d.datesInit.Do(func() {
+		if !resource.IsZeroDates(d.userProvided) {
+			d.dates = d.userProvided
+		} else {
+			d.dates = d.calculated
+		}
+	})
+	return d.dates
+}
+
 func (d *pageMetaDates) Date() time.Time {
-	return d.getDates().Date()
+	return d.initDates().Date()
 }
 
 func (d *pageMetaDates) Lastmod() time.Time {
-	return d.getDates().Lastmod()
+	return d.initDates().Lastmod()
 }
 
 func (d *pageMetaDates) PublishDate() time.Time {
-	return d.getDates().PublishDate()
+	return d.initDates().PublishDate()
 }
 
 func (d *pageMetaDates) ExpiryDate() time.Time {
-	return d.getDates().ExpiryDate()
+	return d.initDates().ExpiryDate()
 }
 
 func (p *pageMeta) Aliases() []string {

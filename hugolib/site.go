@@ -2005,9 +2005,10 @@ func (s *Site) newPageFromTreeRef(np contentTreeRefProvider, sections ...string)
 	return ps, nil
 }
 
-func (s *Site) shouldBuild(p page.Page) bool {
+func (s *Site) shouldBuild(p *pageState) bool {
+	dates := p.pageCommon.m.getTemporaryDates()
 	return shouldBuild(s.BuildFuture, s.BuildExpired,
-		s.BuildDrafts, p.Draft(), p.PublishDate(), p.ExpiryDate())
+		s.BuildDrafts, p.Draft(), dates.PublishDate(), dates.ExpiryDate())
 }
 
 func shouldBuild(buildFuture bool, buildExpired bool, buildDrafts bool, Draft bool,
