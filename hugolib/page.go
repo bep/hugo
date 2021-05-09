@@ -695,6 +695,11 @@ Loop:
 				p.source.posMainContent = next.Pos
 			}
 
+			if !p.s.shouldBuild(p) {
+				// Nothing more to do.
+				return result, nil
+			}
+
 		case it.Type == pageparser.TypeLeadSummaryDivider:
 			posBody := -1
 			f := func(item pageparser.Item) bool {

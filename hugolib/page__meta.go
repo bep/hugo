@@ -129,38 +129,31 @@ type pageMeta struct {
 }
 
 type pageMetaDates struct {
-	datesInit sync.Once
-	dates     resource.Dates
-
 	calculated   resource.Dates
 	userProvided resource.Dates
 }
 
-func (d *pageMetaDates) initDates() resource.Dates {
-	d.datesInit.Do(func() {
-		if !resource.IsZeroDates(d.userProvided) {
-			d.dates = d.userProvided
-		} else {
-			d.dates = d.calculated
-		}
-	})
-	return d.dates
+func (d *pageMetaDates) getDates() resource.Dates {
+	if !resource.IsZeroDates(d.userProvided) {
+		return d.userProvided
+	}
+	return d.calculated
 }
 
 func (d *pageMetaDates) Date() time.Time {
-	return d.initDates().Date()
+	return d.getDates().Date()
 }
 
 func (d *pageMetaDates) Lastmod() time.Time {
-	return d.initDates().Lastmod()
+	return d.getDates().Lastmod()
 }
 
 func (d *pageMetaDates) PublishDate() time.Time {
-	return d.initDates().PublishDate()
+	return d.getDates().PublishDate()
 }
 
 func (d *pageMetaDates) ExpiryDate() time.Time {
-	return d.initDates().ExpiryDate()
+	return d.getDates().ExpiryDate()
 }
 
 func (p *pageMeta) Aliases() []string {
