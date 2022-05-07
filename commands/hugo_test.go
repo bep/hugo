@@ -21,7 +21,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/bep/clock"
 	qt "github.com/frankban/quicktest"
+	"github.com/gohugoio/hugo/common/htime"
 	"github.com/gohugoio/hugo/hugofs"
 	"github.com/spf13/afero"
 	"golang.org/x/tools/txtar"
@@ -29,6 +31,7 @@ import (
 
 // Issue #5662
 func TestHugoWithContentDirOverride(t *testing.T) {
+	t.Parallel()
 	c := qt.New(t)
 
 	files := `
@@ -50,6 +53,7 @@ Page: {{ .Title }}|
 
 // Issue #9794
 func TestHugoStaticFilesMultipleStaticAndManyFolders(t *testing.T) {
+	t.Parallel()
 	c := qt.New(t)
 
 	files := `
@@ -95,6 +99,8 @@ Home.
 
 // Issue #8787
 func TestHugoListCommandsWithClockFlag(t *testing.T) {
+	t.Cleanup(func() { htime.Clock = clock.System() })
+
 	c := qt.New(t)
 
 	files := `
