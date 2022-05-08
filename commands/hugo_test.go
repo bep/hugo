@@ -121,12 +121,20 @@ date: 2200-11-06
 Page: {{ .Title }}|
 
 `
-	s := newTestHugoCmdBuilder(c, files, []string{"list", "future"}).Build()
+	out, err := captureStdout(func() error {
+		newTestHugoCmdBuilder(c, files, []string{"list", "future"}).Build()
+		return nil
+	})
+	c.Assert(err, qt.IsNil)
 	p := filepath.Join("content", "future.md")
-	s.AssertStdout(p + ",2200-11-06T00:00:00Z")
+	c.Assert(out, qt.Contains, p+",2200-11-06T00:00:00Z")
 
-	s = newTestHugoCmdBuilder(c, files, []string{"list", "future", "--clock", "2300-11-06"}).Build()
-	s.AssertStdout("")
+	out, err = captureStdout(func() error {
+		newTestHugoCmdBuilder(c, files, []string{"list", "future", "--clock", "2300-11-06"}).Build()
+		return nil
+	})
+	c.Assert(err, qt.IsNil)
+	c.Assert(out, qt.Equals, "")
 }
 
 type testHugoCmdBuilder struct {
@@ -136,7 +144,6 @@ type testHugoCmdBuilder struct {
 	dir   string
 	files string
 	args  []string
-	out   string
 }
 
 func newTestHugoCmdBuilder(c *qt.C, files string, args []string) *testHugoCmdBuilder {
@@ -162,12 +169,8 @@ func (s *testHugoCmdBuilder) Build() *testHugoCmdBuilder {
 	args := append(s.args, "-s="+s.dir, "--quiet")
 	cmd.SetArgs(args)
 
-	out, err := captureStdout(func() error {
-		_, err := cmd.ExecuteC()
-		return err
-	})
+	_, err := cmd.ExecuteC()
 	s.Assert(err, qt.IsNil)
-	s.out = out
 
 	return s
 }
@@ -187,10 +190,4 @@ func (s *testHugoCmdBuilder) AssertFileContent(filename string, matches ...strin
 			s.Assert(content, qt.Contains, match, qt.Commentf(m))
 		}
 	}
-}
-
-func (s *testHugoCmdBuilder) AssertStdout(match string) {
-	s.Helper()
-	content := strings.TrimSpace(s.out)
-	s.Assert(content, qt.Contains, strings.TrimSpace(match))
 }
