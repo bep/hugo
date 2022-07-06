@@ -1,4 +1,4 @@
-// Copyright 2019 The Hugo Authors. All rights reserved.
+// Copyright 2022 The Hugo Authors. All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -146,10 +146,6 @@ func (ps Pages) removeFirstIfFound(p Page) Pages {
 	}
 	return ps
 }
-
-// PagesFactory somehow creates some Pages.
-// We do a lot of lazy Pages initialization in Hugo, so we need a type.
-type PagesFactory func() Pages
 
 var (
 	_ resource.ResourcesConverter = Pages{}

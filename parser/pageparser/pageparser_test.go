@@ -22,6 +22,14 @@ import (
 	"github.com/gohugoio/hugo/parser/metadecoders"
 )
 
+func TestParselainHTMLDocumentsNotSupported(t *testing.T) {
+	t.Parallel()
+	c := qt.New(t)
+	cfg := Config{EnableEmoji: false}
+	_, err := parseBytes([]byte(`<html>`), cfg, lexIntroSection)
+	c.Assert(err, qt.ErrorIs, ErrPlainHTMLDocumentsNotSupported)
+}
+
 func BenchmarkParse(b *testing.B) {
 	start := `
 	

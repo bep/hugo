@@ -151,23 +151,16 @@ func newMarkdown(pcfg converter.ProviderConfig) goldmark.Markdown {
 	return md
 }
 
-var _ identity.IdentitiesProvider = (*converterResult)(nil)
-
 type converterResult struct {
 	converter.Result
 	toc tableofcontents.Root
-	ids identity.Identities
 }
 
 func (c converterResult) TableOfContents() tableofcontents.Root {
 	return c.toc
 }
 
-func (c converterResult) GetIdentities() identity.Identities {
-	return c.ids
-}
-
-var converterIdentity = identity.KeyValueIdentity{Key: "goldmark", Value: "converter"}
+var converterIdentity = identity.StringIdentity("feature/markdown/goldmark")
 
 func (c *goldmarkConverter) Convert(ctx converter.RenderContext) (result converter.Result, err error) {
 
@@ -184,7 +177,6 @@ func (c *goldmarkConverter) Convert(ctx converter.RenderContext) (result convert
 	rcx := &render.RenderContextDataHolder{
 		Rctx: ctx,
 		Dctx: c.ctx,
-		IDs:  identity.NewManager(converterIdentity),
 	}
 
 	w := &render.Context{
@@ -198,17 +190,18 @@ func (c *goldmarkConverter) Convert(ctx converter.RenderContext) (result convert
 
 	return converterResult{
 		Result: buf,
-		ids:    rcx.IDs.GetIdentities(),
 		toc:    pctx.TableOfContents(),
 	}, nil
 }
 
 var featureSet = map[identity.Identity]bool{
-	converter.FeatureRenderHooks: true,
+	converter.FeatureRenderHookHeading: true,
+	converter.FeatureRenderHookImage:   true,
+	converter.FeatureRenderHookLink:    true,
 }
 
 func (c *goldmarkConverter) Supports(feature identity.Identity) bool {
-	return featureSet[feature.GetIdentity()]
+	return featureSet[feature]
 }
 
 func (c *goldmarkConverter) newParserContext(rctx converter.RenderContext) *parserContext {

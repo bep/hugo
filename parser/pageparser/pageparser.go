@@ -108,7 +108,7 @@ func parseSection(r io.Reader, cfg Config, start stateFunc) (Result, error) {
 func parseBytes(b []byte, cfg Config, start stateFunc) (Result, error) {
 	lexer := newPageLexer(b, start, cfg)
 	lexer.run()
-	return lexer, nil
+	return lexer, lexer.err
 }
 
 // NewIterator creates a new Iterator.

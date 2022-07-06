@@ -41,7 +41,7 @@ import (
 )
 
 func TestHugoModulesVariants(t *testing.T) {
-	if !htesting.IsCI() {
+	if !htesting.IsCIOrCILocal() {
 		t.Skip("skip (relative) long running modules test when running locally")
 	}
 
@@ -300,12 +300,12 @@ JS imported in module: |
 
 // TODO(bep) this fails when testmodBuilder is also building ...
 func TestHugoModulesMatrix(t *testing.T) {
-	if !htesting.IsCI() {
+	if !htesting.IsCIOrCILocal() {
 		t.Skip("skip (relative) long running modules test when running locally")
 	}
 	t.Parallel()
 
-	if !htesting.IsCI() || hugo.GoMinorVersion() < 12 {
+	if !htesting.IsCIOrCILocal() || hugo.GoMinorVersion() < 12 {
 		// https://github.com/golang/go/issues/26794
 		// There were some concurrent issues with Go modules in < Go 12.
 		t.Skip("skip this on local host and for Go <= 1.11 due to a bug in Go's stdlib")
@@ -827,7 +827,6 @@ func TestMountsContentFile(t *testing.T) {
 baseURL = "https://example.com"
 title = "My Modular Site"
 workingDir = %q
-
 [module]
   [[module.mounts]]
     source = "README.md"
@@ -835,7 +834,6 @@ workingDir = %q
   [[module.mounts]]
     source = "mycontent"
     target = "content/blog"
-
 `
 
 	tomlConfig := fmt.Sprintf(configTemplate, workingDir)
@@ -851,17 +849,12 @@ workingDir = %q
 	b.WithTemplatesAdded("index.html", `
 {{ .Title }}
 {{ .Content }}
-
 {{ $readme := .Site.GetPage "/README.md" }}
 {{ with $readme }}README: {{ .Title }}|Filename: {{ path.Join .File.Filename }}|Path: {{ path.Join .File.Path }}|FilePath: {{ path.Join .File.FileInfo.Meta.PathFile }}|{{ end }}
-
-
 {{ $mypage := .Site.GetPage "/blog/mypage.md" }}
 {{ with $mypage }}MYPAGE: {{ .Title }}|Path: {{ path.Join .File.Path }}|FilePath: {{ path.Join .File.FileInfo.Meta.PathFile }}|{{ end }}
 {{ $mybundle := .Site.GetPage "/blog/mybundle" }}
 {{ with $mybundle }}MYBUNDLE: {{ .Title }}|Path: {{ path.Join .File.Path }}|FilePath: {{ path.Join .File.FileInfo.Meta.PathFile }}|{{ end }}
-
-
 `, "_default/_markup/render-link.html", `
 {{ $link := .Destination }}
 {{ $isRemote := strings.HasPrefix $link "http" }}
@@ -879,31 +872,24 @@ workingDir = %q
 	b.WithSourceFile("README.md", `---
 title: "Readme Title"
 ---
-
 Readme Content.
 `,
 		filepath.Join("mycontent", "mypage.md"), `
 ---
 title: "My Page"
 ---
-
-
 * [Relative Link From Page](mybundle)
 * [Relative Link From Page, filename](mybundle/index.md)
 * [Link using original path](/mycontent/mybundle/index.md)
-
-
 `, filepath.Join("mycontent", "mybundle", "index.md"), `
 ---
 title: "My Bundle"
 ---
-
 * [Dot Relative Link From Bundle](../mypage.md)
 * [Link using original path](/mycontent/mypage.md)
 * [Link to Home](/)
 * [Link to Home, README.md](/README.md)
 * [Link to Home, _index.md](/_index.md)
-
 `)
 
 	b.Build(BuildCfg{})
@@ -919,7 +905,6 @@ MYBUNDLE: My Bundle|Path: blog/mybundle/index.md|FilePath: mycontent/mybundle/in
 <a href="https://example.com/blog/mybundle/">Relative Link From Page</a>
 <a href="https://example.com/blog/mybundle/">Relative Link From Page, filename</a>
 <a href="https://example.com/blog/mybundle/">Link using original path</a>
-
 `)
 	b.AssertFileContent("public/blog/mybundle/index.html", `
 <a href="https://example.com/blog/mypage/">Dot Relative Link From Bundle</a>
@@ -940,7 +925,6 @@ title: "Readme Edit"
 Readme Edit
 `)
 }
-
 func TestMountsPaths(t *testing.T) {
 	c := qt.New(t)
 
@@ -996,6 +980,7 @@ title: P1
 		b.Build(BuildCfg{})
 
 		p := b.GetPage("blog/p1.md")
+		b.Assert(p, qt.IsNotNil)
 		f := p.File().FileInfo().Meta()
 		b.Assert(filepath.ToSlash(f.Path), qt.Equals, "blog/p1.md")
 		b.Assert(filepath.ToSlash(f.PathFile()), qt.Equals, "content/blog/p1.md")

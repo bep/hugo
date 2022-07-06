@@ -23,6 +23,7 @@ import (
 	"runtime/trace"
 	"strings"
 
+	"github.com/gohugoio/hugo/cache/memcache"
 	"github.com/gohugoio/hugo/publisher"
 
 	"github.com/gohugoio/hugo/hugofs"
@@ -84,7 +85,7 @@ func (h *HugoSites) Build(config BuildCfg, events ...fsnotify.Event) error {
 
 	if conf.whatChanged == nil {
 		// Assume everything has changed
-		conf.whatChanged = &whatChanged{source: true}
+		conf.whatChanged = &whatChanged{contentChanged: true}
 	}
 
 	var prepareErr error
@@ -106,7 +107,6 @@ func (h *HugoSites) Build(config BuildCfg, events ...fsnotify.Event) error {
 						return fmt.Errorf("initSites: %w", err)
 					}
 				}
-
 				return nil
 			}
 
@@ -217,10 +217,10 @@ func (h *HugoSites) initRebuild(config *BuildCfg) error {
 	}
 
 	for _, s := range h.Sites {
-		s.resetBuildState(config.whatChanged.source)
+		s.resetBuildState(config.whatChanged.contentChanged)
 	}
 
-	h.reset(config)
+	// TODO1 h.reset(config)
 	h.resetLogs()
 	helpers.InitLoggers()
 
@@ -228,11 +228,8 @@ func (h *HugoSites) initRebuild(config *BuildCfg) error {
 }
 
 func (h *HugoSites) process(config *BuildCfg, init func(config *BuildCfg) error, events ...fsnotify.Event) error {
-	// We should probably refactor the Site and pull up most of the logic from there to here,
-	// but that seems like a daunting task.
-	// So for now, if there are more than one site (language),
+	// If there are more than one site (language),
 	// we pre-process the first one, then configure all the sites based on that.
-
 	firstSite := h.Sites[0]
 
 	if len(events) > 0 {
@@ -253,16 +250,22 @@ func (h *HugoSites) assemble(bcfg *BuildCfg) error {
 		}
 	}
 
-	if !bcfg.whatChanged.source {
-		return nil
+	if bcfg.whatChanged.contentChanged {
+		if err := h.withSite(func(s *Site) error {
+			return s.AssemblePages(bcfg.whatChanged)
+		}); err != nil {
+			return err
+		}
 	}
 
-	if err := h.getContentMaps().AssemblePages(); err != nil {
-		return err
-	}
+	changes := bcfg.whatChanged.Changes()
+	if len(changes) > 0 {
+		// 1. Clear the memory cache. This allows any changed/depdendant resource fetched/processed
+		// via resources.Get etc. to be re-fetched/-processed.
+		h.MemCache.ClearOn(memcache.ClearOnRebuild, changes...)
 
-	if err := h.createPageCollections(); err != nil {
-		return err
+		// 2. Prepare the Page render state.
+		h.resetPageRenderStateForIdentities(changes...)
 	}
 
 	return nil
@@ -285,6 +288,7 @@ func (h *HugoSites) render(config *BuildCfg) error {
 		for _, s := range h.Sites {
 			h.renderFormats = append(h.renderFormats, s.renderFormats...)
 		}
+
 	}
 
 	i := 0
@@ -328,9 +332,6 @@ func (h *HugoSites) render(config *BuildCfg) error {
 
 	if !config.SkipRender {
 		if err := h.renderCrossSitesSitemap(); err != nil {
-			return err
-		}
-		if err := h.renderCrossSitesRobotsTXT(); err != nil {
 			return err
 		}
 	}

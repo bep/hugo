@@ -19,7 +19,6 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
-	"strings"
 	"syscall"
 	"time"
 
@@ -36,18 +35,25 @@ var (
 
 func NewLanguageFs(langs map[string]int, fs afero.Fs) (afero.Fs, error) {
 	applyMeta := func(fs *FilterFs, name string, fis []os.FileInfo) {
+		if true {
+			panic("TODO1 remove me")
+		}
 		for i, fi := range fis {
+			filename := filepath.Join(name, fi.Name())
 			if fi.IsDir() {
-				filename := filepath.Join(name, fi.Name())
 				fis[i] = decorateFileInfo(fi, fs, fs.getOpener(filename), "", "", nil)
 				continue
 			}
-
 			meta := fi.(FileMetaInfo).Meta()
+			/*if meta.PathInfo == nil {
+				// TODO1 do this somewhere else? Also consolidate and remove lots of these meta fields.
+				//meta.PathInfo = paths.Parse(filepath.ToSlash(filepath.Join(meta.MountRoot, strings.TrimPrefix(meta.Filename, meta.SourceRoot))))
+			}*/
+			pathInfo := meta.PathInfo
 			lang := meta.Lang
+			fileLang := pathInfo.Lang()
 
-			fileLang, translationBaseName, translationBaseNameWithExt := langInfoFrom(langs, fi.Name())
-			weight := meta.Weight
+			weight := 0
 
 			if fileLang != "" {
 				if fileLang == lang {
@@ -60,11 +66,10 @@ func NewLanguageFs(langs map[string]int, fs afero.Fs) (afero.Fs, error) {
 			fim := NewFileMetaInfo(
 				fi,
 				&FileMeta{
-					Lang:                       lang,
-					Weight:                     weight,
-					TranslationBaseName:        translationBaseName,
-					TranslationBaseNameWithExt: translationBaseNameWithExt,
-					Classifier:                 files.ClassifyContentFile(fi.Name(), meta.OpenFunc),
+					Lang:       lang,
+					Weight:     weight,
+					PathInfo:   pathInfo,
+					Classifier: files.ClassifyContentFile(fi.Name(), meta.OpenFunc),
 				})
 
 			fis[i] = fim
@@ -75,7 +80,7 @@ func NewLanguageFs(langs map[string]int, fs afero.Fs) (afero.Fs, error) {
 		// Maps translation base name to a list of language codes.
 		translations := make(map[string][]string)
 		trackTranslation := func(meta *FileMeta) {
-			name := meta.TranslationBaseNameWithExt
+			name := meta.PathInfo.NameNoLang()
 			translations[name] = append(translations[name], meta.Lang)
 		}
 		for _, fi := range fis {
@@ -89,19 +94,34 @@ func NewLanguageFs(langs map[string]int, fs afero.Fs) (afero.Fs, error) {
 		}
 
 		for _, fi := range fis {
+			if fi.IsDir() {
+				continue
+			}
 			fim := fi.(FileMetaInfo)
-			langs := translations[fim.Meta().TranslationBaseNameWithExt]
+			pi := fim.Meta().PathInfo
+			if pi == nil {
+				panic("no path info")
+			}
+			langs := translations[pi.NameNoLang()]
 			if len(langs) > 0 {
+				// TODO1 make this go away.
 				fim.Meta().Translations = sortAndremoveStringDuplicates(langs)
 			}
 		}
 	}
 
-	return &FilterFs{
+	ffs := &FilterFs{
 		fs:             fs,
 		applyPerSource: applyMeta,
 		applyAll:       all,
-	}, nil
+	}
+
+	if rfs, ok := fs.(ReverseLookupProvider); ok {
+		// Preserve that interface.
+		return NewExtendedFs(ffs, rfs), nil
+	}
+
+	return ffs, nil
 }
 
 func NewFilterFs(fs afero.Fs) (afero.Fs, error) {
@@ -116,6 +136,11 @@ func NewFilterFs(fs afero.Fs) (afero.Fs, error) {
 	ffs := &FilterFs{
 		fs:             fs,
 		applyPerSource: applyMeta,
+	}
+
+	if rfs, ok := fs.(ReverseLookupProvider); ok {
+		// Preserve that interface.
+		return NewExtendedFs(ffs, rfs), nil
 	}
 
 	return ffs, nil
@@ -285,37 +310,6 @@ func (f *filterDir) Readdirnames(count int) ([]string, error) {
 		dirs[i] = d.Name()
 	}
 	return dirs, nil
-}
-
-// Try to extract the language from the given filename.
-// Any valid language identifier in the name will win over the
-// language set on the file system, e.g. "mypost.en.md".
-func langInfoFrom(languages map[string]int, name string) (string, string, string) {
-	var lang string
-
-	baseName := filepath.Base(name)
-	ext := filepath.Ext(baseName)
-	translationBaseName := baseName
-
-	if ext != "" {
-		translationBaseName = strings.TrimSuffix(translationBaseName, ext)
-	}
-
-	fileLangExt := filepath.Ext(translationBaseName)
-	fileLang := strings.TrimPrefix(fileLangExt, ".")
-
-	if _, found := languages[fileLang]; found {
-		lang = fileLang
-		translationBaseName = strings.TrimSuffix(translationBaseName, fileLangExt)
-	}
-
-	translationBaseNameWithExt := translationBaseName
-
-	if ext != "" {
-		translationBaseNameWithExt += ext
-	}
-
-	return lang, translationBaseName, translationBaseNameWithExt
 }
 
 func printFs(fs afero.Fs, path string, w io.Writer) {

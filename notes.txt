@@ -1,0 +1,9 @@
+FOO
+
+
+""
+
+/mysection
+
+/mysection/mybundle
+/mysectionbundle

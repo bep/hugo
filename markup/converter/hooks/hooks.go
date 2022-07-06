@@ -30,6 +30,7 @@ type AttributesProvider interface {
 }
 
 type LinkContext interface {
+	identity.DependencyManagerProvider
 	Page() any
 	Destination() string
 	Title() string
@@ -38,6 +39,7 @@ type LinkContext interface {
 }
 
 type CodeblockContext interface {
+	identity.DependencyManagerProvider
 	AttributesProvider
 	text.Positioner
 	Options() map[string]any
@@ -54,12 +56,10 @@ type AttributesOptionsSliceProvider interface {
 
 type LinkRenderer interface {
 	RenderLink(w io.Writer, ctx LinkContext) error
-	identity.Provider
 }
 
 type CodeBlockRenderer interface {
 	RenderCodeblock(w hugio.FlexiWriter, ctx CodeblockContext) error
-	identity.Provider
 }
 
 type IsDefaultCodeBlockRendererProvider interface {
@@ -88,7 +88,6 @@ type HeadingContext interface {
 type HeadingRenderer interface {
 	// Render writes the rendered content to w using the data in w.
 	RenderHeading(w io.Writer, ctx HeadingContext) error
-	identity.Provider
 }
 
 // ElementPositionResolver provides a way to resolve the start Position

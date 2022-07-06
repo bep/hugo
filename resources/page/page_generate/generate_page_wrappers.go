@@ -23,11 +23,11 @@ import (
 	"errors"
 
 	"github.com/gohugoio/hugo/common/maps"
+	"github.com/gohugoio/hugo/source"
 
 	"github.com/gohugoio/hugo/codegen"
 	"github.com/gohugoio/hugo/resources/page"
 	"github.com/gohugoio/hugo/resources/resource"
-	"github.com/gohugoio/hugo/source"
 )
 
 const header = `// Copyright 2019 The Hugo Authors. All rights reserved.
@@ -218,7 +218,7 @@ func generateFileIsZeroWrappers(c *codegen.Inspector) error {
 
 	var buff bytes.Buffer
 
-	methods := c.MethodsFromTypes([]reflect.Type{reflect.TypeOf((*source.File)(nil)).Elem()}, nil)
+	methods := c.MethodsFromTypes([]reflect.Type{reflect.TypeOf((**source.File)(nil)).Elem()}, nil)
 
 	for _, m := range methods {
 		if m.Name == "IsZero" {

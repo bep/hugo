@@ -535,6 +535,7 @@ date: 2012-01-12
 	s := b.H.Sites[0]
 
 	checkDate := func(p page.Page, year int) {
+		b.Helper()
 		b.Assert(p.Date().Year(), qt.Equals, year)
 		b.Assert(p.Lastmod().Year(), qt.Equals, year)
 	}
@@ -996,7 +997,7 @@ func TestPageWithDate(t *testing.T) {
 
 func TestPageWithLastmodFromGitInfo(t *testing.T) {
 	if htesting.IsCI() {
-		// TODO(bep) figure out why this fails on GitHub actions.
+		// We have no Git history on the CI server.
 		t.Skip("Skip GitInfo test on CI")
 	}
 	c := qt.New(t)
@@ -1244,22 +1245,53 @@ func TestPagePaths(t *testing.T) {
 func TestTranslationKey(t *testing.T) {
 	t.Parallel()
 	c := qt.New(t)
-	cfg, fs := newTestCfg()
 
-	writeSource(t, fs, filepath.Join("content", filepath.FromSlash("sect/simple.no.md")), "---\ntitle: \"A1\"\ntranslationKey: \"k1\"\n---\nContent\n")
-	writeSource(t, fs, filepath.Join("content", filepath.FromSlash("sect/simple.en.md")), "---\ntitle: \"A2\"\n---\nContent\n")
+	files := `-- config.toml --
+baseURL = "https://example.com"
+disableKinds=["taxonomy", "term", "sitemap", "robotsTXT"]
+[languages]
+[languages.en]
+weight = 1
+title = "Title in English"
+[languages.nn]
+weight = 2
+title = "Tittel på nynorsk"
+[outputs]
+	home = ['HTML']
+	page = ['HTML']
 
-	s := buildSingleSite(t, deps.DepsCfg{Fs: fs, Cfg: cfg}, BuildCfg{SkipRender: true})
+-- content/sect/simple.en.md --
+---
+title: A1
+translationKey: k1
+---
+-- content/sect/simple.nn.md --
+---
+title: A2
+---
+-- layouts/index.html --
+{{ range site.Pages }}
+Path: {{ .Path }}|Kind: {{ .Kind }}|TranslationKey: {{ .TranslationKey }}|Title: {{ .Title }}
+{{ end }}
+	`
 
-	c.Assert(len(s.RegularPages()), qt.Equals, 2)
+	b := NewIntegrationTestBuilder(
+		IntegrationTestConfig{
+			T:           c,
+			TxtarString: files,
+		}).Build()
 
-	home := s.Info.Home()
-	c.Assert(home, qt.Not(qt.IsNil))
-	c.Assert(home.TranslationKey(), qt.Equals, "home")
-	c.Assert(s.RegularPages()[0].TranslationKey(), qt.Equals, "page/k1")
-	p2 := s.RegularPages()[1]
+	b.AssertFileContent("public/index.html", `
+Path: /sect/simple|Kind: page|TranslationKey: page/k1|Title: A1
+Path: /sect|Kind: section|TranslationKey: section/sect|Title: Sects
+Path: /|Kind: home|TranslationKey: home|Title: Title in English
+	`)
 
-	c.Assert(p2.TranslationKey(), qt.Equals, "page/sect/simple")
+	b.AssertFileContent("public/nn/index.html", `
+Path: /sect/simple|Kind: page|TranslationKey: page/sect/simple|Title: A2
+Path: /sect|Kind: section|TranslationKey: section/sect|Title: Sects
+Path: /|Kind: home|TranslationKey: home|Title: Tittel på nynorsk
+	`)
 }
 
 func TestChompBOM(t *testing.T) {
@@ -1485,13 +1517,9 @@ Content:{{ .Content }}
 	)
 }
 
-// https://github.com/gohugoio/hugo/issues/5781
-func TestPageWithZeroFile(t *testing.T) {
-	newTestSitesBuilder(t).WithLogger(loggers.NewWarningLogger()).WithSimpleConfigFile().
-		WithTemplatesAdded("index.html", "{{ .File.Filename }}{{ with .File }}{{ .Dir }}{{ end }}").Build(BuildCfg{})
-}
-
 func TestHomePageWithNoTitle(t *testing.T) {
+	t.Parallel()
+
 	b := newTestSitesBuilder(t).WithConfigFile("toml", `
 title = "Site Title"
 `)
@@ -1616,6 +1644,7 @@ func TestPathIssues(t *testing.T) {
 
 				cfg.Set("permalinks", map[string]string{
 					"post": ":section/:title",
+					"blog": ":section/:title",
 				})
 
 				cfg.Set("uglyURLs", uglyURLs)
@@ -1630,6 +1659,7 @@ func TestPathIssues(t *testing.T) {
 					writeSource(t, fs, filepath.Join("content", "post", fmt.Sprintf("doc%d.md", i)),
 						fmt.Sprintf(`---
 title: "test%d.dot"
+weight: 10
 tags:
 - ".net"
 ---
@@ -1639,7 +1669,8 @@ tags:
 
 				writeSource(t, fs, filepath.Join("content", "Blog", "Blog1.md"),
 					fmt.Sprintf(`---
-title: "testBlog"
+title: "My Blog"
+weitght: 100
 tags:
 - "Blog"
 ---
@@ -1657,13 +1688,19 @@ tags:
 					return s
 				}
 
-				blog := "blog"
+				// Note: In Hugo 0.93.0 we redefined the disablePathToLower setting.
+				// Now the canonical content path is lower case, always.
+				// You can still have mixed-case in the name part of the URL using permalinks config,
+				// but not in the directory parts of the URL.
+				// TODO1 release notes
+				// See https://github.com/gohugoio/hugo/issues/9171
+				myblog := "my-blog"
 
 				if disablePathToLower {
-					blog = "Blog"
+					myblog = "My-Blog"
 				}
 
-				th.assertFileContent(pathFunc("public/"+blog+"/"+blog+"1/index.html"), "some blog content")
+				th.assertFileContent(pathFunc("public/blog/"+myblog+"/index.html"), "some blog content")
 
 				th.assertFileContent(pathFunc("public/post/test0.dot/index.html"), "some content")
 
@@ -1999,5 +2036,5 @@ Page1: {{ $p1.Path }}
 
 	b.Build(BuildCfg{})
 
-	b.AssertFileContent("public/index.html", "Lang: no", filepath.FromSlash("Page1: a/B/C/Page1.md"))
+	b.AssertFileContent("public/index.html", "Lang: no", "Page1: /a/b/c/page1")
 }

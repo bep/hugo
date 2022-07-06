@@ -15,10 +15,16 @@ package tplimpl_test
 
 import (
 	"fmt"
+	"path/filepath"
 	"strings"
 	"testing"
 
+	qt "github.com/frankban/quicktest"
+	"github.com/gohugoio/hugo/common/hugo"
+	"github.com/gohugoio/hugo/deps"
+	"github.com/gohugoio/hugo/hugofs"
 	"github.com/gohugoio/hugo/hugolib"
+	"github.com/spf13/afero"
 
 	"github.com/gohugoio/hugo/tpl/internal"
 )
@@ -52,10 +58,27 @@ title: "**BatMan**"
 
 	d := b.H.Sites[0].Deps
 
-	var (
-		templates []string
-		expected  []string
-	)
+	fs := hugofs.NewMem(v)
+
+	afero.WriteFile(fs.Source, filepath.Join(workingDir, "files", "README.txt"), []byte("Hugo Rocks!"), 0755)
+
+	depsCfg := newDepsConfig(v)
+	depsCfg.Fs = fs
+	d, err := deps.New(depsCfg)
+	defer d.Close()
+	c.Assert(err, qt.IsNil)
+
+	var data struct {
+		Title   string
+		Section string
+		Hugo    map[string]any
+		Params  map[string]any
+	}
+
+	data.Title = "**BatMan**"
+	data.Section = "blog"
+	data.Params = map[string]any{"langCode": "en"}
+	data.Hugo = map[string]any{"Version": hugo.MustParseVersion("0.36.1").Version()}
 
 	for _, nsf := range internal.TemplateFuncsNamespaceRegistry {
 		ns := nsf(d)

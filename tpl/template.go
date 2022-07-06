@@ -23,6 +23,7 @@ import (
 
 	bp "github.com/gohugoio/hugo/bufferpool"
 
+	"github.com/gohugoio/hugo/identity"
 	"github.com/gohugoio/hugo/output"
 
 	htmltemplate "github.com/gohugoio/hugo/tpl/internal/go_templates/htmltemplate"
@@ -61,6 +62,7 @@ type TemplateHandler interface {
 	Execute(t Template, wr io.Writer, data any) error
 	ExecuteWithContext(ctx context.Context, t Template, wr io.Writer, data any) error
 	LookupLayout(d output.LayoutDescriptor, f output.Format) (Template, bool, error)
+	GetIdentity(name string) (identity.Identity, bool)
 	HasTemplate(name string) bool
 }
 
@@ -154,6 +156,23 @@ type TemplateFuncGetter interface {
 
 // GetDataFromContext returns the template data context (usually .Page) from ctx if set.
 // NOte: This is not fully implemented yet.
+// NewTemplateIdentity creates a new identity.Identity based on the given tpl.
+func NewTemplateIdentity(tpl Template) *TemplateIdentity {
+	return &TemplateIdentity{
+		tpl: tpl,
+	}
+}
+
+// TemplateIdentity wraps a Template and implemnents identity.Identity.
+type TemplateIdentity struct {
+	tpl Template
+}
+
+func (id *TemplateIdentity) IdentifierBase() any {
+	return id.tpl.Name()
+}
+
+// GetDataFromContext returns the template data context (usually .Page) from ctx if set.
 func GetDataFromContext(ctx context.Context) any {
 	return ctx.Value(texttemplate.DataContextKey)
 }
@@ -208,4 +227,22 @@ func StripHTML(s string) string {
 	}
 
 	return s
+
+}
+
+// AddIdentiesToDataContext adds the identities found in v to the
+// DependencyManager found in ctx.
+func AddIdentiesToDataContext(ctx context.Context, v any) {
+	if v == nil {
+		return
+	}
+	if dot := GetDataFromContext(ctx); dot != nil {
+		if dp, ok := dot.(identity.DependencyManagerProvider); ok {
+			idm := dp.GetDependencyManager()
+			identity.WalkIdentities(v, func(id identity.Identity) bool {
+				idm.AddIdentity(id)
+				return false
+			})
+		}
+	}
 }

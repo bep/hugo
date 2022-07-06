@@ -144,7 +144,7 @@ func (h chromaHighlighter) IsDefaultCodeBlockRenderer() bool {
 	return true
 }
 
-var id = identity.NewPathIdentity("chroma", "highlight")
+var id = identity.StringIdentity("feature/chroma-highlighter")
 
 func (h chromaHighlighter) GetIdentity() identity.Identity {
 	return id

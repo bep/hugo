@@ -19,20 +19,13 @@ import (
 	"github.com/bep/gitmap"
 	"github.com/gohugoio/hugo/common/maps"
 	"github.com/gohugoio/hugo/compare"
+	"github.com/gohugoio/hugo/identity"
 	"github.com/gohugoio/hugo/lazy"
 	"github.com/gohugoio/hugo/navigation"
 	"github.com/gohugoio/hugo/output"
 	"github.com/gohugoio/hugo/resources/page"
 	"github.com/gohugoio/hugo/resources/resource"
 )
-
-type treeRefProvider interface {
-	getTreeRef() *contentTreeRef
-}
-
-func (p *pageCommon) getTreeRef() *contentTreeRef {
-	return p.treeRef
-}
 
 type nextPrevProvider interface {
 	getNextPrev() *nextPrev
@@ -54,8 +47,7 @@ type pageCommon struct {
 	s *Site
 	m *pageMeta
 
-	bucket  *pagesMapBucket
-	treeRef *contentTreeRef
+	dependencyManagerPage identity.Manager
 
 	// Lazily initialized dependencies.
 	init *lazy.Init
@@ -119,38 +111,24 @@ type pageCommon struct {
 	// Internal use
 	page.InternalDependencies
 
-	// The children. Regular pages will have none.
-	*pagePages
-
 	// Any bundled resources
-	resources            resource.Resources
-	resourcesInit        sync.Once
 	resourcesPublishInit sync.Once
-
-	translations    page.Pages
-	allTranslations page.Pages
-
-	// Calculated an cached translation mapping key
-	translationKey     string
-	translationKeyInit sync.Once
-
-	// Will only be set for bundled pages.
-	parent *pageState
-
-	// Set in fast render mode to force render a given page.
-	forceRender bool
 }
 
 func (p *pageCommon) Store() *maps.Scratch {
 	return p.store
 }
 
-type pagePages struct {
-	pagesInit sync.Once
-	pages     page.Pages
+func (p *pageCommon) GetDependencyManager() identity.Manager {
+	return p.dependencyManagerPage
+}
 
-	regularPagesInit          sync.Once
-	regularPages              page.Pages
-	regularPagesRecursiveInit sync.Once
-	regularPagesRecursive     page.Pages
+func (p *pageCommon) IdentifierBase() any {
+	return p.Path()
+}
+
+// IsStale returns whether the Page is stale and needs a full rebuild.
+func (p *pageCommon) IsStale() bool {
+	// TODO1 MarkStale
+	return p.Resources().IsStale()
 }

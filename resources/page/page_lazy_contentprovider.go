@@ -14,6 +14,7 @@
 package page
 
 import (
+	"context"
 	"html/template"
 
 	"github.com/gohugoio/hugo/lazy"
@@ -108,9 +109,9 @@ func (lcp *LazyContentProvider) Len() int {
 	return lcp.cp.Len()
 }
 
-func (lcp *LazyContentProvider) Render(layout ...string) (template.HTML, error) {
+func (lcp *LazyContentProvider) Render(ctx context.Context, layout ...string) (template.HTML, error) {
 	lcp.init.Do()
-	return lcp.cp.Render(layout...)
+	return lcp.cp.Render(ctx, layout...)
 }
 
 func (lcp *LazyContentProvider) RenderString(args ...any) (template.HTML, error) {

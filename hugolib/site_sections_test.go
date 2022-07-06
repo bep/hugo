@@ -19,6 +19,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/gohugoio/hugo/resources/page/pagekinds"
+
 	qt "github.com/frankban/quicktest"
 	"github.com/gohugoio/hugo/deps"
 	"github.com/gohugoio/hugo/resources/page"
@@ -32,7 +34,7 @@ func TestNestedSections(t *testing.T) {
 	)
 
 	cfg.Set("permalinks", map[string]string{
-		"perm a": ":sections/:title",
+		"perm-a": ":sections/:title",
 	})
 
 	pageTemplate := `---
@@ -125,7 +127,7 @@ PAG|{{ .Title }}|{{ $sect.InSection . }}
 		{"elsewhere", func(c *qt.C, p page.Page) {
 			c.Assert(len(p.Pages()), qt.Equals, 1)
 			for _, p := range p.Pages() {
-				c.Assert(p.SectionsPath(), qt.Equals, "elsewhere")
+				c.Assert(p.SectionsPath(), qt.Equals, "/elsewhere")
 			}
 		}},
 		{"post", func(c *qt.C, p page.Page) {
@@ -177,8 +179,7 @@ PAG|{{ .Title }}|{{ $sect.InSection . }}
 			c.Assert(home.IsHome(), qt.Equals, true)
 			c.Assert(len(p.Sections()), qt.Equals, 0)
 			c.Assert(home.CurrentSection(), qt.Equals, home)
-			active, err := home.InSection(home)
-			c.Assert(err, qt.IsNil)
+			active := home.InSection(home)
 			c.Assert(active, qt.Equals, true)
 			c.Assert(p.FirstSection(), qt.Equals, p)
 		}},
@@ -203,29 +204,22 @@ PAG|{{ .Title }}|{{ $sect.InSection . }}
 				}
 
 				c.Assert(child.CurrentSection(), qt.Equals, p)
-				active, err := child.InSection(p)
-				c.Assert(err, qt.IsNil)
+				active := child.InSection(p)
 
 				c.Assert(active, qt.Equals, true)
-				active, err = p.InSection(child)
-				c.Assert(err, qt.IsNil)
+				active = p.InSection(child)
 				c.Assert(active, qt.Equals, true)
-				active, err = p.InSection(getPage(p, "/"))
-				c.Assert(err, qt.IsNil)
+				active = p.InSection(getPage(p, "/"))
 				c.Assert(active, qt.Equals, false)
 
-				isAncestor, err := p.IsAncestor(child)
-				c.Assert(err, qt.IsNil)
+				isAncestor := p.IsAncestor(child)
 				c.Assert(isAncestor, qt.Equals, true)
-				isAncestor, err = child.IsAncestor(p)
-				c.Assert(err, qt.IsNil)
+				isAncestor = child.IsAncestor(p)
 				c.Assert(isAncestor, qt.Equals, false)
 
-				isDescendant, err := p.IsDescendant(child)
-				c.Assert(err, qt.IsNil)
+				isDescendant := p.IsDescendant(child)
 				c.Assert(isDescendant, qt.Equals, false)
-				isDescendant, err = child.IsDescendant(p)
-				c.Assert(err, qt.IsNil)
+				isDescendant = child.IsDescendant(p)
 				c.Assert(isDescendant, qt.Equals, true)
 			}
 
@@ -247,32 +241,26 @@ PAG|{{ .Title }}|{{ $sect.InSection . }}
 			c.Assert(len(p.Sections()), qt.Equals, 0)
 
 			l1 := getPage(p, "/l1")
-			isDescendant, err := l1.IsDescendant(p)
-			c.Assert(err, qt.IsNil)
+			isDescendant := l1.IsDescendant(p)
 			c.Assert(isDescendant, qt.Equals, false)
-			isDescendant, err = l1.IsDescendant(nil)
-			c.Assert(err, qt.IsNil)
+			isDescendant = l1.IsDescendant(nil)
 			c.Assert(isDescendant, qt.Equals, false)
-			isDescendant, err = nilp.IsDescendant(p)
-			c.Assert(err, qt.IsNil)
+			isDescendant = nilp.IsDescendant(p)
 			c.Assert(isDescendant, qt.Equals, false)
-			isDescendant, err = p.IsDescendant(l1)
-			c.Assert(err, qt.IsNil)
+			isDescendant = p.IsDescendant(l1)
 			c.Assert(isDescendant, qt.Equals, true)
 
-			isAncestor, err := l1.IsAncestor(p)
-			c.Assert(err, qt.IsNil)
+			isAncestor := l1.IsAncestor(p)
 			c.Assert(isAncestor, qt.Equals, true)
-			isAncestor, err = p.IsAncestor(l1)
-			c.Assert(err, qt.IsNil)
+			isAncestor = p.IsAncestor(l1)
 			c.Assert(isAncestor, qt.Equals, false)
 			c.Assert(p.FirstSection(), qt.Equals, l1)
-			isAncestor, err = p.IsAncestor(nil)
-			c.Assert(err, qt.IsNil)
+			isAncestor = p.IsAncestor(nil)
 			c.Assert(isAncestor, qt.Equals, false)
-			isAncestor, err = nilp.IsAncestor(l1)
-			c.Assert(err, qt.IsNil)
 			c.Assert(isAncestor, qt.Equals, false)
+
+			l3 := getPage(p, "/l1/l2/l3")
+			c.Assert(l3.FirstSection(), qt.Equals, l1)
 		}},
 		{"perm a,link", func(c *qt.C, p page.Page) {
 			c.Assert(p.Title(), qt.Equals, "T9_-1")
@@ -287,7 +275,7 @@ PAG|{{ .Title }}|{{ $sect.InSection . }}
 		}},
 	}
 
-	home := s.getPage(page.KindHome)
+	home := s.getPage(pagekinds.Home)
 
 	for _, test := range tests {
 		test := test
@@ -295,7 +283,7 @@ PAG|{{ .Title }}|{{ $sect.InSection . }}
 			t.Parallel()
 			c := qt.New(t)
 			sections := strings.Split(test.sections, ",")
-			p := s.getPage(page.KindSection, sections...)
+			p := s.getPage(pagekinds.Section, sections...)
 			c.Assert(p, qt.Not(qt.IsNil), qt.Commentf(fmt.Sprint(sections)))
 
 			if p.Pages() != nil {
@@ -308,10 +296,9 @@ PAG|{{ .Title }}|{{ $sect.InSection . }}
 
 	c.Assert(home, qt.Not(qt.IsNil))
 
-	c.Assert(len(home.Sections()), qt.Equals, 9)
 	c.Assert(s.Info.Sections(), deepEqualsPages, home.Sections())
 
-	rootPage := s.getPage(page.KindPage, "mypage.md")
+	rootPage := s.getPage(pagekinds.Page, "mypage.md")
 	c.Assert(rootPage, qt.Not(qt.IsNil))
 	c.Assert(rootPage.Parent().IsHome(), qt.Equals, true)
 	// https://github.com/gohugoio/hugo/issues/6365
@@ -323,7 +310,7 @@ PAG|{{ .Title }}|{{ $sect.InSection . }}
 	// If we later decide to do something about this, we will have to do some normalization in
 	// getPage.
 	// TODO(bep)
-	sectionWithSpace := s.getPage(page.KindSection, "Spaces in Section")
+	sectionWithSpace := s.getPage(pagekinds.Section, "Spaces in Section")
 	c.Assert(sectionWithSpace, qt.Not(qt.IsNil))
 	c.Assert(sectionWithSpace.RelPermalink(), qt.Equals, "/spaces-in-section/")
 

@@ -26,6 +26,7 @@ import (
 	"sync"
 
 	"github.com/gohugoio/hugo/helpers"
+	"github.com/gohugoio/hugo/identity"
 
 	"errors"
 
@@ -44,16 +45,16 @@ import (
 )
 
 var (
-	_ urls.RefLinker  = (*ShortcodeWithPage)(nil)
-	_ pageWrapper     = (*ShortcodeWithPage)(nil)
-	_ text.Positioner = (*ShortcodeWithPage)(nil)
+	_ urls.RefLinker    = (*ShortcodeWithPage)(nil)
+	_ text.Positioner   = (*ShortcodeWithPage)(nil)
+	_ page.PageProvider = (*ShortcodeWithPage)(nil)
 )
 
 // ShortcodeWithPage is the "." context in a shortcode template.
 type ShortcodeWithPage struct {
 	Params        any
 	Inner         template.HTML
-	Page          page.Page
+	page          page.Page
 	Parent        *ShortcodeWithPage
 	Name          string
 	IsNamedParams bool
@@ -61,6 +62,8 @@ type ShortcodeWithPage struct {
 	// Zero-based ordinal in relation to its parent. If the parent is the page itself,
 	// this ordinal will represent the position of this shortcode in the page content.
 	Ordinal int
+
+	identity.DependencyManagerProvider
 
 	// Indentation before the opening shortcode in the source.
 	indentation string
@@ -101,7 +104,7 @@ func (scp *ShortcodeWithPage) InnerDeindent() template.HTML {
 // may be expensive to calculate, so only use this in error situations.
 func (scp *ShortcodeWithPage) Position() text.Position {
 	scp.posInit.Do(func() {
-		if p, ok := mustUnwrapPage(scp.Page).(pageContext); ok {
+		if p, ok := mustUnwrapPage(scp.page).(pageContext); ok {
 			scp.pos = p.posOffset(scp.posOffset)
 		}
 	})
@@ -110,19 +113,19 @@ func (scp *ShortcodeWithPage) Position() text.Position {
 
 // Site returns information about the current site.
 func (scp *ShortcodeWithPage) Site() page.Site {
-	return scp.Page.Site()
+	return scp.page.Site()
 }
 
 // Ref is a shortcut to the Ref method on Page. It passes itself as a context
 // to get better error messages.
 func (scp *ShortcodeWithPage) Ref(args map[string]any) (string, error) {
-	return scp.Page.RefFrom(args, scp)
+	return scp.page.RefFrom(args, scp)
 }
 
 // RelRef is a shortcut to the RelRef method on Page. It passes itself as a context
 // to get better error messages.
 func (scp *ShortcodeWithPage) RelRef(args map[string]any) (string, error) {
-	return scp.Page.RelRefFrom(args, scp)
+	return scp.page.RelRefFrom(args, scp)
 }
 
 // Scratch returns a scratch-pad scoped for this shortcode. This can be used
@@ -177,8 +180,9 @@ func (scp *ShortcodeWithPage) Get(key any) any {
 	return x.Interface()
 }
 
-func (scp *ShortcodeWithPage) page() page.Page {
-	return scp.Page
+// Page returns the Page which contains this shortcode.
+func (scp *ShortcodeWithPage) Page() page.Page {
+	return scp.page
 }
 
 // Note - this value must not contain any markup syntax
@@ -284,11 +288,11 @@ type shortcodeHandler struct {
 	enableInlineShortcodes bool
 }
 
-func newShortcodeHandler(p *pageState, s *Site) *shortcodeHandler {
+func newShortcodeHandler(p *pageState) *shortcodeHandler {
 	sh := &shortcodeHandler{
 		p:                      p,
-		s:                      s,
-		enableInlineShortcodes: s.ExecHelper.Sec().EnableInlineShortcodes,
+		s:                      p.s,
+		enableInlineShortcodes: p.s.ExecHelper.Sec().EnableInlineShortcodes,
 		shortcodes:             make([]*shortcode, 0, 4),
 		nameSet:                make(map[string]bool),
 	}
@@ -353,7 +357,16 @@ func renderShortcode(
 		hasVariants = hasVariants || more
 	}
 
-	data := &ShortcodeWithPage{Ordinal: sc.ordinal, posOffset: sc.pos, indentation: sc.indentation, Params: sc.params, Page: newPageForShortcode(p), Parent: parent, Name: sc.name}
+	data := &ShortcodeWithPage{
+		Ordinal:                   sc.ordinal,
+		posOffset:                 sc.pos,
+		indentation:               sc.indentation,
+		Params:                    sc.params,
+		page:                      newPageForShortcode(p),
+		DependencyManagerProvider: p.pageOutput,
+		Parent:                    parent,
+		Name:                      sc.name,
+	}
 	if sc.params != nil {
 		data.IsNamedParams = reflect.TypeOf(sc.params).Kind() == reflect.Map
 	}

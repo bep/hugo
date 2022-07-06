@@ -60,15 +60,14 @@ func (tp *TranslationProvider) Update(d *deps.Deps) error {
 	for i := len(dirs) - 1; i >= 0; i-- {
 		dir := dirs[i]
 		src := spec.NewFilesystemFromFileMetaInfo(dir)
-		files, err := src.Files()
+
+		err := src.Walk(func(file *source.File) error {
+			return addTranslationFile(bundle, file)
+		})
 		if err != nil {
 			return err
 		}
-		for _, file := range files {
-			if err := addTranslationFile(bundle, file); err != nil {
-				return err
-			}
-		}
+
 	}
 
 	tp.t = NewTranslator(bundle, d.Cfg, d.Log)
@@ -80,7 +79,7 @@ func (tp *TranslationProvider) Update(d *deps.Deps) error {
 
 const artificialLangTagPrefix = "art-x-"
 
-func addTranslationFile(bundle *i18n.Bundle, r source.File) error {
+func addTranslationFile(bundle *i18n.Bundle, r *source.File) error {
 	f, err := r.FileInfo().Meta().Open()
 	if err != nil {
 		return fmt.Errorf("failed to open translations file %q:: %w", r.LogicalName(), err)
@@ -124,7 +123,7 @@ func (tp *TranslationProvider) Clone(d *deps.Deps) error {
 	return nil
 }
 
-func errWithFileContext(inerr error, r source.File) error {
+func errWithFileContext(inerr error, r *source.File) error {
 	fim, ok := r.FileInfo().(hugofs.FileMetaInfo)
 	if !ok {
 		return inerr

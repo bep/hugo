@@ -16,6 +16,8 @@ package hugolib
 import (
 	"sync"
 
+	"github.com/gohugoio/hugo/resources/page/pagekinds"
+
 	"github.com/gohugoio/hugo/resources/page"
 )
 
@@ -30,29 +32,24 @@ func (p *pageData) Data() any {
 	p.dataInit.Do(func() {
 		p.data = make(page.Data)
 
-		if p.Kind() == page.KindPage {
+		if p.Kind() == pagekinds.Page {
 			return
 		}
 
 		switch p.Kind() {
-		case page.KindTerm:
-			b := p.treeRef.n
-			name := b.viewInfo.name
-			termKey := b.viewInfo.termKey
-
-			taxonomy := p.s.Taxonomies()[name.plural].Get(termKey)
-
-			p.data[name.singular] = taxonomy
-			p.data["Singular"] = name.singular
-			p.data["Plural"] = name.plural
-			p.data["Term"] = b.viewInfo.term()
-		case page.KindTaxonomy:
-			b := p.treeRef.n
-			name := b.viewInfo.name
-
-			p.data["Singular"] = name.singular
-			p.data["Plural"] = name.plural
-			p.data["Terms"] = p.s.Taxonomies()[name.plural]
+		case pagekinds.Term:
+			// TODO1
+			p.data["singular TODO1"] = nil
+			p.data["Singular"] = "singular TODO1"
+			p.data["Plural"] = "plural  TODO1"
+			p.data["Term"] = nil
+		case pagekinds.Taxonomy:
+			// TODO1
+			//b := nil //p.m.treeRef.GetNode()
+			//name := "TODO1"
+			p.data["Singular"] = "singular TODO1"
+			p.data["Plural"] = "plural TODO1"
+			p.data["Terms"] = p.s.Taxonomies()["plural TODO1"]
 			// keep the following just for legacy reasons
 			p.data["OrderedIndex"] = p.data["Terms"]
 			p.data["Index"] = p.data["Terms"]

@@ -27,6 +27,7 @@ import (
 	"github.com/spf13/afero"
 
 	"github.com/gohugoio/hugo/hugofs"
+	"github.com/gohugoio/hugo/identity"
 
 	"github.com/gohugoio/hugo/common/herrors"
 	"github.com/gohugoio/hugo/common/text"
@@ -55,8 +56,9 @@ func New(fs *filesystems.SourceFilesystem, rs *resources.Spec) *Client {
 }
 
 type buildTransformation struct {
-	optsm map[string]any
-	c     *Client
+	depsManager identity.Manager
+	optsm       map[string]any
+	c           *Client
 }
 
 func (t *buildTransformation) Key() internal.ResourceTransformationKey {
@@ -92,7 +94,7 @@ func (t *buildTransformation) Transform(ctx *resources.ResourceTransformationCtx
 		return err
 	}
 
-	buildOptions.Plugins, err = createBuildPlugins(t.c, opts)
+	buildOptions.Plugins, err = createBuildPlugins(t.depsManager, t.c, opts)
 	if err != nil {
 		return err
 	}
@@ -216,7 +218,12 @@ func (t *buildTransformation) Transform(ctx *resources.ResourceTransformationCtx
 
 // Process process esbuild transform
 func (c *Client) Process(res resources.ResourceTransformer, opts map[string]any) (resource.Resource, error) {
+	var depsManager identity.Manager = identity.NopManager
+	if dmp, ok := res.(identity.DependencyManagerProvider); ok {
+		depsManager = dmp.GetDependencyManager()
+	}
+
 	return res.Transform(
-		&buildTransformation{c: c, optsm: opts},
+		&buildTransformation{c: c, optsm: opts, depsManager: depsManager},
 	)
 }

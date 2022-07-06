@@ -96,7 +96,7 @@ type Page interface {
 	Weight() int
 	IsPage() bool
 	IsSection() bool
-	IsAncestor(other any) (bool, error)
+	IsAncestor(other any) bool
 	Params() maps.Params
 }
 

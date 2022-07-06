@@ -214,7 +214,7 @@ foo bar
 		}
 		test := test
 		t.Run(test.name, func(t *testing.T) {
-			t.Parallel()
+			//t.Parallel()
 			c := qt.New(t)
 			errorAsserter := testSiteBuildErrorAsserter{
 				c:    c,
@@ -617,7 +617,7 @@ toc line 4
 
 // https://github.com/gohugoio/hugo/issues/5375
 func TestSiteBuildTimeout(t *testing.T) {
-	if !htesting.IsCI() {
+	if !htesting.IsCIOrCILocal() {
 		//defer leaktest.CheckTimeout(t, 10*time.Second)()
 	}
 

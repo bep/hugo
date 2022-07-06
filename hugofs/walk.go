@@ -21,6 +21,7 @@ import (
 	"strings"
 
 	"github.com/gohugoio/hugo/common/loggers"
+	"github.com/gohugoio/hugo/common/paths"
 
 	"errors"
 
@@ -55,8 +56,10 @@ type Walkway struct {
 }
 
 type WalkwayConfig struct {
-	Fs       afero.Fs
-	Root     string
+	Fs   afero.Fs
+	Root string
+
+	// TODO1 check if we can remove.
 	BasePath string
 
 	Logger loggers.Logger
@@ -115,6 +118,9 @@ func (w *Walkway) Walk() error {
 	var fi FileMetaInfo
 	if w.fi != nil {
 		fi = w.fi
+		if fi.Meta().Component == "" {
+			return w.walkFn(w.root, nil, errors.New("missing metadata"))
+		}
 	} else {
 		info, _, err := lstatIfPossible(w.fs, w.root)
 		if err != nil {
@@ -185,6 +191,10 @@ func (w *Walkway) walk(path string, info FileMetaInfo, dirEntries []FileMetaInfo
 
 	meta := info.Meta()
 	filename := meta.Filename
+	component := meta.Component
+	if component == "" {
+		panic(filename + ": component is empty")
+	}
 
 	if dirEntries == nil {
 		f, err := w.fs.Open(path)
@@ -204,7 +214,10 @@ func (w *Walkway) walk(path string, info FileMetaInfo, dirEntries []FileMetaInfo
 			return walkFn(path, info, fmt.Errorf("walk: Readdir: %w", err))
 		}
 
-		dirEntries = fileInfosToFileMetaInfos(fis)
+		dirEntries = FileInfosToFileMetaInfos(fis)
+		for _, entry := range dirEntries {
+			entry.Meta().Component = component
+		}
 
 		if !meta.IsOrdered {
 			sort.Slice(dirEntries, func(i, j int) bool {
@@ -246,6 +259,10 @@ func (w *Walkway) walk(path string, info FileMetaInfo, dirEntries []FileMetaInfo
 
 		meta := fim.Meta()
 
+		if meta.Component == "" {
+			panic(meta.Filename + ": component is empty")
+		}
+
 		// Note that we use the original Name even if it's a symlink.
 		name := meta.Name
 		if name == "" {
@@ -255,17 +272,24 @@ func (w *Walkway) walk(path string, info FileMetaInfo, dirEntries []FileMetaInfo
 		if name == "" {
 			panic(fmt.Sprintf("[%s] no name set in %v", path, meta))
 		}
-		pathn := filepath.Join(path, name)
 
-		pathMeta := pathn
-		if w.basePath != "" {
-			pathMeta = strings.TrimPrefix(pathn, w.basePath)
+		if meta.PathInfo == nil {
+			pathn := filepath.Join(path, name)
+
+			pathMeta := pathn
+			if w.basePath != "" {
+				pathMeta = strings.TrimPrefix(pathn, w.basePath)
+			}
+			meta.Path = normalizeFilename(pathMeta)
+			meta.PathInfo = paths.Parse(meta.Path, paths.ForComponent(meta.Component))
+			meta.PathWalk = pathn
+
+			if meta.Lang == "" {
+				meta.Lang = meta.PathInfo.Lang()
+			}
 		}
 
-		meta.Path = normalizeFilename(pathMeta)
-		meta.PathWalk = pathn
-
-		if fim.IsDir() && meta.IsSymlink && w.isSeen(meta.Filename) {
+		if fim.IsDir() && w.isSeen(meta.Filename) {
 			// Prevent infinite recursion
 			// Possible cyclic reference
 			meta.SkipDir = true

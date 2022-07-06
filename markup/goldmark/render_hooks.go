@@ -18,6 +18,7 @@ import (
 	"strings"
 
 	"github.com/gohugoio/hugo/common/types/hstring"
+	"github.com/gohugoio/hugo/identity"
 	"github.com/gohugoio/hugo/markup/converter/hooks"
 	"github.com/gohugoio/hugo/markup/goldmark/goldmark_config"
 	"github.com/gohugoio/hugo/markup/goldmark/internal/render"
@@ -30,7 +31,9 @@ import (
 	"github.com/yuin/goldmark/util"
 )
 
-var _ renderer.SetOptioner = (*hookedRenderer)(nil)
+var (
+	_ renderer.SetOptioner = (*hookedRenderer)(nil)
+)
 
 func newLinkRenderer(cfg goldmark_config.Config) renderer.NodeRenderer {
 	r := &hookedRenderer{
@@ -47,6 +50,7 @@ func newLinks(cfg goldmark_config.Config) goldmark.Extender {
 }
 
 type linkContext struct {
+	identity.DependencyManagerProvider
 	page        any
 	destination string
 	title       string
@@ -79,6 +83,8 @@ func (ctx linkContext) Title() string {
 }
 
 type headingContext struct {
+	identity.DependencyManagerProvider
+
 	page      any
 	level     int
 	anchor    string
@@ -154,6 +160,8 @@ func (r *hookedRenderer) renderImage(w util.BufWriter, source []byte, node ast.N
 	err := lr.RenderLink(
 		w,
 		linkContext{
+			DependencyManagerProvider: ctx.RenderContext().DependencyManagerProvider,
+
 			page:        ctx.DocumentContext().Document,
 			destination: string(n.Destination),
 			title:       string(n.Title),
@@ -161,8 +169,6 @@ func (r *hookedRenderer) renderImage(w util.BufWriter, source []byte, node ast.N
 			plainText:   string(n.Text(source)),
 		},
 	)
-
-	ctx.AddIdentity(lr)
 
 	return ast.WalkContinue, err
 }
@@ -224,6 +230,8 @@ func (r *hookedRenderer) renderLink(w util.BufWriter, source []byte, node ast.No
 	err := lr.RenderLink(
 		w,
 		linkContext{
+			DependencyManagerProvider: ctx.RenderContext().DependencyManagerProvider,
+
 			page:        ctx.DocumentContext().Document,
 			destination: string(n.Destination),
 			title:       string(n.Title),
@@ -231,11 +239,6 @@ func (r *hookedRenderer) renderLink(w util.BufWriter, source []byte, node ast.No
 			plainText:   string(n.Text(source)),
 		},
 	)
-
-	// TODO(bep) I have a working branch that fixes these rather confusing identity types,
-	// but for now it's important that it's not .GetIdentity() that's added here,
-	// to make sure we search the entire chain on changes.
-	ctx.AddIdentity(lr)
 
 	return ast.WalkContinue, err
 }
@@ -292,17 +295,14 @@ func (r *hookedRenderer) renderAutoLink(w util.BufWriter, source []byte, node as
 	err := lr.RenderLink(
 		w,
 		linkContext{
+			DependencyManagerProvider: ctx.RenderContext().DependencyManagerProvider,
+
 			page:        ctx.DocumentContext().Document,
 			destination: url,
 			text:        hstring.RenderedString(label),
 			plainText:   label,
 		},
 	)
-
-	// TODO(bep) I have a working branch that fixes these rather confusing identity types,
-	// but for now it's important that it's not .GetIdentity() that's added here,
-	// to make sure we search the entire chain on changes.
-	ctx.AddIdentity(lr)
 
 	return ast.WalkContinue, err
 }
@@ -379,6 +379,8 @@ func (r *hookedRenderer) renderHeading(w util.BufWriter, source []byte, node ast
 	err := hr.RenderHeading(
 		w,
 		headingContext{
+			DependencyManagerProvider: ctx.RenderContext().DependencyManagerProvider,
+
 			page:             ctx.DocumentContext().Document,
 			level:            n.Level,
 			anchor:           string(anchor),
@@ -387,8 +389,6 @@ func (r *hookedRenderer) renderHeading(w util.BufWriter, source []byte, node ast
 			AttributesHolder: attributes.New(n.Attributes(), attributes.AttributesOwnerGeneral),
 		},
 	)
-
-	ctx.AddIdentity(hr)
 
 	return ast.WalkContinue, err
 }

@@ -15,7 +15,6 @@ package hugolib
 
 import (
 	"fmt"
-	"path/filepath"
 	"testing"
 
 	qt "github.com/frankban/quicktest"
@@ -100,10 +99,24 @@ URL: {{ $pag.URL }}
 
 // Issue 6023
 func TestPaginateWithSort(t *testing.T) {
-	b := newTestSitesBuilder(t).WithSimpleConfigFile()
-	b.WithTemplatesAdded("index.html", `{{ range (.Paginate (sort .Site.RegularPages ".File.Filename" "desc")).Pages }}|{{ .File.Filename }}{{ end }}`)
-	b.Build(BuildCfg{}).AssertFileContent("public/index.html",
-		filepath.FromSlash("|content/sect/doc1.nn.md|content/sect/doc1.nb.md|content/sect/doc1.fr.md|content/sect/doc1.en.md"))
+	files := `
+-- config.toml --
+baseURL="https://example.org"
+-- content/p1.md --
+-- content/p2.md --
+-- content/p3.md --
+-- layouts/index.html --
+{{ range (.Paginate (sort .Site.RegularPages ".File.Filename" "desc")).Pages }}|{{ .Path }}{{ end }}
+`
+
+	b := NewIntegrationTestBuilder(
+		IntegrationTestConfig{
+			T:           t,
+			TxtarString: files,
+		},
+	).Build()
+
+	b.AssertFileContent("public/index.html", "|/p3|/p2|/p1")
 }
 
 // https://github.com/gohugoio/hugo/issues/6797
