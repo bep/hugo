@@ -1,4 +1,4 @@
-// Copyright 2019 The Hugo Authors. All rights reserved.
+// Copyright 2021 The Hugo Authors. All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -16,11 +16,15 @@
 package create
 
 import (
+	"context"
 	"net/http"
+	"os"
 	"path"
 	"path/filepath"
-	"strings"
 	"time"
+
+	"github.com/gohugoio/hugo/cache/memcache"
+	"github.com/gohugoio/hugo/identity"
 
 	"github.com/gohugoio/hugo/hugofs/glob"
 
@@ -53,19 +57,39 @@ func New(rs *resources.Spec) *Client {
 
 // Copy copies r to the new targetPath.
 func (c *Client) Copy(r resource.Resource, targetPath string) (resource.Resource, error) {
-	return c.rs.ResourceCache.GetOrCreate(resources.ResourceCacheKey(targetPath), func() (resource.Resource, error) {
+	key := memcache.CleanKey(targetPath)
+	return c.rs.ResourceCache.GetOrCreate(context.TODO(), key, func() (resource.Resource, error) {
 		return resources.Copy(r, targetPath), nil
 	})
 }
 
-// Get creates a new Resource by opening the given filename in the assets filesystem.
-func (c *Client) Get(filename string) (resource.Resource, error) {
-	filename = filepath.Clean(filename)
-	return c.rs.ResourceCache.GetOrCreate(resources.ResourceCacheKey(filename), func() (resource.Resource, error) {
+// Get creates a new Resource by opening the given pathname in the assets filesystem.
+func (c *Client) Get(pathname string) (resource.Resource, error) {
+	pathname = path.Clean(pathname)
+	key := memcache.CleanKey(pathname)
+
+	return c.rs.ResourceCache.GetOrCreate(context.TODO(), key, func() (resource.Resource, error) {
+		// The resource file will not be read before it gets used (e.g. in .Content),
+		// so we need to check that the file exists here.
+		filename := filepath.FromSlash(pathname)
+		if _, err := c.rs.BaseFs.Assets.Fs.Stat(filename); err != nil {
+			if os.IsNotExist(err) {
+				return nil, nil
+			}
+			// A real error.
+			return nil, err
+		}
+
+		// TODO1 consolidate etc. (make into one identity)
+		id := identity.NewManager(identity.StringIdentity(key))
 		return c.rs.New(resources.ResourceSourceDescriptor{
-			Fs:             c.rs.BaseFs.Assets.Fs,
-			LazyPublish:    true,
-			SourceFilename: filename,
+			LazyPublish: true,
+			OpenReadSeekCloser: func() (hugio.ReadSeekCloser, error) {
+				return c.rs.BaseFs.Assets.Fs.Open(filename)
+			},
+			GroupIdentity:     id,
+			DependencyManager: id,
+			TargetPath:        pathname,
 		})
 	})
 }
@@ -93,26 +117,19 @@ func (c *Client) GetMatch(pattern string) (resource.Resource, error) {
 }
 
 func (c *Client) match(name, pattern string, matchFunc func(r resource.Resource) bool, firstOnly bool) (resource.Resources, error) {
-	pattern = glob.NormalizePath(pattern)
-	partitions := glob.FilterGlobParts(strings.Split(pattern, "/"))
-	if len(partitions) == 0 {
-		partitions = []string{resources.CACHE_OTHER}
-	}
-	key := path.Join(name, path.Join(partitions...))
-	key = path.Join(key, pattern)
+	key := path.Join(name, glob.NormalizePath(pattern))
 
-	return c.rs.ResourceCache.GetOrCreateResources(key, func() (resource.Resources, error) {
+	return c.rs.ResourceCache.GetOrCreateResources(context.TODO(), key, func() (resource.Resources, error) {
 		var res resource.Resources
 
-		handle := func(info hugofs.FileMetaInfo) (bool, error) {
+		handle := func(info hugofs.FileMetaDirEntry) (bool, error) {
 			meta := info.Meta()
 			r, err := c.rs.New(resources.ResourceSourceDescriptor{
 				LazyPublish: true,
-				FileInfo:    info,
 				OpenReadSeekCloser: func() (hugio.ReadSeekCloser, error) {
 					return meta.Open()
 				},
-				RelTargetFilename: meta.Path,
+				TargetPath: meta.Path,
 			})
 			if err != nil {
 				return true, err
@@ -137,15 +154,21 @@ func (c *Client) match(name, pattern string, matchFunc func(r resource.Resource)
 
 // FromString creates a new Resource from a string with the given relative target path.
 func (c *Client) FromString(targetPath, content string) (resource.Resource, error) {
-	return c.rs.ResourceCache.GetOrCreate(path.Join(resources.CACHE_OTHER, targetPath), func() (resource.Resource, error) {
+	targetPath = path.Clean(targetPath)
+	r, err := c.rs.ResourceCache.GetOrCreate(context.TODO(), memcache.CleanKey(targetPath), func() (resource.Resource, error) {
 		return c.rs.New(
 			resources.ResourceSourceDescriptor{
-				Fs:          c.rs.FileCaches.AssetsCache().Fs,
 				LazyPublish: true,
 				OpenReadSeekCloser: func() (hugio.ReadSeekCloser, error) {
 					return hugio.NewReadSeekerNoOpCloserFromString(content), nil
 				},
-				RelTargetFilename: filepath.Clean(targetPath),
+				TargetPath: targetPath,
 			})
 	})
+
+	if err == nil {
+		// Mark it so it gets evicted on rebuild.
+		r.(resource.Staler).MarkStale()
+	}
+	return r, err
 }

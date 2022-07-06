@@ -238,7 +238,7 @@ func (cc *hugoBuilderCommon) timeTrack(start time.Time, name string) {
 		return
 	}
 	elapsed := time.Since(start)
-	fmt.Printf("%s in %v ms\n", name, int(1000*elapsed.Seconds()))
+	fmt.Println(loggers.FormatBuildDuration(name, elapsed))
 }
 
 func (cc *hugoBuilderCommon) getConfigDir(baseDir string) string {

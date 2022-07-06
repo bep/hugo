@@ -16,6 +16,7 @@
 package page
 
 import (
+	"context"
 	"html/template"
 
 	"github.com/gohugoio/hugo/identity"
@@ -23,7 +24,6 @@ import (
 
 	"github.com/bep/gitmap"
 	"github.com/gohugoio/hugo/config"
-	"github.com/gohugoio/hugo/tpl"
 
 	"github.com/gohugoio/hugo/common/maps"
 	"github.com/gohugoio/hugo/compare"
@@ -113,7 +113,7 @@ type ContentRenderer interface {
 
 // FileProvider provides the source file.
 type FileProvider interface {
-	File() source.File
+	File() *source.File
 }
 
 // GetPageProvider provides the GetPage method.
@@ -124,9 +124,6 @@ type GetPageProvider interface {
 	// This will return nil when no page could be found, and will return
 	// an error if the ref is ambiguous.
 	GetPage(ref string) (Page, error)
-
-	// GetPageWithTemplateInfo is for internal use only.
-	GetPageWithTemplateInfo(info tpl.Info, ref string) (Page, error)
 }
 
 // GitInfoProvider provides Git info.
@@ -152,11 +149,18 @@ type OutputFormatsProvider interface {
 	OutputFormats() OutputFormats
 }
 
+// PageProvider provides access to a Page.
+// Implemented by shortcodes and others.
+type PageProvider interface {
+	Page() Page
+}
+
 // Page is the core interface in Hugo.
 type Page interface {
 	ContentProvider
 	TableOfContentsProvider
 	PageWithoutContent
+	identity.DependencyManagerProvider
 }
 
 // PageMetaProvider provides page metadata, typically provided via front matter.
@@ -201,13 +205,9 @@ type PageMetaProvider interface {
 	// Param looks for a param in Page and then in Site config.
 	Param(key any) (any, error)
 
-	// Path gets the relative path, including file name and extension if relevant,
-	// to the source of this Page. It will be relative to any content root.
+	// Path gets the cannonical source path.
+	// TODO1 a better description of what the path is.
 	Path() string
-
-	// This is just a temporary bridge method. Use Path in templates.
-	// Pathc is for internal usage only.
-	Pathc() string
 
 	// The slug, typically defined in front matter.
 	Slug() string
@@ -220,13 +220,6 @@ type PageMetaProvider interface {
 
 	// Section returns the first path element below the content root.
 	Section() string
-
-	// Returns a slice of sections (directories if it's a file) to this
-	// Page.
-	SectionsEntries() []string
-
-	// SectionsPath is SectionsEntries joined with a /.
-	SectionsPath() string
 
 	// Sitemap returns the sitemap configuration for this page.
 	Sitemap() config.Sitemap
@@ -242,7 +235,7 @@ type PageMetaProvider interface {
 
 // PageRenderProvider provides a way for a Page to render content.
 type PageRenderProvider interface {
-	Render(layout ...string) (template.HTML, error)
+	Render(ctx context.Context, layout ...string) (template.HTML, error)
 	RenderString(args ...any) (template.HTML, error)
 }
 
@@ -304,7 +297,7 @@ type PageWithoutContent interface {
 	GetTerms(taxonomy string) Pages
 
 	// Used in change/dependency tracking.
-	identity.Provider
+	identity.Identity
 
 	DeprecatedWarningPageMethods
 }
@@ -384,15 +377,14 @@ type TreeProvider interface {
 
 	// IsAncestor returns whether the current page is an ancestor of the given
 	// Note that this method is not relevant for taxonomy lists and taxonomy terms pages.
-	IsAncestor(other any) (bool, error)
+	IsAncestor(other any) bool
 
-	// CurrentSection returns the page's current section or the page itself if home or a section.
-	// Note that this will return nil for pages that is not regular, home or section pages.
+	// CurrentSection returns the page's current section or the page itself if a branch node (e.g. home or a section).
 	CurrentSection() Page
 
 	// IsDescendant returns whether the current page is a descendant of the given
 	// Note that this method is not relevant for taxonomy lists and taxonomy terms pages.
-	IsDescendant(other any) (bool, error)
+	IsDescendant(other any) bool
 
 	// FirstSection returns the section on level 1 below home, e.g. "/docs".
 	// For the home page, this will return itself.
@@ -401,7 +393,7 @@ type TreeProvider interface {
 	// InSection returns whether the given page is in the current section.
 	// Note that this will always return false for pages that are
 	// not either regular, home or section pages.
-	InSection(other any) (bool, error)
+	InSection(other any) bool
 
 	// Parent returns a section's parent section or a page's section.
 	// To get a section's subsections, see Page's Sections method.
@@ -411,9 +403,16 @@ type TreeProvider interface {
 	// Note that for non-sections, this method will always return an empty list.
 	Sections() Pages
 
-	// Page returns a reference to the Page itself, kept here mostly
-	// for legacy reasons.
+	// Page returns a reference to the Page itself, mostly
+	// implemented to enable portable partials between regular, shortcode and markdown hook templates.
 	Page() Page
+
+	// Returns a slice of sections (directories if it's a file) to this
+	// Page.
+	SectionsEntries() []string
+
+	// SectionsPath is SectionsEntries joined with a /.
+	SectionsPath() string
 }
 
 // DeprecatedWarningPageMethods lists deprecated Page methods that will trigger

@@ -1,4 +1,4 @@
-// Copyright 2019 The Hugo Authors. All rights reserved.
+// Copyright 2021 The Hugo Authors. All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -16,11 +16,9 @@ package resources
 import (
 	"fmt"
 	"math/rand"
-	"path/filepath"
 	"strings"
 	"testing"
-
-	"github.com/spf13/afero"
+	"time"
 
 	"github.com/gohugoio/hugo/resources/resource"
 
@@ -33,66 +31,11 @@ func TestGenericResource(t *testing.T) {
 	c := qt.New(t)
 	spec := newTestResourceSpec(specDescriptor{c: c})
 
-	r := spec.newGenericResource(nil, nil, nil, "/a/foo.css", "foo.css", media.CSSType)
+	r := newResource(spec, "/a/foo.css", "", media.CSSType)
 
-	c.Assert(r.Permalink(), qt.Equals, "https://example.com/foo.css")
-	c.Assert(r.RelPermalink(), qt.Equals, "/foo.css")
+	c.Assert(r.Permalink(), qt.Equals, "https://example.com/a/foo.css")
+	c.Assert(r.RelPermalink(), qt.Equals, "/a/foo.css")
 	c.Assert(r.ResourceType(), qt.Equals, "text")
-}
-
-func TestGenericResourceWithLinkFactory(t *testing.T) {
-	c := qt.New(t)
-	spec := newTestResourceSpec(specDescriptor{c: c})
-
-	factory := newTargetPaths("/foo")
-
-	r := spec.newGenericResource(nil, factory, nil, "/a/foo.css", "foo.css", media.CSSType)
-
-	c.Assert(r.Permalink(), qt.Equals, "https://example.com/foo/foo.css")
-	c.Assert(r.RelPermalink(), qt.Equals, "/foo/foo.css")
-	c.Assert(r.Key(), qt.Equals, "/foo/foo.css")
-	c.Assert(r.ResourceType(), qt.Equals, "text")
-}
-
-func TestNewResourceFromFilename(t *testing.T) {
-	c := qt.New(t)
-	spec := newTestResourceSpec(specDescriptor{c: c})
-
-	writeSource(t, spec.Fs, "content/a/b/logo.png", "image")
-	writeSource(t, spec.Fs, "content/a/b/data.json", "json")
-
-	bfs := afero.NewBasePathFs(spec.Fs.Source, "content")
-
-	r, err := spec.New(ResourceSourceDescriptor{Fs: bfs, SourceFilename: "a/b/logo.png"})
-
-	c.Assert(err, qt.IsNil)
-	c.Assert(r, qt.Not(qt.IsNil))
-	c.Assert(r.ResourceType(), qt.Equals, "image")
-	c.Assert(r.RelPermalink(), qt.Equals, "/a/b/logo.png")
-	c.Assert(r.Permalink(), qt.Equals, "https://example.com/a/b/logo.png")
-
-	r, err = spec.New(ResourceSourceDescriptor{Fs: bfs, SourceFilename: "a/b/data.json"})
-
-	c.Assert(err, qt.IsNil)
-	c.Assert(r, qt.Not(qt.IsNil))
-	c.Assert(r.ResourceType(), qt.Equals, "application")
-}
-
-func TestNewResourceFromFilenameSubPathInBaseURL(t *testing.T) {
-	c := qt.New(t)
-	spec := newTestResourceSpec(specDescriptor{c: c, baseURL: "https://example.com/docs"})
-
-	writeSource(t, spec.Fs, "content/a/b/logo.png", "image")
-	bfs := afero.NewBasePathFs(spec.Fs.Source, "content")
-
-	fmt.Println()
-	r, err := spec.New(ResourceSourceDescriptor{Fs: bfs, SourceFilename: filepath.FromSlash("a/b/logo.png")})
-
-	c.Assert(err, qt.IsNil)
-	c.Assert(r, qt.Not(qt.IsNil))
-	c.Assert(r.ResourceType(), qt.Equals, "image")
-	c.Assert(r.RelPermalink(), qt.Equals, "/docs/a/b/logo.png")
-	c.Assert(r.Permalink(), qt.Equals, "https://example.com/docs/a/b/logo.png")
 }
 
 var pngType, _ = media.FromStringAndExt("image/png", "png")
@@ -101,10 +44,10 @@ func TestResourcesByType(t *testing.T) {
 	c := qt.New(t)
 	spec := newTestResourceSpec(specDescriptor{c: c})
 	resources := resource.Resources{
-		spec.newGenericResource(nil, nil, nil, "/a/foo1.css", "foo1.css", media.CSSType),
-		spec.newGenericResource(nil, nil, nil, "/a/logo.png", "logo.css", pngType),
-		spec.newGenericResource(nil, nil, nil, "/a/foo2.css", "foo2.css", media.CSSType),
-		spec.newGenericResource(nil, nil, nil, "/a/foo3.css", "foo3.css", media.CSSType),
+		newResource(spec, "/a/foo1.css", "", media.CSSType),
+		newResource(spec, "/a/logo.png", "", pngType),
+		newResource(spec, "/a/foo2.css", "", media.CSSType),
+		newResource(spec, "/a/foo3.css", "", media.CSSType),
 	}
 
 	c.Assert(len(resources.ByType("text")), qt.Equals, 3)
@@ -115,20 +58,20 @@ func TestResourcesGetByPrefix(t *testing.T) {
 	c := qt.New(t)
 	spec := newTestResourceSpec(specDescriptor{c: c})
 	resources := resource.Resources{
-		spec.newGenericResource(nil, nil, nil, "/a/foo1.css", "foo1.css", media.CSSType),
-		spec.newGenericResource(nil, nil, nil, "/a/logo1.png", "logo1.png", pngType),
-		spec.newGenericResource(nil, nil, nil, "/b/Logo2.png", "Logo2.png", pngType),
-		spec.newGenericResource(nil, nil, nil, "/b/foo2.css", "foo2.css", media.CSSType),
-		spec.newGenericResource(nil, nil, nil, "/b/foo3.css", "foo3.css", media.CSSType),
+		newResource(spec, "/a/foo1.css", "foo1.css", media.CSSType),
+		newResource(spec, "/a/logo1.png", "logo1.png", pngType),
+		newResource(spec, "/b/Logo2.png", "Logo2.png", pngType),
+		newResource(spec, "/b/foo2.css", "foo2.css", media.CSSType),
+		newResource(spec, "/b/foo3.css", "foo3.css", media.CSSType),
 	}
 
 	c.Assert(resources.GetMatch("asdf*"), qt.IsNil)
-	c.Assert(resources.GetMatch("logo*").RelPermalink(), qt.Equals, "/logo1.png")
-	c.Assert(resources.GetMatch("loGo*").RelPermalink(), qt.Equals, "/logo1.png")
-	c.Assert(resources.GetMatch("logo2*").RelPermalink(), qt.Equals, "/Logo2.png")
-	c.Assert(resources.GetMatch("foo2*").RelPermalink(), qt.Equals, "/foo2.css")
-	c.Assert(resources.GetMatch("foo1*").RelPermalink(), qt.Equals, "/foo1.css")
-	c.Assert(resources.GetMatch("foo1*").RelPermalink(), qt.Equals, "/foo1.css")
+	c.Assert(resources.GetMatch("logo*").RelPermalink(), qt.Equals, "/a/logo1.png")
+	c.Assert(resources.GetMatch("loGo*").RelPermalink(), qt.Equals, "/a/logo1.png")
+	c.Assert(resources.GetMatch("logo2*").RelPermalink(), qt.Equals, "/b/logo2.png") // TODO1 case
+	c.Assert(resources.GetMatch("foo2*").RelPermalink(), qt.Equals, "/b/foo2.css")
+	c.Assert(resources.GetMatch("foo1*").RelPermalink(), qt.Equals, "/a/foo1.css")
+	c.Assert(resources.GetMatch("foo1*").RelPermalink(), qt.Equals, "/a/foo1.css")
 	c.Assert(resources.GetMatch("asdfasdf*"), qt.IsNil)
 
 	c.Assert(len(resources.Match("logo*")), qt.Equals, 2)
@@ -144,23 +87,23 @@ func TestResourcesGetMatch(t *testing.T) {
 	c := qt.New(t)
 	spec := newTestResourceSpec(specDescriptor{c: c})
 	resources := resource.Resources{
-		spec.newGenericResource(nil, nil, nil, "/a/foo1.css", "foo1.css", media.CSSType),
-		spec.newGenericResource(nil, nil, nil, "/a/logo1.png", "logo1.png", pngType),
-		spec.newGenericResource(nil, nil, nil, "/b/Logo2.png", "Logo2.png", pngType),
-		spec.newGenericResource(nil, nil, nil, "/b/foo2.css", "foo2.css", media.CSSType),
-		spec.newGenericResource(nil, nil, nil, "/b/foo3.css", "foo3.css", media.CSSType),
-		spec.newGenericResource(nil, nil, nil, "/b/c/foo4.css", "c/foo4.css", media.CSSType),
-		spec.newGenericResource(nil, nil, nil, "/b/c/foo5.css", "c/foo5.css", media.CSSType),
-		spec.newGenericResource(nil, nil, nil, "/b/c/d/foo6.css", "c/d/foo6.css", media.CSSType),
+		newResource(spec, "/a/foo1.css", "foo1.css", media.CSSType),
+		newResource(spec, "/a/logo1.png", "logo1.png", pngType),
+		newResource(spec, "/b/Logo2.png", "Logo2.png", pngType),
+		newResource(spec, "/b/foo2.css", "foo2.css", media.CSSType),
+		newResource(spec, "/b/foo3.css", "foo3.css", media.CSSType),
+		newResource(spec, "/b/c/foo4.css", "c/foo4.css", media.CSSType),
+		newResource(spec, "/b/c/foo5.css", "c/foo5.css", media.CSSType),
+		newResource(spec, "/b/c/d/foo6.css", "c/d/foo6.css", media.CSSType),
 	}
 
-	c.Assert(resources.GetMatch("logo*").RelPermalink(), qt.Equals, "/logo1.png")
-	c.Assert(resources.GetMatch("loGo*").RelPermalink(), qt.Equals, "/logo1.png")
-	c.Assert(resources.GetMatch("logo2*").RelPermalink(), qt.Equals, "/Logo2.png")
-	c.Assert(resources.GetMatch("foo2*").RelPermalink(), qt.Equals, "/foo2.css")
-	c.Assert(resources.GetMatch("foo1*").RelPermalink(), qt.Equals, "/foo1.css")
-	c.Assert(resources.GetMatch("foo1*").RelPermalink(), qt.Equals, "/foo1.css")
-	c.Assert(resources.GetMatch("*/foo*").RelPermalink(), qt.Equals, "/c/foo4.css")
+	c.Assert(resources.GetMatch("logo*").RelPermalink(), qt.Equals, "/a/logo1.png")
+	c.Assert(resources.GetMatch("loGo*").RelPermalink(), qt.Equals, "/a/logo1.png")
+	c.Assert(resources.GetMatch("logo2*").RelPermalink(), qt.Equals, "/b/logo2.png")
+	c.Assert(resources.GetMatch("foo2*").RelPermalink(), qt.Equals, "/b/foo2.css")
+	c.Assert(resources.GetMatch("foo1*").RelPermalink(), qt.Equals, "/a/foo1.css")
+	c.Assert(resources.GetMatch("foo1*").RelPermalink(), qt.Equals, "/a/foo1.css")
+	c.Assert(resources.GetMatch("*/foo*").RelPermalink(), qt.Equals, "/b/c/foo4.css")
 
 	c.Assert(resources.GetMatch("asdfasdf"), qt.IsNil)
 
@@ -188,10 +131,11 @@ func TestResourcesGetMatch(t *testing.T) {
 func BenchmarkResourcesMatch(b *testing.B) {
 	resources := benchResources(b)
 	prefixes := []string{"abc*", "jkl*", "nomatch*", "sub/*"}
+	rnd := rand.New(rand.NewSource(time.Now().Unix()))
 
 	b.RunParallel(func(pb *testing.PB) {
 		for pb.Next() {
-			resources.Match(prefixes[rand.Intn(len(prefixes))])
+			resources.Match(prefixes[rnd.Intn(len(prefixes))])
 		}
 	})
 }
@@ -206,7 +150,7 @@ func BenchmarkResourcesMatchA100(b *testing.B) {
 	a100 := strings.Repeat("a", 100)
 	pattern := "a*a*a*a*a*a*a*a*b"
 
-	resources := resource.Resources{spec.newGenericResource(nil, nil, nil, "/a/"+a100, a100, media.CSSType)}
+	resources := resource.Resources{newResource(spec, "/a/"+a100, a100, media.CSSType)}
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -221,17 +165,17 @@ func benchResources(b *testing.B) resource.Resources {
 
 	for i := 0; i < 30; i++ {
 		name := fmt.Sprintf("abcde%d_%d.css", i%5, i)
-		resources = append(resources, spec.newGenericResource(nil, nil, nil, "/a/"+name, name, media.CSSType))
+		resources = append(resources, newResource(spec, "/a/"+name, name, media.CSSType))
 	}
 
 	for i := 0; i < 30; i++ {
 		name := fmt.Sprintf("efghi%d_%d.css", i%5, i)
-		resources = append(resources, spec.newGenericResource(nil, nil, nil, "/a/"+name, name, media.CSSType))
+		resources = append(resources, newResource(spec, "/a/"+name, name, media.CSSType))
 	}
 
 	for i := 0; i < 30; i++ {
 		name := fmt.Sprintf("jklmn%d_%d.css", i%5, i)
-		resources = append(resources, spec.newGenericResource(nil, nil, nil, "/b/sub/"+name, "sub/"+name, media.CSSType))
+		resources = append(resources, newResource(spec, "/b/sub/"+name, name, media.CSSType))
 	}
 
 	return resources
@@ -258,7 +202,7 @@ func BenchmarkAssignMetadata(b *testing.B) {
 		}
 		for i := 0; i < 20; i++ {
 			name := fmt.Sprintf("foo%d_%d.css", i%5, i)
-			resources = append(resources, spec.newGenericResource(nil, nil, nil, "/a/"+name, name, media.CSSType))
+			resources = append(resources, newResource(spec, "/a/"+name, name, media.CSSType))
 		}
 		b.StartTimer()
 

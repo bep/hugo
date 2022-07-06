@@ -26,6 +26,7 @@ import (
 	"github.com/gohugoio/hugo/htesting"
 
 	"github.com/gohugoio/hugo/common/herrors"
+	"github.com/gohugoio/hugo/common/hugio"
 	"github.com/gohugoio/hugo/hugofs"
 
 	"github.com/gohugoio/hugo/media"
@@ -47,11 +48,18 @@ func gopherPNG() io.Reader { return base64.NewDecoder(base64.StdEncoding, string
 func TestTransform(t *testing.T) {
 	c := qt.New(t)
 
-	createTransformer := func(spec *Spec, filename, content string) Transformer {
-		filename = filepath.FromSlash(filename)
+	createTransformer := func(spec *Spec, pathname, content string) Transformer {
+		filename := filepath.FromSlash(pathname)
 		fs := spec.Fs.Source
-		afero.WriteFile(fs, filename, []byte(content), 0777)
-		r, _ := spec.New(ResourceSourceDescriptor{Fs: fs, SourceFilename: filename})
+		afero.WriteFile(fs, pathname, []byte(content), 0777)
+		r, err := spec.New(
+			ResourceSourceDescriptor{
+				TargetPath: pathname,
+				OpenReadSeekCloser: func() (hugio.ReadSeekCloser, error) {
+					return fs.Open(filename)
+				},
+			})
+		c.Assert(err, qt.IsNil)
 		return r.(Transformer)
 	}
 

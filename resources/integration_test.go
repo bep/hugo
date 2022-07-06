@@ -54,6 +54,7 @@ bmp: {{ $bmp.RelPermalink }}|{{ $bmp.MediaType }}|
 		}).Build()
 
 	assertImages := func() {
+		b.Helper()
 		b.AssertFileContent("public/index.html", `
 		gif: /mybundle/pixel_hu8aa3346827e49d756ff4e630147c42b5_70_1x1_resize_box_3.gif|image/gif|
 		bmp: /mybundle/pixel_hu8aa3346827e49d756ff4e630147c42b5_70_1x1_resize_box_3.bmp|image/bmp|

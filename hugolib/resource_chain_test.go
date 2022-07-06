@@ -15,12 +15,10 @@ package hugolib
 
 import (
 	"fmt"
-	"io"
 	"io/ioutil"
 	"math/rand"
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -35,25 +33,14 @@ import (
 )
 
 func TestResourceChainBasic(t *testing.T) {
-	failIfHandler := func(h http.Handler) http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if r.URL.Path == "/fail.jpg" {
-				http.Error(w, "{ msg: failed }", 500)
-				return
-			}
-			h.ServeHTTP(w, r)
 
-		})
-	}
-	ts := httptest.NewServer(
-		failIfHandler(http.FileServer(http.Dir("testdata/"))),
-	)
-	t.Cleanup(func() {
-		ts.Close()
-	})
-
-	b := newTestSitesBuilder(t)
-	b.WithTemplatesAdded("index.html", fmt.Sprintf(`
+	files := `
+-- config.toml --
+title = "Integration Test"
+disableKinds=["page", "section", "taxonomy", "term", "sitemap", "robotsTXT", "RSS"]
+-- assets/images/pixel.png --
+iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==
+-- layouts/index.html --
 {{ $hello := "<h1>     Hello World!   </h1>" | resources.FromString "hello.html" | fingerprint "sha512" | minify  | fingerprint }}
 {{ $cssFingerprinted1 := "body {  background-color: lightblue; }" | resources.FromString "styles.css" |  minify  | fingerprint }}
 {{ $cssFingerprinted2 := "body {  background-color: orange; }" | resources.FromString "styles2.css" |  minify  | fingerprint }}
@@ -61,24 +48,24 @@ func TestResourceChainBasic(t *testing.T) {
 
 HELLO: {{ $hello.Name }}|{{ $hello.RelPermalink }}|{{ $hello.Content | safeHTML }}
 
-{{ $img := resources.Get "images/sunset.jpg" }}
+{{ $img := resources.Get "images/pixel.png" }}
 {{ $fit := $img.Fit "200x200" }}
 {{ $fit2 := $fit.Fit "100x200" }}
 {{ $img = $img | fingerprint }}
-SUNSET: {{ $img.Name }}|{{ $img.RelPermalink }}|{{ $img.Width }}|{{ len $img.Content }}
+PIXEL: {{ $img.Name }}|{{ $img.RelPermalink }}|{{ $img.Width }}|{{ len $img.Content }}
 FIT: {{ $fit.Name }}|{{ $fit.RelPermalink }}|{{ $fit.Width }}
 CSS integrity Data first: {{ $cssFingerprinted1.Data.Integrity }} {{ $cssFingerprinted1.RelPermalink }}
 CSS integrity Data last:  {{ $cssFingerprinted2.RelPermalink }} {{ $cssFingerprinted2.Data.Integrity }}
 
-{{ $failedImg := resources.GetRemote "%[1]s/fail.jpg" }}
-{{ $rimg := resources.GetRemote "%[1]s/sunset.jpg" }}
-{{ $remotenotfound := resources.GetRemote "%[1]s/notfound.jpg" }}
+{{ $failedImg := resources.GetRemote "TEST_URL/fail.jpg" }}
+{{ $rimg := resources.GetRemote "TEST_URL/assets/images/pixel.png" }}
+{{ $remotenotfound := resources.GetRemote "TEST_URL/notfound.jpg" }}
 {{ $localnotfound := resources.Get "images/notfound.jpg" }}
 {{ $gopherprotocol := resources.GetRemote "gopher://example.org" }}
 {{ $rfit := $rimg.Fit "200x200" }}
 {{ $rfit2 := $rfit.Fit "100x200" }}
 {{ $rimg = $rimg | fingerprint }}
-SUNSET REMOTE: {{ $rimg.Name }}|{{ $rimg.RelPermalink }}|{{ $rimg.Width }}|{{ len $rimg.Content }}
+PIXEL REMOTE: {{ $rimg.Name }}|{{ $rimg.RelPermalink }}|{{ $rimg.Width }}|{{ len $rimg.Content }}
 FIT REMOTE: {{ $rfit.Name }}|{{ $rfit.RelPermalink }}|{{ $rfit.Width }}
 REMOTE NOT FOUND: {{ if $remotenotfound }}FAILED{{ else}}OK{{ end }}
 LOCAL NOT FOUND: {{ if $localnotfound }}FAILED{{ else}}OK{{ end }}
@@ -86,35 +73,53 @@ PRINT PROTOCOL ERROR1: {{ with $gopherprotocol }}{{ . | safeHTML }}{{ end }}
 PRINT PROTOCOL ERROR2: {{ with $gopherprotocol }}{{ .Err | safeHTML }}{{ end }}
 PRINT PROTOCOL ERROR DETAILS: {{ with $gopherprotocol }}Err: {{ .Err | safeHTML }}{{ with .Err }}|{{ with .Data }}Body: {{ .Body }}|StatusCode: {{ .StatusCode }}{{ end }}|{{ end }}{{ end }}
 FAILED REMOTE ERROR DETAILS CONTENT: {{ with $failedImg.Err }}|{{ . }}|{{ with .Data }}Body: {{ .Body }}|StatusCode: {{ .StatusCode }}|ContentLength: {{ .ContentLength }}|ContentType: {{ .ContentType }}{{ end }}{{ end }}|
-`, ts.URL))
+			
+		`
 
-	fs := b.Fs.Source
+	tempDir := t.TempDir()
 
-	imageDir := filepath.Join("assets", "images")
-	b.Assert(os.MkdirAll(imageDir, 0777), qt.IsNil)
-	src, err := os.Open("testdata/sunset.jpg")
-	b.Assert(err, qt.IsNil)
-	out, err := fs.Create(filepath.Join(imageDir, "sunset.jpg"))
-	b.Assert(err, qt.IsNil)
-	_, err = io.Copy(out, src)
-	b.Assert(err, qt.IsNil)
-	out.Close()
+	failIfHandler := func(h http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.URL.Path == "/fail.jpg" {
+				http.Error(w, "{ msg: failed }", 500)
+				return
+			}
+			h.ServeHTTP(w, r)
+		})
+	}
 
-	b.Running()
+	ts := httptest.NewServer(
+		failIfHandler(http.FileServer(http.Dir(tempDir))),
+	)
+
+	t.Cleanup(func() {
+		ts.Close()
+	})
+
+	files = strings.ReplaceAll(files, "TEST_URL", ts.URL)
+
+	b := NewIntegrationTestBuilder(
+		IntegrationTestConfig{
+			T:           t,
+			TxtarString: files,
+			Running:     true,
+			NeedsOsFS:   true,
+			WorkingDir:  tempDir,
+		})
 
 	for i := 0; i < 2; i++ {
 
-		b.Build(BuildCfg{})
+		b.Build()
 
 		b.AssertFileContent("public/index.html",
 			fmt.Sprintf(`
-SUNSET: images/sunset.jpg|/images/sunset.a9bf1d944e19c0f382e0d8f51de690f7d0bc8fa97390c4242a86c3e5c0737e71.jpg|900|90587
-FIT: images/sunset.jpg|/images/sunset_hu59e56ffff1bc1d8d122b1403d34e039f_90587_200x200_fit_q75_box.jpg|200
+PIXEL: images/pixel.png|/images/pixel.497790947d4666760ce38f3c00e852c71fdb66cae849bae8e9ede352719e1581.png|1|70
+FIT: images/pixel.png|/images/pixel_hu8aa3346827e49d756ff4e630147c42b5_70_200x200_fit_box_3.png|1
 CSS integrity Data first: sha256-od9YaHw8nMOL8mUy97Sy8sKwMV3N4hI3aVmZXATxH&#43;8= /styles.min.a1df58687c3c9cc38bf26532f7b4b2f2c2b0315dcde212376959995c04f11fef.css
 CSS integrity Data last:  /styles2.min.1cfc52986836405d37f9998a63fd6dd8608e8c410e5e3db1daaa30f78bc273ba.css sha256-HPxSmGg2QF03&#43;ZmKY/1t2GCOjEEOXj2x2qow94vCc7o=
 
-SUNSET REMOTE: sunset_%[1]s.jpg|/sunset_%[1]s.a9bf1d944e19c0f382e0d8f51de690f7d0bc8fa97390c4242a86c3e5c0737e71.jpg|900|90587
-FIT REMOTE: sunset_%[1]s.jpg|/sunset_%[1]s_hu59e56ffff1bc1d8d122b1403d34e039f_0_200x200_fit_q75_box.jpg|200
+PIXEL REMOTE: pixel_%[1]s.png|/pixel_%[1]s.497790947d4666760ce38f3c00e852c71fdb66cae849bae8e9ede352719e1581.png|1|70
+FIT REMOTE: pixel_%[1]s.png|/pixel_%[1]s_hu8aa3346827e49d756ff4e630147c42b5_70_200x200_fit_box_3.png|1
 REMOTE NOT FOUND: OK
 LOCAL NOT FOUND: OK
 PRINT PROTOCOL ERROR DETAILS: Err: error calling resources.GetRemote: Get "gopher://example.org": unsupported protocol scheme "gopher"||
@@ -122,10 +127,10 @@ FAILED REMOTE ERROR DETAILS CONTENT: |failed to fetch remote resource: Internal 
 |StatusCode: 500|ContentLength: 16|ContentType: text/plain; charset=utf-8|
 
 
-`, helpers.HashString(ts.URL+"/sunset.jpg", map[string]any{})))
+`, helpers.HashString(ts.URL+"/assets/images/pixel.png", map[string]any{})))
 
 		b.AssertFileContent("public/styles.min.a1df58687c3c9cc38bf26532f7b4b2f2c2b0315dcde212376959995c04f11fef.css", "body{background-color:#add8e6}")
-		b.AssertFileContent("public//styles2.min.1cfc52986836405d37f9998a63fd6dd8608e8c410e5e3db1daaa30f78bc273ba.css", "body{background-color:orange}")
+		b.AssertFileContent("public/styles2.min.1cfc52986836405d37f9998a63fd6dd8608e8c410e5e3db1daaa30f78bc273ba.css", "body{background-color:orange}")
 
 		b.EditFiles("page1.md", `
 ---
@@ -136,10 +141,6 @@ summary: "Edited summary"
 Edited content.
 
 `)
-
-		b.Assert(b.Fs.WorkingDirWritable.Remove("public"), qt.IsNil)
-		b.H.ResourceSpec.ClearCaches()
-
 	}
 }
 
@@ -235,7 +236,7 @@ End.
 	}
 }
 
-func TestResourceChains(t *testing.T) {
+func _TestResourceChains(t *testing.T) {
 	t.Parallel()
 
 	c := qt.New(t)
@@ -295,7 +296,6 @@ func TestResourceChains(t *testing.T) {
 			return
 
 		case "/authenticated/":
-			w.Header().Set("Content-Type", "text/plain")
 			if r.Header.Get("Authorization") == "Bearer abcd" {
 				w.Write([]byte(`Welcome`))
 				return
@@ -304,7 +304,6 @@ func TestResourceChains(t *testing.T) {
 			return
 
 		case "/post":
-			w.Header().Set("Content-Type", "text/plain")
 			if r.Method == http.MethodPost {
 				body, err := ioutil.ReadAll(r.Body)
 				if err != nil {
@@ -319,7 +318,6 @@ func TestResourceChains(t *testing.T) {
 		}
 
 		http.Error(w, "Not found", http.StatusNotFound)
-		return
 	}))
 	t.Cleanup(func() {
 		ts.Close()
@@ -367,19 +365,20 @@ T6: {{ $bundle1.Permalink }}
       keepWhitespace = false
 `)
 			b.WithTemplates("home.html", fmt.Sprintf(`
+%s
 Min CSS: {{ ( resources.Get "css/styles1.css" | minify ).Content }}
-Min CSS Remote: {{ ( resources.GetRemote "%[1]s/css/styles1.css" | minify ).Content }}
+Min CSS Remote: {{ ( resources.GetRemote "TEST_URL/css/styles1.css" | minify ).Content }}
 Min JS: {{ ( resources.Get "js/script1.js" | resources.Minify ).Content | safeJS }}
-Min JS Remote: {{ ( resources.GetRemote "%[1]s/js/script1.js" | minify ).Content }}
+Min JS Remote: {{ ( resources.GetRemote "TEST_URL/js/script1.js" | minify ).Content }}
 Min JSON: {{ ( resources.Get "mydata/json1.json" | resources.Minify ).Content | safeHTML }}
-Min JSON Remote: {{ ( resources.GetRemote "%[1]s/mydata/json1.json" | resources.Minify ).Content | safeHTML }}
+Min JSON Remote: {{ ( resources.GetRemote "TEST_URL/mydata/json1.json" | resources.Minify ).Content | safeHTML }}
 Min XML: {{ ( resources.Get "mydata/xml1.xml" | resources.Minify ).Content | safeHTML }}
-Min XML Remote: {{ ( resources.GetRemote "%[1]s/mydata/xml1.xml" | resources.Minify ).Content | safeHTML }}
+Min XML Remote: {{ ( resources.GetRemote "TEST_URL/mydata/xml1.xml" | resources.Minify ).Content | safeHTML }}
 Min SVG: {{ ( resources.Get "mydata/svg1.svg" | resources.Minify ).Content | safeHTML }}
-Min SVG Remote: {{ ( resources.GetRemote "%[1]s/mydata/svg1.svg" | resources.Minify ).Content | safeHTML }}
+Min SVG Remote: {{ ( resources.GetRemote "TEST_URL/mydata/svg1.svg" | resources.Minify ).Content | safeHTML }}
 Min SVG again: {{ ( resources.Get "mydata/svg1.svg" | resources.Minify ).Content | safeHTML }}
 Min HTML: {{ ( resources.Get "mydata/html1.html" | resources.Minify ).Content | safeHTML }}
-Min HTML Remote: {{ ( resources.GetRemote "%[1]s/mydata/html1.html" | resources.Minify ).Content | safeHTML }}
+Min HTML Remote: {{ ( resources.GetRemote "TEST_URL/mydata/html1.html" | resources.Minify ).Content | safeHTML }}
 `, ts.URL))
 		}, func(b *sitesBuilder) {
 			b.AssertFileContent("public/index.html", `Min CSS: h1{font-style:bold}`)
@@ -399,13 +398,14 @@ Min HTML Remote: {{ ( resources.GetRemote "%[1]s/mydata/html1.html" | resources.
 
 		{"remote", func() bool { return true }, func(b *sitesBuilder) {
 			b.WithTemplates("home.html", fmt.Sprintf(`
-{{$js := resources.GetRemote "%[1]s/js/script1.js" }}
+%s
+{{$js := resources.GetRemote "TEST_URL/js/script1.js" }}
 Remote Filename: {{ $js.RelPermalink }}
-{{$svg := resources.GetRemote "%[1]s/mydata/svg1.svg" }}
+{{$svg := resources.GetRemote "TEST_URL/mydata/svg1.svg" }}
 Remote Content-Disposition: {{ $svg.RelPermalink }}
-{{$auth := resources.GetRemote "%[1]s/authenticated/" (dict "headers" (dict "Authorization" "Bearer abcd")) }}
+{{$auth := resources.GetRemote "TEST_URL/authenticated/" (dict "headers" (dict "Authorization" "Bearer abcd")) }}
 Remote Authorization: {{ $auth.Content }}
-{{$post := resources.GetRemote "%[1]s/post" (dict "method" "post" "body" "Request body") }}
+{{$post := resources.GetRemote "TEST_URL/post" (dict "method" "post" "body" "Request body") }}
 Remote POST: {{ $post.Content }}
 `, ts.URL))
 		}, func(b *sitesBuilder) {
@@ -733,34 +733,4 @@ JSON: {{ $json.RelPermalink }}: {{ $json.Content }}
 		"imagesByType: 2",
 		"applicationByType: 3",
 		"/jsons/data1.json: json1 content")
-}
-
-func TestResourceMinifyDisabled(t *testing.T) {
-	t.Parallel()
-
-	b := newTestSitesBuilder(t).WithConfigFile("toml", `
-baseURL = "https://example.org"
-
-[minify]
-disableXML=true
-
-
-`)
-
-	b.WithContent("page.md", "")
-
-	b.WithSourceFile(
-		"assets/xml/data.xml", "<root>   <foo> asdfasdf </foo> </root>",
-	)
-
-	b.WithTemplates("index.html", `
-{{ $xml := resources.Get "xml/data.xml" | minify | fingerprint }}
-XML: {{ $xml.Content | safeHTML }}|{{ $xml.RelPermalink }}
-`)
-
-	b.Build(BuildCfg{})
-
-	b.AssertFileContent("public/index.html", `
-XML: <root>   <foo> asdfasdf </foo> </root>|/xml/data.min.3be4fddd19aaebb18c48dd6645215b822df74701957d6d36e59f203f9c30fd9f.xml
-`)
 }

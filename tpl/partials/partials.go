@@ -37,6 +37,7 @@ import (
 	"github.com/gohugoio/hugo/deps"
 )
 
+// TODO1 merge.
 // TestTemplateProvider is global deps.ResourceProvider.
 // NOTE: It's currently unused.
 var TestTemplateProvider deps.ResourceProvider
@@ -251,6 +252,7 @@ func (ns *Namespace) getOrCreate(ctx context.Context, key partialCacheKey, conte
 
 	// This needs to be done outside the lock.
 	// See #9588
+	// TODO1
 	_, p, err = ns.include(ctx, key.name, context)
 	if err != nil {
 		return nil, err

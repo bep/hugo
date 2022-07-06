@@ -114,7 +114,7 @@ func (i *importCmd) importFromJekyll(cmd *cobra.Command, args []string) error {
 	jww.FEEDBACK.Println("Importing...")
 
 	fileCount := 0
-	callback := func(path string, fi hugofs.FileMetaInfo, err error) error {
+	callback := func(path string, fi hugofs.FileMetaDirEntry, err error) error {
 		if err != nil {
 			return err
 		}

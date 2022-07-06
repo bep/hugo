@@ -44,7 +44,7 @@ const (
 }`
 )
 
-func Pack(fs afero.Fs, fis []hugofs.FileMetaInfo) error {
+func Pack(fs afero.Fs, fis []hugofs.FileMetaDirEntry) error {
 	var b *packageBuilder
 
 	// Have a package.hugo.json?
@@ -77,7 +77,7 @@ func Pack(fs afero.Fs, fis []hugofs.FileMetaInfo) error {
 		}
 	}
 
-	meta := fi.(hugofs.FileMetaInfo).Meta()
+	meta := fi.(hugofs.FileMetaDirEntry).Meta()
 	masterFilename := meta.Filename
 	f, err := meta.Open()
 	if err != nil {
@@ -96,7 +96,7 @@ func Pack(fs afero.Fs, fis []hugofs.FileMetaInfo) error {
 			continue
 		}
 
-		meta := fi.(hugofs.FileMetaInfo).Meta()
+		meta := fi.(hugofs.FileMetaDirEntry).Meta()
 
 		if meta.Filename == masterFilename {
 			continue

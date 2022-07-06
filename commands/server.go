@@ -604,7 +604,7 @@ func (c *commandeer) serve(s *serverCmd) error {
 		servers = append(servers, srv)
 
 		if doLiveReload {
-			u, err := url.Parse(helpers.SanitizeURL(baseURLs[i]))
+			u, err := url.Parse(baseURLs[i])
 			if err != nil {
 				return err
 			}

@@ -344,6 +344,8 @@ func TestFastMD5FromFile(t *testing.T) {
 
 	sf1, err := fs.Open("small.txt")
 	c.Assert(err, qt.IsNil)
+	fi1, err := fs.Stat("small.txt")
+	c.Assert(err, qt.IsNil)
 	sf2, err := fs.Open("small2.txt")
 	c.Assert(err, qt.IsNil)
 
@@ -357,19 +359,20 @@ func TestFastMD5FromFile(t *testing.T) {
 	defer bf1.Close()
 	defer bf2.Close()
 
-	m1, err := MD5FromFileFast(sf1)
+	m1, s1, err := MD5FromReaderFast(sf1)
 	c.Assert(err, qt.IsNil)
 	c.Assert(m1, qt.Equals, "e9c8989b64b71a88b4efb66ad05eea96")
+	c.Assert(s1, qt.Equals, fi1.Size())
 
-	m2, err := MD5FromFileFast(sf2)
+	m2, _, err := MD5FromReaderFast(sf2)
 	c.Assert(err, qt.IsNil)
 	c.Assert(m2, qt.Not(qt.Equals), m1)
 
-	m3, err := MD5FromFileFast(bf1)
+	m3, _, err := MD5FromReaderFast(bf1)
 	c.Assert(err, qt.IsNil)
 	c.Assert(m3, qt.Not(qt.Equals), m2)
 
-	m4, err := MD5FromFileFast(bf2)
+	m4, _, err := MD5FromReaderFast(bf2)
 	c.Assert(err, qt.IsNil)
 	c.Assert(m4, qt.Not(qt.Equals), m3)
 
@@ -398,7 +401,7 @@ func BenchmarkMD5FromFileFast(b *testing.B) {
 						b.Fatal(err)
 					}
 				} else {
-					if _, err := MD5FromFileFast(f); err != nil {
+					if _, _, err := MD5FromReaderFast(f); err != nil {
 						b.Fatal(err)
 					}
 				}

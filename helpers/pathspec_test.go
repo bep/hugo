@@ -14,7 +14,9 @@
 package helpers
 
 import (
+	"fmt"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	qt "github.com/frankban/quicktest"
@@ -25,38 +27,58 @@ import (
 
 func TestNewPathSpecFromConfig(t *testing.T) {
 	c := qt.New(t)
-	v := newTestCfg()
-	l := langs.NewLanguage("no", v)
-	v.Set("disablePathToLower", true)
-	v.Set("removePathAccents", true)
-	v.Set("uglyURLs", true)
-	v.Set("canonifyURLs", true)
-	v.Set("paginatePath", "side")
-	v.Set("baseURL", "http://base.com/foo")
-	v.Set("themesDir", "thethemes")
-	v.Set("layoutDir", "thelayouts")
-	v.Set("workingDir", "thework")
-	v.Set("staticDir", "thestatic")
-	v.Set("theme", "thetheme")
-	langs.LoadLanguageSettings(v, nil)
+	for _, baseURLWithPath := range []bool{false, true} {
+		for _, baseURLWithTrailingSlash := range []bool{false, true} {
+			c.Run(fmt.Sprintf("baseURLWithPath=%T-baseURLWithTrailingSlash=%T", baseURLWithPath, baseURLWithTrailingSlash), func(c *qt.C) {
+				baseURL := "http://base.com"
+				if baseURLWithPath {
+					baseURL += "/foo"
+				}
 
-	fs := hugofs.NewMem(v)
-	fs.Source.MkdirAll(filepath.FromSlash("thework/thethemes/thetheme"), 0777)
+				if baseURLWithTrailingSlash {
+					baseURL += "/"
+				}
 
-	p, err := NewPathSpec(fs, l, nil)
+				v := newTestCfg()
+				l := langs.NewLanguage("no", v)
+				v.Set("disablePathToLower", true)
+				v.Set("removePathAccents", true)
+				v.Set("uglyURLs", true)
+				v.Set("canonifyURLs", true)
+				v.Set("paginatePath", "side")
+				v.Set("baseURL", baseURL)
+				v.Set("themesDir", "thethemes")
+				v.Set("layoutDir", "thelayouts")
+				v.Set("workingDir", "thework")
+				v.Set("staticDir", "thestatic")
+				v.Set("theme", "thetheme")
+				langs.LoadLanguageSettings(v, nil)
 
-	c.Assert(err, qt.IsNil)
-	c.Assert(p.CanonifyURLs, qt.Equals, true)
-	c.Assert(p.DisablePathToLower, qt.Equals, true)
-	c.Assert(p.RemovePathAccents, qt.Equals, true)
-	c.Assert(p.UglyURLs, qt.Equals, true)
-	c.Assert(p.Language.Lang, qt.Equals, "no")
-	c.Assert(p.PaginatePath, qt.Equals, "side")
+				fs := hugofs.NewMem(v)
+				fs.Source.MkdirAll(filepath.FromSlash("thework/thethemes/thetheme"), 0777)
 
-	c.Assert(p.BaseURL.String(), qt.Equals, "http://base.com/foo")
-	c.Assert(p.BaseURLString, qt.Equals, "http://base.com/foo")
-	c.Assert(p.BaseURLNoPathString, qt.Equals, "http://base.com")
+				p, err := NewPathSpec(fs, l, nil)
 
-	c.Assert(p.ThemesDir, qt.Equals, "thethemes")
-	c.Assert(p.WorkingDir, qt.Equals, "thework")
+				c.Assert(err, qt.IsNil)
+				c.Assert(p.CanonifyURLs, qt.Equals, true)
+				c.Assert(p.DisablePathToLower, qt.Equals, true)
+				c.Assert(p.RemovePathAccents, qt.Equals, true)
+				c.Assert(p.UglyURLs, qt.Equals, true)
+				c.Assert(p.Language.Lang, qt.Equals, "no")
+				c.Assert(p.PaginatePath, qt.Equals, "side")
+
+				c.Assert(p.BaseURL.String(), qt.Equals, baseURL)
+				c.Assert(p.BaseURLStringOrig, qt.Equals, baseURL)
+				baseURLNoTrailingSlash := strings.TrimSuffix(baseURL, "/")
+				c.Assert(p.BaseURLString, qt.Equals, baseURLNoTrailingSlash)
+				c.Assert(p.BaseURLNoPathString, qt.Equals, strings.TrimSuffix(baseURLNoTrailingSlash, "/foo"))
+
+				c.Assert(p.ThemesDir, qt.Equals, "thethemes")
+				c.Assert(p.WorkingDir, qt.Equals, "thework")
+
+			})
+
+		}
+
+	}
 }

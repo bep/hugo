@@ -24,6 +24,7 @@ import (
 
 	"github.com/bep/debounce"
 	"github.com/gohugoio/hugo/common/loggers"
+	"github.com/gohugoio/hugo/hugofs"
 
 	"github.com/spf13/cast"
 
@@ -604,7 +605,7 @@ func (c *collector) mountCommonJSConfig(owner *moduleAdapter, mounts []Mount) ([
 	}
 
 	// Mount the common JS config files.
-	fis, err := afero.ReadDir(c.fs, owner.Dir())
+	fis, err := hugofs.ReadDir(c.fs, owner.Dir())
 	if err != nil {
 		return mounts, err
 	}

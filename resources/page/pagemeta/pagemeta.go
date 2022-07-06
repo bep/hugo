@@ -17,6 +17,7 @@ import (
 	"github.com/mitchellh/mapstructure"
 )
 
+// TODO1 remove this type. Only URL and Slug is used, I think.
 type URLPath struct {
 	URL       string
 	Permalink string

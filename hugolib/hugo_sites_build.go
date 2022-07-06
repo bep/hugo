@@ -21,6 +21,7 @@ import (
 	"path/filepath"
 	"runtime/trace"
 	"strings"
+	"time"
 
 	"github.com/gohugoio/hugo/publisher"
 
@@ -76,14 +77,14 @@ func (h *HugoSites) Build(config BuildCfg, events ...fsnotify.Event) error {
 		h.Metrics.Reset()
 	}
 
-	h.testCounters = config.testCounters
+	h.buildCounters = &buildCounters{}
 
 	// Need a pointer as this may be modified.
 	conf := &config
 
 	if conf.whatChanged == nil {
 		// Assume everything has changed
-		conf.whatChanged = &whatChanged{source: true}
+		conf.whatChanged = &whatChanged{contentChanged: true}
 	}
 
 	var prepareErr error
@@ -105,7 +106,6 @@ func (h *HugoSites) Build(config BuildCfg, events ...fsnotify.Event) error {
 						return fmt.Errorf("initSites: %w", err)
 					}
 				}
-
 				return nil
 			}
 
@@ -216,10 +216,10 @@ func (h *HugoSites) initRebuild(config *BuildCfg) error {
 	}
 
 	for _, s := range h.Sites {
-		s.resetBuildState(config.whatChanged.source)
+		s.resetBuildState(config.whatChanged.contentChanged)
 	}
 
-	h.reset(config)
+	// TODO1 h.reset(config)
 	h.resetLogs()
 	helpers.InitLoggers()
 
@@ -227,11 +227,9 @@ func (h *HugoSites) initRebuild(config *BuildCfg) error {
 }
 
 func (h *HugoSites) process(config *BuildCfg, init func(config *BuildCfg) error, events ...fsnotify.Event) error {
-	// We should probably refactor the Site and pull up most of the logic from there to here,
-	// but that seems like a daunting task.
-	// So for now, if there are more than one site (language),
+	defer h.Log.PrintTimerIfDelayed(time.Now(), "Processed content")
+	// If there are more than one site (language),
 	// we pre-process the first one, then configure all the sites based on that.
-
 	firstSite := h.Sites[0]
 
 	if len(events) > 0 {
@@ -243,6 +241,8 @@ func (h *HugoSites) process(config *BuildCfg, init func(config *BuildCfg) error,
 }
 
 func (h *HugoSites) assemble(bcfg *BuildCfg) error {
+	defer h.Log.PrintTimerIfDelayed(time.Now(), "Assembled pages")
+
 	if len(h.Sites) > 1 {
 		// The first is initialized during process; initialize the rest
 		for _, site := range h.Sites[1:] {
@@ -252,22 +252,19 @@ func (h *HugoSites) assemble(bcfg *BuildCfg) error {
 		}
 	}
 
-	if !bcfg.whatChanged.source {
-		return nil
-	}
-
-	if err := h.getContentMaps().AssemblePages(); err != nil {
-		return err
-	}
-
-	if err := h.createPageCollections(); err != nil {
-		return err
+	if bcfg.whatChanged.contentChanged {
+		if err := h.withSite(true, func(s *Site) error {
+			return s.AssemblePages(bcfg.whatChanged)
+		}); err != nil {
+			return err
+		}
 	}
 
 	return nil
 }
 
 func (h *HugoSites) render(config *BuildCfg) error {
+	defer h.Log.PrintTimerIfDelayed(time.Now(), "Rendered pages")
 	if _, err := h.init.layouts.Do(); err != nil {
 		return err
 	}
@@ -276,7 +273,7 @@ func (h *HugoSites) render(config *BuildCfg) error {
 
 	if !config.PartialReRender {
 		h.renderFormats = output.Formats{}
-		h.withSite(func(s *Site) error {
+		h.withSite(true, func(s *Site) error {
 			s.initRenderFormats()
 			return nil
 		})
@@ -284,6 +281,7 @@ func (h *HugoSites) render(config *BuildCfg) error {
 		for _, s := range h.Sites {
 			h.renderFormats = append(h.renderFormats, s.renderFormats...)
 		}
+
 	}
 
 	i := 0
@@ -329,9 +327,6 @@ func (h *HugoSites) render(config *BuildCfg) error {
 		if err := h.renderCrossSitesSitemap(); err != nil {
 			return err
 		}
-		if err := h.renderCrossSitesRobotsTXT(); err != nil {
-			return err
-		}
 	}
 
 	return nil
@@ -353,7 +348,7 @@ func (h *HugoSites) postProcess() error {
 		if err != nil {
 			h.Log.Warnf("Failed to resolve jsconfig.json dir: %s", err)
 		} else {
-			m := fi.(hugofs.FileMetaInfo).Meta()
+			m := fi.(hugofs.FileMetaDirEntry).Meta()
 			assetsDir := m.SourceRoot
 			if strings.HasPrefix(assetsDir, h.ResourceSpec.WorkingDir) {
 				if jsConfig := h.ResourceSpec.JSConfigBuilder.Build(assetsDir); jsConfig != nil {

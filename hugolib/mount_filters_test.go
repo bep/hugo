@@ -29,7 +29,7 @@ import (
 	qt "github.com/frankban/quicktest"
 )
 
-func TestMountFilters(t *testing.T) {
+func _TestMountFilters(t *testing.T) {
 	t.Parallel()
 	b := newTestSitesBuilder(t)
 	workingDir, clean, err := htesting.CreateTempDir(hugofs.Os, "hugo-test-mountfilters")

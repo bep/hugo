@@ -45,7 +45,7 @@ func TestRSSOutput(t *testing.T) {
 	// Home RSS
 	th.assertFileContent(filepath.Join("public", rssURI), "<?xml", "rss version", "RSSTest")
 	// Section RSS
-	th.assertFileContent(filepath.Join("public", "sect", rssURI), "<?xml", "rss version", "Sects on RSSTest")
+	th.assertFileContent(filepath.Join("public", "sect", rssURI), "<?xml", "rss version", "<title>Sects on RSSTest")
 	// Taxonomy RSS
 	th.assertFileContent(filepath.Join("public", "categories", "hugo", rssURI), "<?xml", "rss version", "hugo on RSSTest")
 

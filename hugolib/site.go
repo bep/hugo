@@ -14,6 +14,7 @@
 package hugolib
 
 import (
+	"context"
 	"fmt"
 	"html/template"
 	"io"
@@ -21,17 +22,20 @@ import (
 	"mime"
 	"net/url"
 	"os"
-	"path"
 	"path/filepath"
-	"regexp"
 	"runtime"
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
+	"github.com/gohugoio/hugo/cache/memcache"
 	"github.com/gohugoio/hugo/common/htime"
 	"github.com/gohugoio/hugo/common/hugio"
+	"github.com/gohugoio/hugo/hugolib/doctree"
+	"github.com/pkg/errors"
+
 	"github.com/gohugoio/hugo/common/types"
 	"github.com/gohugoio/hugo/modules"
 	"golang.org/x/text/unicode/norm"
@@ -41,8 +45,6 @@ import (
 	"github.com/gohugoio/hugo/common/constants"
 
 	"github.com/gohugoio/hugo/common/loggers"
-
-	"github.com/gohugoio/hugo/resources"
 
 	"github.com/gohugoio/hugo/identity"
 
@@ -60,6 +62,8 @@ import (
 
 	"github.com/gohugoio/hugo/common/hugo"
 	"github.com/gohugoio/hugo/publisher"
+	"github.com/gohugoio/hugo/resources/page/pagekinds"
+	"github.com/gohugoio/hugo/resources/page/siteidentities"
 
 	"github.com/gohugoio/hugo/langs"
 
@@ -90,16 +94,16 @@ import (
 //
 // 1. A list of Files is parsed and then converted into Pages.
 //
-// 2. Pages contain sections (based on the file they were generated from),
-//    aliases and slugs (included in a pages frontmatter) which are the
-//    various targets that will get generated.  There will be canonical
-//    listing.  The canonical path can be overruled based on a pattern.
+//  2. Pages contain sections (based on the file they were generated from),
+//     aliases and slugs (included in a pages frontmatter) which are the
+//     various targets that will get generated.  There will be canonical
+//     listing.  The canonical path can be overruled based on a pattern.
 //
-// 3. Taxonomies are created via configuration and will present some aspect of
-//    the final page and typically a perm url.
+//  3. Taxonomies are created via configuration and will present some aspect of
+//     the final page and typically a perm url.
 //
-// 4. All Pages are passed through a template based on their desired
-//    layout based on numerous different elements.
+//  4. All Pages are passed through a template based on their desired
+//     layout based on numerous different elements.
 //
 // 5. The entire collection of files is written to disk.
 type Site struct {
@@ -108,15 +112,15 @@ type Site struct {
 	// sites .
 	h *HugoSites
 
-	*PageCollections
+	*pageFinder
 
 	taxonomies TaxonomyList
 
-	Sections Taxonomy
-	Info     *SiteInfo
+	Info *SiteInfo
 
-	language   *langs.Language
-	siteBucket *pagesMapBucket
+	language      *langs.Language
+	languageIndex int
+	cascade       map[page.PageMatcher]maps.Params
 
 	siteCfg siteConfigHolder
 
@@ -177,18 +181,32 @@ func (s *Site) Taxonomies() TaxonomyList {
 	return s.taxonomies
 }
 
-type taxonomiesConfig map[string]string
-
-func (t taxonomiesConfig) Values() []viewName {
-	var vals []viewName
-	for k, v := range t {
-		vals = append(vals, viewName{singular: k, plural: v})
+type (
+	taxonomiesConfig       map[string]string
+	taxonomiesConfigValues struct {
+		views          []viewName
+		viewsByTreeKey map[string]viewName
 	}
-	sort.Slice(vals, func(i, j int) bool {
-		return vals[i].plural < vals[j].plural
+)
+
+func (t taxonomiesConfig) Values() taxonomiesConfigValues {
+	var views []viewName
+	for k, v := range t {
+		views = append(views, viewName{singular: k, plural: v, pluralTreeKey: cleanTreeKey(v)})
+	}
+	sort.Slice(views, func(i, j int) bool {
+		return views[i].plural < views[j].plural
 	})
 
-	return vals
+	viewsByTreeKey := make(map[string]viewName)
+	for _, v := range views {
+		viewsByTreeKey[v.pluralTreeKey] = v
+	}
+
+	return taxonomiesConfigValues{
+		views:          views,
+		viewsByTreeKey: viewsByTreeKey,
+	}
 }
 
 type siteConfigHolder struct {
@@ -212,14 +230,6 @@ func (init *siteInit) Reset() {
 	init.prevNextInSection.Reset()
 	init.menus.Reset()
 	init.taxonomies.Reset()
-}
-
-func (s *Site) initInit(init *lazy.Init, pctx pageContext) bool {
-	_, err := init.Do()
-	if err != nil {
-		s.h.FatalError(pctx.wrapError(err))
-	}
-	return err == nil
 }
 
 func (s *Site) prepareInits() {
@@ -255,10 +265,6 @@ func (s *Site) prepareInits() {
 	})
 
 	s.init.prevNextInSection = init.Branch(func() (any, error) {
-		var sections page.Pages
-		s.home.treeRef.m.collectSectionsRecursiveIncludingSelf(pageMapQuery{Prefix: s.home.treeRef.key}, func(n *contentNode) {
-			sections = append(sections, n.p)
-		})
 
 		setNextPrev := func(pas page.Pages) {
 			for i, p := range pas {
@@ -285,28 +291,20 @@ func (s *Site) prepareInits() {
 			}
 		}
 
-		for _, sect := range sections {
-			treeRef := sect.(treeRefProvider).getTreeRef()
+		sections := s.pageMap.getPagesInSection(
+			pageMapQueryPagesInSection{
+				pageMapQueryPagesBelowPath: pageMapQueryPagesBelowPath{
+					Path:         "",
+					KindsInclude: pagekinds.Section,
+				},
+				IncludeSelf: true,
+				Recursive:   true,
+			},
+		)
 
-			var pas page.Pages
-			treeRef.m.collectPages(pageMapQuery{Prefix: treeRef.key + cmBranchSeparator}, func(c *contentNode) {
-				pas = append(pas, c.p)
-			})
-			page.SortByDefault(pas)
-
-			setNextPrev(pas)
+		for _, section := range sections {
+			setNextPrev(section.RegularPages())
 		}
-
-		// The root section only goes one level down.
-		treeRef := s.home.getTreeRef()
-
-		var pas page.Pages
-		treeRef.m.collectPages(pageMapQuery{Prefix: treeRef.key + cmBranchSeparator}, func(c *contentNode) {
-			pas = append(pas, c.p)
-		})
-		page.SortByDefault(pas)
-
-		setNextPrev(pas)
 
 		return nil, nil
 	})
@@ -317,13 +315,55 @@ func (s *Site) prepareInits() {
 	})
 
 	s.init.taxonomies = init.Branch(func() (any, error) {
-		err := s.pageMap.assembleTaxonomies()
-		return nil, err
+		if err := s.pageMap.CreateSiteTaxonomies(); err != nil {
+			return nil, err
+		}
+		return s.taxonomies, nil
 	})
 }
 
 type siteRenderingContext struct {
 	output.Format
+}
+
+// Pages returns all pages.
+// This is for the current language only.
+func (s *Site) Pages() page.Pages {
+	return s.pageMap.getPagesInSection(
+		pageMapQueryPagesInSection{
+			pageMapQueryPagesBelowPath: pageMapQueryPagesBelowPath{
+				Path:             s.home.Path(),
+				ListFilterGlobal: true,
+			},
+			Recursive:   true,
+			IncludeSelf: true,
+		},
+	)
+}
+
+// RegularPages returns all the regular pages.
+// This is for the current language only.
+func (s *Site) RegularPages() page.Pages {
+	return s.pageMap.getPagesInSection(
+		pageMapQueryPagesInSection{
+			pageMapQueryPagesBelowPath: pageMapQueryPagesBelowPath{
+				Path:             s.home.Path(),
+				KindsInclude:     pagekinds.Page,
+				ListFilterGlobal: true,
+			},
+			Recursive: true,
+		},
+	)
+}
+
+// AllPages returns all pages for all sites.
+func (s *Site) AllPages() page.Pages {
+	return s.h.Pages()
+}
+
+// AllRegularPages returns all regular pages for all sites.
+func (s *Site) AllRegularPages() page.Pages {
+	return s.h.RegularPages()
 }
 
 func (s *Site) Menus() navigation.Menus {
@@ -334,15 +374,23 @@ func (s *Site) Menus() navigation.Menus {
 func (s *Site) initRenderFormats() {
 	formatSet := make(map[string]bool)
 	formats := output.Formats{}
-	s.pageMap.pageTrees.WalkRenderable(func(s string, n *contentNode) bool {
-		for _, f := range n.p.m.configuredOutputFormats {
-			if !formatSet[f.Name] {
-				formats = append(formats, f)
-				formatSet[f.Name] = true
-			}
-		}
-		return false
-	})
+
+	s.pageMap.treePages.Walk(
+		context.TODO(),
+		doctree.WalkConfig[contentNodeI]{
+			Callback: func(ctx *doctree.WalkContext[contentNodeI], key string, n contentNodeI) (bool, error) {
+				if p, ok := n.(*pageState); ok {
+					for _, f := range p.m.configuredOutputFormats {
+						if !formatSet[f.Name] {
+							formats = append(formats, f)
+							formatSet[f.Name] = true
+						}
+					}
+				}
+				return false, nil
+			},
+		},
+	)
 
 	// Add the per kind configured output formats
 	for _, kind := range allKindsInPages {
@@ -358,6 +406,7 @@ func (s *Site) initRenderFormats() {
 
 	sort.Sort(formats)
 	s.renderFormats = formats
+
 }
 
 func (s *Site) GetRelatedDocsHandler() *page.RelatedDocsHandler {
@@ -369,9 +418,6 @@ func (s *Site) Language() *langs.Language {
 }
 
 func (s *Site) isEnabled(kind string) bool {
-	if kind == kindUnknown {
-		panic("Unknown kind")
-	}
 	return !s.disabledKinds[kind]
 }
 
@@ -389,18 +435,19 @@ func (s *Site) reset() *Site {
 		frontmatterHandler:  s.frontmatterHandler,
 		mediaTypesConfig:    s.mediaTypesConfig,
 		language:            s.language,
-		siteBucket:          s.siteBucket,
+		languageIndex:       s.languageIndex,
+		cascade:             s.cascade,
 		h:                   s.h,
 		publisher:           s.publisher,
 		siteConfigConfig:    s.siteConfigConfig,
 		init:                s.init,
-		PageCollections:     s.PageCollections,
+		pageFinder:          s.pageFinder,
 		siteCfg:             s.siteCfg,
 	}
 }
 
 // newSite creates a new site with the given configuration.
-func newSite(cfg deps.DepsCfg) (*Site, error) {
+func newSite(i int, cfg deps.DepsCfg) (*Site, error) {
 	if cfg.Language == nil {
 		cfg.Language = langs.NewDefaultLanguage(cfg.Cfg)
 	}
@@ -409,7 +456,8 @@ func newSite(cfg deps.DepsCfg) (*Site, error) {
 	}
 
 	ignoreErrors := cast.ToStringSlice(cfg.Language.Get("ignoreErrors"))
-	ignorableLogger := loggers.NewIgnorableLogger(cfg.Logger, ignoreErrors...)
+	ignoreWarnings := cast.ToStringSlice(cfg.Language.Get("ignoreWarnings"))
+	ignorableLogger := loggers.NewIgnorableLogger(cfg.Logger, ignoreErrors, ignoreWarnings)
 
 	disabledKinds := make(map[string]bool)
 	for _, disabled := range cast.ToStringSlice(cfg.Language.Get("disableKinds")) {
@@ -418,16 +466,16 @@ func newSite(cfg deps.DepsCfg) (*Site, error) {
 
 	if disabledKinds["taxonomyTerm"] {
 		// Correct from the value it had before Hugo 0.73.0.
-		if disabledKinds[page.KindTaxonomy] {
-			disabledKinds[page.KindTerm] = true
+		if disabledKinds[pagekinds.Taxonomy] {
+			disabledKinds[pagekinds.Term] = true
 		} else {
-			disabledKinds[page.KindTaxonomy] = true
+			disabledKinds[pagekinds.Taxonomy] = true
 		}
 
 		delete(disabledKinds, "taxonomyTerm")
-	} else if disabledKinds[page.KindTaxonomy] && !disabledKinds[page.KindTerm] {
+	} else if disabledKinds[pagekinds.Taxonomy] && !disabledKinds[pagekinds.Term] {
 		// This is a potentially ambigous situation. It may be correct.
-		ignorableLogger.Errorsf(constants.ErrIDAmbigousDisableKindTaxonomy, `You have the value 'taxonomy' in the disabledKinds list. In Hugo 0.73.0 we fixed these to be what most people expect (taxonomy and term).
+		ignorableLogger.Warnsf(constants.ErrIDAmbigousDisableKindTaxonomy, `You have the value 'taxonomy' in the disabledKinds list. In Hugo 0.73.0 we fixed these to be what most people expect (taxonomy and term).
 But this also means that your site configuration may not do what you expect. If it is correct, you can suppress this message by following the instructions below.`)
 	}
 
@@ -460,7 +508,7 @@ But this also means that your site configuration may not do what you expect. If 
 		return nil, err
 	}
 
-	rssDisabled := disabledKinds[kindRSS]
+	rssDisabled := disabledKinds["RSS"]
 	if rssDisabled {
 		// Legacy
 		tmp := siteOutputFormatsConfig[:0]
@@ -478,19 +526,19 @@ But this also means that your site configuration may not do what you expect. If 
 
 		// Check and correct taxonomy kinds vs pre Hugo 0.73.0.
 		v1, hasTaxonomyTerm := siteOutputs["taxonomyterm"]
-		v2, hasTaxonomy := siteOutputs[page.KindTaxonomy]
-		_, hasTerm := siteOutputs[page.KindTerm]
+		v2, hasTaxonomy := siteOutputs[pagekinds.Taxonomy]
+		_, hasTerm := siteOutputs[pagekinds.Term]
 		if hasTaxonomy && hasTaxonomyTerm {
-			siteOutputs[page.KindTaxonomy] = v1
-			siteOutputs[page.KindTerm] = v2
+			siteOutputs[pagekinds.Taxonomy] = v1
+			siteOutputs[pagekinds.Term] = v2
 			delete(siteOutputs, "taxonomyTerm")
 		} else if hasTaxonomy && !hasTerm {
 			// This is a potentially ambigous situation. It may be correct.
-			ignorableLogger.Errorsf(constants.ErrIDAmbigousOutputKindTaxonomy, `You have configured output formats for 'taxonomy' in your site configuration. In Hugo 0.73.0 we fixed these to be what most people expect (taxonomy and term).
+			ignorableLogger.Warnsf(constants.ErrIDAmbigousOutputKindTaxonomy, `You have configured output formats for 'taxonomy' in your site configuration. In Hugo 0.73.0 we fixed these to be what most people expect (taxonomy and term).
 But this also means that your site configuration may not do what you expect. If it is correct, you can suppress this message by following the instructions below.`)
 		}
 		if !hasTaxonomy && hasTaxonomyTerm {
-			siteOutputs[page.KindTaxonomy] = v1
+			siteOutputs[pagekinds.Taxonomy] = v1
 			delete(siteOutputs, "taxonomyterm")
 		}
 	}
@@ -523,6 +571,7 @@ But this also means that your site configuration may not do what you expect. If 
 		return nil, err
 	}
 
+	// TODO1 check usage
 	timeout := 30 * time.Second
 	if cfg.Language.IsSet("timeout") {
 		v := cfg.Language.Get("timeout")
@@ -540,23 +589,20 @@ But this also means that your site configuration may not do what you expect. If 
 		enableEmoji:      cfg.Language.Cfg.GetBool("enableEmoji"),
 	}
 
-	var siteBucket *pagesMapBucket
+	var cascade map[page.PageMatcher]maps.Params
 	if cfg.Language.IsSet("cascade") {
 		var err error
-		cascade, err := page.DecodeCascade(cfg.Language.Get("cascade"))
+		cascade, err = page.DecodeCascade(cfg.Language.Get("cascade"))
 		if err != nil {
 			return nil, fmt.Errorf("failed to decode cascade config: %s", err)
-		}
-
-		siteBucket = &pagesMapBucket{
-			cascade: cascade,
 		}
 
 	}
 
 	s := &Site{
 		language:      cfg.Language,
-		siteBucket:    siteBucket,
+		languageIndex: i,
+		cascade:       cascade,
 		disabledKinds: disabledKinds,
 
 		outputFormats:       outputFormats,
@@ -578,23 +624,6 @@ But this also means that your site configuration may not do what you expect. If 
 	return s, nil
 }
 
-// NewSite creates a new site with the given dependency configuration.
-// The site will have a template system loaded and ready to use.
-// Note: This is mainly used in single site tests.
-func NewSite(cfg deps.DepsCfg) (*Site, error) {
-	s, err := newSite(cfg)
-	if err != nil {
-		return nil, err
-	}
-
-	var l configLoader
-	if err = l.applyDeps(cfg, s); err != nil {
-		return nil, err
-	}
-
-	return s, nil
-}
-
 // NewSiteDefaultLang creates a new site in the default language.
 // The site will have a template system loaded and ready to use.
 // Note: This is mainly used in single site tests.
@@ -605,18 +634,6 @@ func NewSiteDefaultLang(withTemplate ...func(templ tpl.TemplateManager) error) (
 		return nil, err
 	}
 	return newSiteForLang(langs.NewDefaultLanguage(l.cfg), withTemplate...)
-}
-
-// NewEnglishSite creates a new site in English language.
-// The site will have a template system loaded and ready to use.
-// Note: This is mainly used in single site tests.
-// TODO(bep) test refactor -- remove
-func NewEnglishSite(withTemplate ...func(templ tpl.TemplateManager) error) (*Site, error) {
-	l := configLoader{cfg: config.New()}
-	if err := l.applyConfigDefaults(); err != nil {
-		return nil, err
-	}
-	return newSiteForLang(langs.NewLanguage("en", l.cfg), withTemplate...)
 }
 
 // newSiteForLang creates a new site in the given language.
@@ -646,6 +663,8 @@ func NewSiteForCfg(cfg deps.DepsCfg) (*Site, error) {
 	return h.Sites[0], nil
 }
 
+var _ identity.IdentityLookupProvider = (*SiteInfo)(nil)
+
 type SiteInfo struct {
 	Authors page.AuthorList
 	Social  SiteSocial
@@ -673,6 +692,10 @@ type SiteInfo struct {
 	language                       *langs.Language
 	defaultContentLanguageInSubdir bool
 	sectionPagesMenu               string
+}
+
+func (s *SiteInfo) LookupIdentity(name string) (identity.Identity, bool) {
+	return siteidentities.FromString(name)
 }
 
 func (s *SiteInfo) Pages() page.Pages {
@@ -752,7 +775,7 @@ func (s *SiteInfo) String() string {
 }
 
 func (s *SiteInfo) BaseURL() template.URL {
-	return template.URL(s.s.PathSpec.BaseURL.String())
+	return template.URL(s.s.PathSpec.BaseURLStringOrig)
 }
 
 // ServerPort returns the port part of the BaseURL, 0 if none found.
@@ -831,7 +854,7 @@ func (s siteRefLinker) logNotFound(ref, what string, p page.Page, position text.
 	} else if p == nil {
 		s.errorLogger.Printf("[%s] REF_NOT_FOUND: Ref %q: %s", s.s.Lang(), ref, what)
 	} else {
-		s.errorLogger.Printf("[%s] REF_NOT_FOUND: Ref %q from page %q: %s", s.s.Lang(), ref, p.Pathc(), what)
+		s.errorLogger.Printf("[%s] REF_NOT_FOUND: Ref %q from page %q: %s", s.s.Lang(), ref, p.Path(), what)
 	}
 }
 
@@ -857,6 +880,7 @@ func (s *siteRefLinker) refLink(ref string, source any, relative bool, outputFor
 	if refURL.Path != "" {
 		var err error
 		target, err = s.s.getPageRef(p, refURL.Path)
+
 		var pos text.Position
 		if err != nil || target == nil {
 			if p, ok := source.(text.Positioner); ok {
@@ -923,8 +947,34 @@ func (s *Site) multilingual() *Multilingual {
 }
 
 type whatChanged struct {
-	source bool
-	files  map[string]bool
+	mu sync.Mutex
+
+	contentChanged bool
+	identitySet    identity.Identities
+}
+
+func (w *whatChanged) Add(ids ...identity.Identity) {
+	if w == nil {
+		return
+	}
+
+	w.mu.Lock()
+	defer w.mu.Unlock()
+
+	if w.identitySet == nil {
+		return
+	}
+
+	for _, id := range ids {
+		w.identitySet[id] = true
+	}
+}
+
+func (w *whatChanged) Changes() []identity.Identity {
+	if w == nil || w.identitySet == nil {
+		return nil
+	}
+	return w.identitySet.AsSlice()
 }
 
 // RegisterMediaTypes will register the Site's media types in the mime
@@ -978,7 +1028,7 @@ func (s *Site) translateFileEvents(events []fsnotify.Event) []fsnotify.Event {
 	eventMap := make(map[string][]fsnotify.Event)
 
 	// We often get a Remove etc. followed by a Create, a Create followed by a Write.
-	// Remove the superfluous events to mage the update logic simpler.
+	// Remove the superfluous events to make the update logic simpler.
 	for _, ev := range events {
 		eventMap[ev.Name] = append(eventMap[ev.Name], ev)
 	}
@@ -1010,102 +1060,159 @@ func (s *Site) translateFileEvents(events []fsnotify.Event) []fsnotify.Event {
 	return filtered
 }
 
-var (
-	// These are only used for cache busting, so false positives are fine.
-	// We also deliberately do not match for file suffixes to also catch
-	// directory names.
-	// TODO(bep) consider this when completing the relevant PR rewrite on this.
-	cssFileRe   = regexp.MustCompile("(css|sass|scss)")
-	cssConfigRe = regexp.MustCompile(`(postcss|tailwind)\.config\.js`)
-	jsFileRe    = regexp.MustCompile("(js|ts|jsx|tsx)")
-)
-
-// reBuild partially rebuilds a site given the filesystem events.
-// It returns whatever the content source was changed.
-// TODO(bep) clean up/rewrite this method.
+// processPartial prepares the Sites' sources for a partial rebuild.
+// TODO1 .CurrentSection -- no win slashes. Issue?
 func (s *Site) processPartial(config *BuildCfg, init func(config *BuildCfg) error, events []fsnotify.Event) error {
 	events = s.filterFileEvents(events)
 	events = s.translateFileEvents(events)
 
-	changeIdentities := make(identity.Identities)
-
-	s.Log.Debugf("Rebuild for events %q", events)
-
 	h := s.h
 
-	// First we need to determine what changed
-
 	var (
-		sourceChanged       = []fsnotify.Event{}
-		sourceReallyChanged = []fsnotify.Event{}
-		contentFilesChanged []string
-
-		tmplChanged bool
-		tmplAdded   bool
-		dataChanged bool
-		i18nChanged bool
-
-		sourceFilesChanged = make(map[string]bool)
+		tmplChanged    bool
+		tmplAdded      bool
+		i18nChanged    bool
+		contentChanged bool
 
 		// prevent spamming the log on changes
 		logger = helpers.NewDistinctErrorLogger()
 	)
 
-	var cachePartitions []string
-	// Special case
-	// TODO(bep) I have a ongoing branch where I have redone the cache. Consider this there.
 	var (
-		evictCSSRe *regexp.Regexp
-		evictJSRe  *regexp.Regexp
+		pathsChanges []*paths.PathInfo
+		pathsDeletes []*paths.PathInfo
 	)
 
 	for _, ev := range events {
-		if assetsFilename, _ := s.BaseFs.Assets.MakePathRelative(ev.Name); assetsFilename != "" {
-			cachePartitions = append(cachePartitions, resources.ResourceKeyPartitions(assetsFilename)...)
-			if evictCSSRe == nil {
-				if cssFileRe.MatchString(assetsFilename) || cssConfigRe.MatchString(assetsFilename) {
-					evictCSSRe = cssFileRe
-				}
-			}
-			if evictJSRe == nil && jsFileRe.MatchString(assetsFilename) {
-				evictJSRe = jsFileRe
+		removed := false
+
+		if ev.Op&fsnotify.Remove == fsnotify.Remove {
+			removed = true
+		}
+
+		// Some editors (Vim) sometimes issue only a Rename operation when writing an existing file
+		// Sometimes a rename operation means that file has been renamed other times it means
+		// it's been updated.
+		if ev.Op&fsnotify.Rename == fsnotify.Rename {
+			// If the file is still on disk, it's only been updated, if it's not, it's been moved
+			if ex, err := afero.Exists(s.Fs.Source, ev.Name); !ex || err != nil {
+				removed = true
 			}
 		}
 
-		id, found := s.eventToIdentity(ev)
-		if found {
-			changeIdentities[id] = id
+		paths := s.BaseFs.CollectPaths(ev.Name)
 
-			switch id.Type {
-			case files.ComponentFolderContent:
-				logger.Println("Source changed", ev)
-				sourceChanged = append(sourceChanged, ev)
-			case files.ComponentFolderLayouts:
-				tmplChanged = true
-				if !s.Tmpl().HasTemplate(id.Path) {
-					tmplAdded = true
+		if removed {
+			pathsDeletes = append(pathsDeletes, paths...)
+		} else {
+			pathsChanges = append(pathsChanges, paths...)
+		}
+
+	}
+
+	var (
+		addedOrChangedContent []*paths.PathInfo
+		identities            []identity.Identity
+	)
+	// Find the most specific identity possible (the m}ost specific being the Go pointer to a given Page).
+	handleChange := func(pathInfo *paths.PathInfo, delete bool) {
+		switch pathInfo.Component() {
+		case files.ComponentFolderContent:
+			logger.Println("Source changed", pathInfo.Filename())
+
+			// Assume that the site stats (e.g. Site lastmod) have changed.
+			identities = append(identities, siteidentities.Stats)
+
+			if ids := h.pageTrees.GetIdentities(pathInfo.Base()); len(ids) > 0 {
+				identities = append(identities, ids...)
+
+				if delete {
+					s, ok := h.pageTrees.treePages.LongestPrefixAll(pathInfo.Base())
+					if ok {
+						h.pageTrees.DeletePage(s)
+					}
+					identities = append(ids, siteidentities.PageCollections)
 				}
-				if tmplAdded {
-					logger.Println("Template added", ev)
-				} else {
-					logger.Println("Template changed", ev)
-				}
-
-			case files.ComponentFolderData:
-				logger.Println("Data changed", ev)
-				dataChanged = true
-			case files.ComponentFolderI18n:
-				logger.Println("i18n changed", ev)
-				i18nChanged = true
-
+			} else {
+				// New or renamed content file.
+				identities = append(ids, siteidentities.PageCollections)
 			}
+
+			contentChanged = true
+
+			// TODO1 can we do better? Must be in line with AssemblePages.
+			h.pageTrees.treeTaxonomyEntries.DeletePrefix("")
+
+			if !delete {
+				addedOrChangedContent = append(addedOrChangedContent, pathInfo)
+			}
+
+		case files.ComponentFolderLayouts:
+			tmplChanged = true
+			if !s.Tmpl().HasTemplate(pathInfo.Base()) {
+				tmplAdded = true
+			}
+			if tmplAdded {
+				logger.Println("Template added", pathInfo.Filename())
+				// A new template may require a more coarse grained build.
+				base := pathInfo.Base()
+				if strings.Contains(base, "_markup") {
+					identities = append(identities, identity.NewGlobIdentity(fmt.Sprintf("**/_markup/%s*", pathInfo.BaseNameNoIdentifier())))
+				}
+				if strings.Contains(base, "shortcodes") {
+					identities = append(identities, identity.NewGlobIdentity(fmt.Sprintf("shortcodes/%s*", pathInfo.BaseNameNoIdentifier())))
+				}
+			} else {
+				logger.Println("Template changed", pathInfo.Filename())
+				if templ, found := s.Tmpl().GetIdentity(pathInfo.Base()); found {
+					identities = append(identities, templ)
+				} else {
+					identities = append(identities, pathInfo)
+				}
+			}
+		case files.ComponentFolderAssets:
+			logger.Println("Asset changed", pathInfo.Filename())
+			r := h.ResourceSpec.ResourceCache.Get(context.Background(), memcache.CleanKey(pathInfo.Base()))
+			if !identity.WalkIdentities(r, false, func(level int, rid identity.Identity) bool {
+				identities = append(identities, rid)
+				return false
+			}) {
+
+				identities = append(identities, pathInfo)
+			}
+		case files.ComponentFolderData:
+			logger.Println("Data changed", pathInfo.Filename())
+
+			// This should cover all usage of site.Data.
+			// Currently very coarse grained.
+			identities = append(identities, siteidentities.Data)
+			s.h.init.data.Reset()
+		case files.ComponentFolderI18n:
+			logger.Println("i18n changed", pathInfo.Filename())
+			i18nChanged = true
+			identities = append(identities, pathInfo)
+		default:
+			panic(fmt.Sprintf("unknown component: %q", pathInfo.Component()))
 		}
 	}
+
+	for _, id := range pathsDeletes {
+		handleChange(id, true)
+	}
+
+	for _, id := range pathsChanges {
+		handleChange(id, false)
+	}
+
+	// TODO1 if config.ErrRecovery || tmplAdded {
+
+	resourceFiles := addedOrChangedContent // TODO1 + remove the PathIdentities .ToPathIdentities().Sort()
 
 	changed := &whatChanged{
-		source: len(sourceChanged) > 0,
-		files:  sourceFilesChanged,
+		contentChanged: contentChanged,
+		identitySet:    make(identity.Identities),
 	}
+	changed.Add(identities...)
 
 	config.whatChanged = changed
 
@@ -1113,22 +1220,23 @@ func (s *Site) processPartial(config *BuildCfg, init func(config *BuildCfg) erro
 		return err
 	}
 
-	// These in memory resource caches will be rebuilt on demand.
-	for _, s := range s.h.Sites {
-		s.ResourceSpec.ResourceCache.DeletePartitions(cachePartitions...)
-		if evictCSSRe != nil {
-			s.ResourceSpec.ResourceCache.DeleteMatches(evictCSSRe)
+	// Clear relevant cache and page state.
+	changes := changed.Changes()
+	if len(changes) > 0 {
+		for _, id := range changes {
+			if staler, ok := id.(resource.Staler); ok {
+				staler.MarkStale()
+			}
 		}
-		if evictJSRe != nil {
-			s.ResourceSpec.ResourceCache.DeleteMatches(evictJSRe)
-		}
+		h.resetPageRenderStateForIdentities(changes...)
+		h.MemCache.ClearOn(memcache.ClearOnRebuild, changes...)
 	}
 
 	if tmplChanged || i18nChanged {
 		sites := s.h.Sites
 		first := sites[0]
 
-		s.h.init.Reset()
+		s.h.init.layouts.Reset()
 
 		// TOD(bep) globals clean
 		if err := first.Deps.LoadResources(); err != nil {
@@ -1153,56 +1261,10 @@ func (s *Site) processPartial(config *BuildCfg, init func(config *BuildCfg) erro
 		}
 	}
 
-	if dataChanged {
-		s.h.init.data.Reset()
-	}
-
-	for _, ev := range sourceChanged {
-		removed := false
-
-		if ev.Op&fsnotify.Remove == fsnotify.Remove {
-			removed = true
-		}
-
-		// Some editors (Vim) sometimes issue only a Rename operation when writing an existing file
-		// Sometimes a rename operation means that file has been renamed other times it means
-		// it's been updated
-		if ev.Op&fsnotify.Rename == fsnotify.Rename {
-			// If the file is still on disk, it's only been updated, if it's not, it's been moved
-			if ex, err := afero.Exists(s.Fs.Source, ev.Name); !ex || err != nil {
-				removed = true
-			}
-		}
-
-		if removed && files.IsContentFile(ev.Name) {
-			h.removePageByFilename(ev.Name)
-		}
-
-		sourceReallyChanged = append(sourceReallyChanged, ev)
-		sourceFilesChanged[ev.Name] = true
-	}
-
-	if config.ErrRecovery || tmplAdded || dataChanged {
-		h.resetPageState()
-	} else {
-		h.resetPageStateFromEvents(changeIdentities)
-	}
-
-	if len(sourceReallyChanged) > 0 || len(contentFilesChanged) > 0 {
-		var filenamesChanged []string
-		for _, e := range sourceReallyChanged {
-			filenamesChanged = append(filenamesChanged, e.Name)
-		}
-		if len(contentFilesChanged) > 0 {
-			filenamesChanged = append(filenamesChanged, contentFilesChanged...)
-		}
-
-		filenamesChanged = helpers.UniqueStringsReuse(filenamesChanged)
-
-		if err := s.readAndProcessContent(*config, filenamesChanged...); err != nil {
+	if resourceFiles != nil {
+		if err := s.readAndProcessContent(*config, resourceFiles); err != nil {
 			return err
 		}
-
 	}
 
 	return nil
@@ -1213,8 +1275,8 @@ func (s *Site) process(config BuildCfg) (err error) {
 		err = fmt.Errorf("initialize: %w", err)
 		return
 	}
-	if err = s.readAndProcessContent(config); err != nil {
-		err = fmt.Errorf("readAndProcessContent: %w", err)
+	if err = s.readAndProcessContent(config, nil); err != nil {
+		err = errors.Wrap(err, "readAndProcessContent")
 		return
 	}
 	return err
@@ -1244,23 +1306,7 @@ func (s *Site) render(ctx *siteRenderContext) (err error) {
 		return
 	}
 
-	if ctx.outIdx == 0 {
-		if err = s.renderSitemap(); err != nil {
-			return
-		}
-
-		if ctx.multihost {
-			if err = s.renderRobotsTXT(); err != nil {
-				return
-			}
-		}
-
-		if err = s.render404(); err != nil {
-			return
-		}
-	}
-
-	if !ctx.renderSingletonPages() {
+	if !ctx.shouldRenderSingletonPages() {
 		return
 	}
 
@@ -1390,7 +1436,7 @@ func (s *Site) initializeSiteInfo() error {
 		hugoInfo:                       hugo.NewInfo(s.Cfg.GetString("environment"), deps),
 	}
 
-	rssOutputFormat, found := s.outputFormats[page.KindHome].GetByName(output.RSSFormat.Name)
+	rssOutputFormat, found := s.outputFormats[pagekinds.Home].GetByName(output.RSSFormat.Name)
 
 	if found {
 		s.Info.RSSLink = s.permalink(rssOutputFormat.BaseFilename())
@@ -1399,21 +1445,12 @@ func (s *Site) initializeSiteInfo() error {
 	return nil
 }
 
-func (s *Site) eventToIdentity(e fsnotify.Event) (identity.PathIdentity, bool) {
-	for _, fs := range s.BaseFs.SourceFilesystems.FileSystems() {
-		if p := fs.Path(e.Name); p != "" {
-			return identity.NewPathIdentity(fs.Name, filepath.ToSlash(p)), true
-		}
-	}
-	return identity.PathIdentity{}, false
-}
-
-func (s *Site) readAndProcessContent(buildConfig BuildCfg, filenames ...string) error {
+func (s *Site) readAndProcessContent(buildConfig BuildCfg, ids paths.PathInfos) error {
 	sourceSpec := source.NewSourceSpec(s.PathSpec, buildConfig.ContentInclusionFilter, s.BaseFs.Content.Fs)
 
 	proc := newPagesProcessor(s.h, sourceSpec)
 
-	c := newPagesCollector(sourceSpec, s.h.getContentMaps(), s.Log, s.h.ContentChanges, proc, filenames...)
+	c := newPagesCollector(s.h, sourceSpec, s.Log, s.h.ContentChanges, proc, ids)
 
 	if err := c.Collect(); err != nil {
 		return err
@@ -1471,7 +1508,7 @@ func (s *SiteInfo) createNodeMenuEntryURL(in string) string {
 	}
 	// make it match the nodes
 	menuEntryURL := in
-	menuEntryURL = helpers.SanitizeURLKeepTrailingSlash(s.s.PathSpec.URLize(menuEntryURL))
+	menuEntryURL = paths.URLEscape(s.s.PathSpec.URLize(menuEntryURL))
 	if !s.canonifyURLs {
 		menuEntryURL = paths.AddContextRoot(s.s.PathSpec.BaseURL.String(), menuEntryURL)
 	}
@@ -1502,46 +1539,58 @@ func (s *Site) assembleMenus() {
 	sectionPagesMenu := s.Info.sectionPagesMenu
 
 	if sectionPagesMenu != "" {
-		s.pageMap.sections.Walk(func(s string, v any) bool {
-			p := v.(*contentNode).p
-			if p.IsHome() {
-				return false
-			}
-			// From Hugo 0.22 we have nested sections, but until we get a
-			// feel of how that would work in this setting, let us keep
-			// this menu for the top level only.
-			id := p.Section()
-			if _, ok := flat[twoD{sectionPagesMenu, id}]; ok {
-				return false
-			}
+		s.pageMap.treePages.Walk(
+			context.TODO(), doctree.WalkConfig[contentNodeI]{
+				LockType: doctree.LockTypeRead,
+				Callback: func(ctx *doctree.WalkContext[contentNodeI], s string, n contentNodeI) (bool, error) {
+					p := n.(*pageState)
+					if !p.m.shouldBeCheckedForMenuDefinitions() {
+						return false, nil
+					}
+					// TODO1 what is all of this?
+					id := p.Section()
+					if _, ok := flat[twoD{sectionPagesMenu, id}]; ok {
+						return false, nil
+					}
 
-			me := navigation.MenuEntry{
-				Identifier: id,
-				Name:       p.LinkTitle(),
-				Weight:     p.Weight(),
-				Page:       p,
-			}
-			flat[twoD{sectionPagesMenu, me.KeyName()}] = &me
+					me := navigation.MenuEntry{
+						Identifier: id,
+						Name:       p.LinkTitle(),
+						Weight:     p.Weight(),
+						Page:       p,
+					}
+					flat[twoD{sectionPagesMenu, me.KeyName()}] = &me
 
-			return false
-		})
+					return false, nil
+				},
+			},
+		)
+
 	}
 
-	// Add menu entries provided by pages
-	s.pageMap.pageTrees.WalkRenderable(func(ss string, n *contentNode) bool {
-		p := n.p
+	s.pageMap.treePages.Walk(
+		context.TODO(), doctree.WalkConfig[contentNodeI]{
+			LockType: doctree.LockTypeRead,
+			Callback: func(ctx *doctree.WalkContext[contentNodeI], s string, n contentNodeI) (bool, error) {
+				p := n.(*pageState)
 
-		for name, me := range p.pageMenus.menus() {
-			if _, ok := flat[twoD{name, me.KeyName()}]; ok {
-				err := p.wrapError(fmt.Errorf("duplicate menu entry with identifier %q in menu %q", me.KeyName(), name))
-				s.Log.Warnln(err)
-				continue
-			}
-			flat[twoD{name, me.KeyName()}] = me
-		}
+				if !p.m.shouldBeCheckedForMenuDefinitions() {
+					return false, nil
+				}
 
-		return false
-	})
+				for name, me := range p.pageMenus.menus() {
+					if _, ok := flat[twoD{name, me.KeyName()}]; ok {
+						err := p.wrapError(fmt.Errorf("duplicate menu entry with identifier %q in menu %q", me.KeyName(), name))
+						p.s.Log.Warnln(err)
+						continue
+					}
+					flat[twoD{name, me.KeyName()}] = me
+				}
+
+				return false, nil
+			},
+		},
+	)
 
 	// Create Children Menus First
 	for _, e := range flat {
@@ -1570,6 +1619,7 @@ func (s *Site) assembleMenus() {
 			s.menus[menu.MenuName] = s.menus[menu.MenuName].Add(e)
 		}
 	}
+
 }
 
 // get any language code to prefix the target file path with.
@@ -1601,9 +1651,10 @@ func (s *Site) getLanguagePermalinkLang(alwaysInSubDir bool) string {
 }
 
 func (s *Site) getTaxonomyKey(key string) string {
-	if s.PathSpec.DisablePathToLower {
+	// TODO1
+	/*if s.PathSpec.DisablePathToLower {
 		return s.PathSpec.MakePath(key)
-	}
+	}*/
 	return strings.ToLower(s.PathSpec.MakePath(key))
 }
 
@@ -1613,22 +1664,22 @@ func (s *Site) resetBuildState(sourceChanged bool) {
 	s.init.Reset()
 
 	if sourceChanged {
-		s.pageMap.contentMap.pageReverseIndex.Reset()
-		s.PageCollections = newPageCollections(s.pageMap)
-		s.pageMap.withEveryBundlePage(func(p *pageState) bool {
-			p.pagePages = &pagePages{}
+		// TODO1 s.pageMap.pageReverseIndex.Reset()
+		/*s.pageMap.WithEveryBundlePage(func(p *pageState) bool {
 			if p.bucket != nil {
 				p.bucket.pagesMapBucketPages = &pagesMapBucketPages{}
 			}
-			p.parent = nil
 			p.Scratcher = maps.NewScratcher()
 			return false
-		})
+		})*/
+
 	} else {
-		s.pageMap.withEveryBundlePage(func(p *pageState) bool {
-			p.Scratcher = maps.NewScratcher()
-			return false
-		})
+		/*
+			s.pageMap.WithEveryBundlePage(func(p *pageState) bool {
+				p.Scratcher = maps.NewScratcher()
+				return false
+			})
+		*/
 	}
 }
 
@@ -1660,18 +1711,6 @@ func (s *SiteInfo) GetPage(ref ...string) (page.Page, error) {
 		p = page.NilPage
 	}
 
-	return p, err
-}
-
-func (s *SiteInfo) GetPageWithTemplateInfo(info tpl.Info, ref ...string) (page.Page, error) {
-	p, err := s.GetPage(ref...)
-	if p != nil {
-		// Track pages referenced by templates/shortcodes
-		// when in server mode.
-		if im, ok := info.(identity.Manager); ok {
-			im.Add(p)
-		}
-	}
 	return p, err
 }
 
@@ -1728,11 +1767,12 @@ func (s *Site) renderAndWriteXML(statCounter *uint64, name string, targetPath st
 
 func (s *Site) renderAndWritePage(statCounter *uint64, name string, targetPath string, p *pageState, templ tpl.Template) error {
 	s.Log.Debugf("Render %s to %q", name, targetPath)
-	s.h.IncrPageRender()
+	s.h.buildCounters.pageRender.Inc()
 	renderBuffer := bp.GetBuffer()
 	defer bp.PutBuffer(renderBuffer)
 
 	of := p.outputFormat()
+	p.pageOutput.renderState++
 
 	if err := s.renderForTemplate(p.Kind(), of.Name, p, renderBuffer, templ); err != nil {
 		return err
@@ -1786,7 +1826,6 @@ var infoOnMissingLayout = map[string]bool{
 // where ITEM is the thing being hooked.
 type hookRendererTemplate struct {
 	templateHandler tpl.TemplateHandler
-	identity.SearchProvider
 	templ           tpl.Template
 	resolvePosition func(ctx any) text.Position
 }
@@ -1823,87 +1862,16 @@ func (s *Site) renderForTemplate(name, outputFormat string, d any, w io.Writer, 
 	return
 }
 
-func (s *Site) lookupTemplate(layouts ...string) (tpl.Template, bool) {
-	for _, l := range layouts {
-		if templ, found := s.Tmpl().Lookup(l); found {
-			return templ, true
-		}
-	}
-
-	return nil, false
-}
-
 func (s *Site) publish(statCounter *uint64, path string, r io.Reader, fs afero.Fs) (err error) {
 	s.PathSpec.ProcessingStats.Incr(statCounter)
 
 	return helpers.WriteToDisk(filepath.Clean(path), r, fs)
 }
 
-func (s *Site) kindFromFileInfoOrSections(fi *fileInfo, sections []string) string {
-	if fi.TranslationBaseName() == "_index" {
-		if fi.Dir() == "" {
-			return page.KindHome
-		}
-
-		return s.kindFromSections(sections)
-
-	}
-
-	return page.KindPage
-}
-
-func (s *Site) kindFromSections(sections []string) string {
-	if len(sections) == 0 {
-		return page.KindHome
-	}
-
-	return s.kindFromSectionPath(path.Join(sections...))
-}
-
-func (s *Site) kindFromSectionPath(sectionPath string) string {
-	for _, plural := range s.siteCfg.taxonomiesConfig {
-		if plural == sectionPath {
-			return page.KindTaxonomy
-		}
-
-		if strings.HasPrefix(sectionPath, plural) {
-			return page.KindTerm
-		}
-
-	}
-
-	return page.KindSection
-}
-
-func (s *Site) newPage(
-	n *contentNode,
-	parentbBucket *pagesMapBucket,
-	kind, title string,
-	sections ...string) *pageState {
-	m := map[string]any{}
-	if title != "" {
-		m["title"] = title
-	}
-
-	p, err := newPageFromMeta(
-		n,
-		parentbBucket,
-		m,
-		&pageMeta{
-			s:        s,
-			kind:     kind,
-			sections: sections,
-		})
-	if err != nil {
-		panic(err)
-	}
-
-	return p
-}
-
-func (s *Site) shouldBuild(p page.Page) bool {
+func (s *Site) shouldBuild(p *pageState) bool {
+	dates := p.pageCommon.m.dates
 	return shouldBuild(s.BuildFuture, s.BuildExpired,
-		s.BuildDrafts, p.Draft(), p.PublishDate(), p.ExpiryDate())
+		s.BuildDrafts, p.Draft(), dates.PublishDate(), dates.ExpiryDate())
 }
 
 func shouldBuild(buildFuture bool, buildExpired bool, buildDrafts bool, Draft bool,

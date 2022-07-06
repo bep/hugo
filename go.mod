@@ -2,7 +2,6 @@ module github.com/gohugoio/hugo
 
 require (
 	github.com/BurntSushi/locker v0.0.0-20171006230638-a6e239ea1c69
-	github.com/PuerkitoBio/purell v1.1.1
 	github.com/alecthomas/chroma/v2 v2.4.0
 	github.com/armon/go-radix v1.0.0
 	github.com/aws/aws-sdk-go v1.43.5
@@ -13,14 +12,14 @@ require (
 	github.com/bep/godartsass v0.14.0
 	github.com/bep/golibsass v1.1.0
 	github.com/bep/gowebp v0.2.0
-	github.com/bep/overlayfs v0.6.0
+	github.com/bep/lazycache v0.0.0-20221117164806-9a5388257d0d
+	github.com/bep/overlayfs v0.8.0
 	github.com/bep/tmc v0.5.1
 	github.com/clbanning/mxj/v2 v2.5.7
 	github.com/cli/safeexec v1.0.0
 	github.com/disintegration/gift v1.2.1
 	github.com/dustin/go-humanize v1.0.0
 	github.com/evanw/esbuild v0.15.15
-	github.com/fortytw2/leaktest v1.3.0
 	github.com/frankban/quicktest v1.14.4
 	github.com/fsnotify/fsnotify v1.6.0
 	github.com/getkin/kin-openapi v0.109.0
@@ -45,14 +44,16 @@ require (
 	github.com/muesli/smartcrop v0.3.0
 	github.com/niklasfasching/go-org v1.6.5
 	github.com/olekukonko/tablewriter v0.0.5
+	github.com/pbnjay/memory v0.0.0-20210728143218-7b4eea64cf58
 	github.com/pelletier/go-toml/v2 v2.0.6
+	github.com/pkg/errors v0.9.1
 	github.com/rogpeppe/go-internal v1.9.0
 	github.com/rwcarlsen/goexif v0.0.0-20190401172101-9e8deecbddbd
 	github.com/sanity-io/litter v1.5.5
 	github.com/spf13/afero v1.9.3
 	github.com/spf13/cast v1.5.0
 	github.com/spf13/cobra v1.6.1
-	github.com/spf13/fsync v0.9.0
+	github.com/spf13/fsync v0.10.0
 	github.com/spf13/jwalterweatherman v1.1.0
 	github.com/spf13/pflag v1.0.5
 	github.com/tdewolff/minify/v2 v2.12.4
@@ -82,7 +83,6 @@ require (
 	github.com/Azure/go-autorest/autorest/date v0.3.0 // indirect
 	github.com/Azure/go-autorest/logger v0.2.1 // indirect
 	github.com/Azure/go-autorest/tracing v0.6.0 // indirect
-	github.com/PuerkitoBio/urlesc v0.0.0-20170810143723-de5bf2ad4578 // indirect
 	github.com/aws/aws-sdk-go-v2 v1.9.0 // indirect
 	github.com/aws/aws-sdk-go-v2/config v1.7.0 // indirect
 	github.com/aws/aws-sdk-go-v2/credentials v1.4.0 // indirect
@@ -103,6 +103,7 @@ require (
 	github.com/google/wire v0.5.0 // indirect
 	github.com/googleapis/gax-go/v2 v2.3.0 // indirect
 	github.com/googleapis/go-type-adapters v1.0.0 // indirect
+	github.com/hashicorp/golang-lru/v2 v2.0.1 // indirect
 	github.com/inconshreveable/mousetrap v1.0.1 // indirect
 	github.com/invopop/yaml v0.1.0 // indirect
 	github.com/jmespath/go-jmespath v0.4.0 // indirect

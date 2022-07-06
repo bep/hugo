@@ -20,6 +20,7 @@ import (
 
 	"github.com/gohugoio/hugo/common/maps"
 	"github.com/gohugoio/hugo/hugofs/glob"
+	"github.com/gohugoio/hugo/resources/page/pagekinds"
 	"github.com/mitchellh/mapstructure"
 )
 
@@ -60,8 +61,8 @@ func (m PageMatcher) Matches(p Page) bool {
 
 	if m.Path != "" {
 		g, err := glob.GetGlob(m.Path)
-		// TODO(bep) Path() vs filepath vs leading slash.
-		p := strings.ToLower(filepath.ToSlash(p.Pathc()))
+		// TODO1 vs file.Path.
+		p := strings.ToLower(filepath.ToSlash(p.Path()))
 		if !(strings.HasPrefix(p, "/")) {
 			p = "/" + p
 		}
@@ -125,7 +126,7 @@ func DecodePageMatcher(m any, v *PageMatcher) error {
 	if v.Kind != "" {
 		g, _ := glob.GetGlob(v.Kind)
 		found := false
-		for _, k := range kindMap {
+		for _, k := range pagekinds.KindMap {
 			if g.Match(k) {
 				found = true
 				break

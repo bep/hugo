@@ -173,15 +173,22 @@ func (l *logger) Out() io.Writer {
 	return l.out
 }
 
+// FormatBuildDuration formats a duration to a string on the form expected in "Total in ..." etc.
+func FormatBuildDuration(name string, d time.Duration) string {
+	if d.Milliseconds() < 2000 {
+		return fmt.Sprintf("%s in %dms", name, d.Milliseconds())
+	}
+	return fmt.Sprintf("%s in %.2fs", name, d.Seconds())
+}
+
 // PrintTimerIfDelayed prints a time statement to the FEEDBACK logger
 // if considerable time is spent.
 func (l *logger) PrintTimerIfDelayed(start time.Time, name string) {
 	elapsed := time.Since(start)
-	milli := int(1000 * elapsed.Seconds())
-	if milli < 500 {
+	if elapsed.Milliseconds() < 500 {
 		return
 	}
-	l.Printf("%s in %v ms", name, milli)
+	fmt.Println(FormatBuildDuration(name, elapsed))
 }
 
 func (l *logger) PrintTimer(start time.Time, name string) {

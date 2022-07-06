@@ -14,6 +14,7 @@
 package hugolib
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"path/filepath"
@@ -21,7 +22,7 @@ import (
 	"time"
 
 	"github.com/gohugoio/hugo/common/htime"
-	"github.com/gohugoio/hugo/helpers"
+	"github.com/gohugoio/hugo/common/paths"
 
 	"github.com/gohugoio/hugo/source"
 
@@ -83,7 +84,7 @@ func (f ContentFactory) ApplyArchetypeTemplate(w io.Writer, p page.Page, archety
 		return fmt.Errorf("failed to parse archetype template: %s: %w", err, err)
 	}
 
-	result, err := executeToString(ps.s.Tmpl(), templ, d)
+	result, err := executeToString(context.Background(), ps.s.Tmpl(), templ, d)
 	if err != nil {
 		return fmt.Errorf("failed to execute archetype template: %s: %w", err, err)
 	}
@@ -91,7 +92,6 @@ func (f ContentFactory) ApplyArchetypeTemplate(w io.Writer, p page.Page, archety
 	_, err = io.WriteString(w, f.shortcodeReplacerPost.Replace(result))
 
 	return err
-
 }
 
 func (f ContentFactory) SectionFromFilename(filename string) (string, error) {
@@ -100,12 +100,7 @@ func (f ContentFactory) SectionFromFilename(filename string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-
-	parts := strings.Split(helpers.ToSlashTrimLeading(rel), "/")
-	if len(parts) < 2 {
-		return "", nil
-	}
-	return parts[0], nil
+	return paths.Parse(filepath.ToSlash(rel)).Section(), nil
 }
 
 // CreateContentPlaceHolder creates a content placeholder file inside the
@@ -168,7 +163,7 @@ type archetypeFileData struct {
 
 	// File is the same as Page.File, embedded here for historic reasons.
 	// TODO(bep) make this a method.
-	source.File
+	*source.File
 }
 
 func (f *archetypeFileData) Site() page.Site {

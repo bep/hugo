@@ -53,20 +53,33 @@ func TestFilenameFilter(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 	c.Assert(nopFilter.Match("ab.txt", false), qt.Equals, true)
 
-	includeOnlyFilter, err := NewFilenameFilter([]string{"**.json", "**.jpg"}, nil)
-	c.Assert(err, qt.IsNil)
-	c.Assert(includeOnlyFilter.Match("ab.json", false), qt.Equals, true)
-	c.Assert(includeOnlyFilter.Match("ab.jpg", false), qt.Equals, true)
-	c.Assert(includeOnlyFilter.Match("ab.gif", false), qt.Equals, false)
+	var (
+		nilFilter         *FilenameFilter
+		includeOnlyFilter *FilenameFilter
+	)
 
+	includeOnlyFilter, err = NewFilenameFilter([]string{"**.json", "**.jpg"}, nil)
+	c.Assert(err, qt.IsNil)
 	exlcudeOnlyFilter, err := NewFilenameFilter(nil, []string{"**.json", "**.jpg"})
 	c.Assert(err, qt.IsNil)
-	c.Assert(exlcudeOnlyFilter.Match("ab.json", false), qt.Equals, false)
-	c.Assert(exlcudeOnlyFilter.Match("ab.jpg", false), qt.Equals, false)
-	c.Assert(exlcudeOnlyFilter.Match("ab.gif", false), qt.Equals, true)
+	excludeAbGifFilter, err := NewFilenameFilter(nil, []string{"**.gif"})
+	c.Assert(err, qt.IsNil)
 
-	var nilFilter *FilenameFilter
-	c.Assert(nilFilter.Match("ab.gif", false), qt.Equals, true)
+	for i := 0; i < 2; i++ {
+		c.Assert(includeOnlyFilter.Match("ab.json", false), qt.Equals, true)
+		c.Assert(includeOnlyFilter.Match("ab.jpg", false), qt.Equals, true)
+		c.Assert(includeOnlyFilter.Match("ab.gif", false), qt.Equals, false)
+
+		c.Assert(err, qt.IsNil)
+		c.Assert(exlcudeOnlyFilter.Match("ab.json", false), qt.Equals, false)
+		c.Assert(exlcudeOnlyFilter.Match("ab.jpg", false), qt.Equals, false)
+		c.Assert(exlcudeOnlyFilter.Match("ab.gif", false), qt.Equals, true, qt.Commentf("%d", i))
+
+		chain := exlcudeOnlyFilter.Append(excludeAbGifFilter)
+		c.Assert(chain.Match("ab.gif", false), qt.Equals, false)
+
+		c.Assert(nilFilter.Match("ab.gif", false), qt.Equals, true)
+	}
 
 	funcFilter := NewFilenameFilterForInclusionFunc(func(s string) bool { return strings.HasSuffix(s, ".json") })
 	c.Assert(funcFilter.Match("ab.json", false), qt.Equals, true)

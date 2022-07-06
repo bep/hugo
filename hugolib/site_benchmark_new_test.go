@@ -101,7 +101,6 @@ title="My Page"
 
 My page content.
 `
-
 	}
 
 	var categoryKey string
@@ -241,7 +240,6 @@ canonifyURLs = true
 				return sb
 			},
 			func(s *sitesBuilder) {
-
 			},
 		},
 		{
@@ -273,6 +271,8 @@ canonifyURLs = true
 
 				sb := newTestSitesBuilder(b).WithConfigFile("toml", `
 baseURL = "https://example.com"
+
+ignoreWarnings = ["warn-path-file"]
 
 [languages]
 [languages.en]
@@ -421,6 +421,7 @@ baseURL = "https://example.com"
 				createContent := func(dir, name string) {
 					var content string
 					if strings.Contains(name, "_index") {
+						// TODO(bep) fixme
 						content = pageContent(1)
 					} else {
 						content = pageContentWithCategory(1, fmt.Sprintf("category%d", r.Intn(5)+1))
@@ -479,13 +480,10 @@ title: %s
 
 Edited!!`, p.Title()))
 
-	counters := &testCounters{}
+	b.Build(BuildCfg{})
 
-	b.Build(BuildCfg{testCounters: counters})
-
-	// We currently rebuild all the language versions of the same content file.
-	// We could probably optimize that case, but it's not trivial.
-	b.Assert(int(counters.contentRenderCounter), qt.Equals, 4)
+	// We rebuild all the language versions of the same content file.
+	b.Assert(int(b.H.buildCounters.contentRender.Load()), qt.Equals, 4)
 	b.AssertFileContent("public"+p.RelPermalink()+"index.html", "Edited!!")
 }
 
@@ -535,7 +533,7 @@ func BenchmarkSiteNew(b *testing.B) {
 								panic("infinite loop")
 							}
 							p = pages[rnd.Intn(len(pages))]
-							if !p.File().IsZero() {
+							if p.File() != nil {
 								break
 							}
 						}

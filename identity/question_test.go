@@ -1,4 +1,4 @@
-// Copyright 2020 The Hugo Authors. All rights reserved.
+// Copyright 2022 The Hugo Authors. All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -11,4 +11,29 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package js
+package identity
+
+import (
+	"testing"
+
+	qt "github.com/frankban/quicktest"
+)
+
+func TestQuestion(t *testing.T) {
+	c := qt.New(t)
+
+	q := NewQuestion(StringIdentity("2+2?"))
+
+	v, ok := q.Result()
+	c.Assert(ok, qt.Equals, false)
+	c.Assert(v, qt.IsNil)
+
+	q.Answer(func() any {
+		return 4
+	})
+
+	v, ok = q.Result()
+	c.Assert(ok, qt.Equals, true)
+	c.Assert(v, qt.Equals, 4)
+
+}

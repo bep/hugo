@@ -30,7 +30,7 @@ import (
 
 // We have many tests for the different resize operations etc. in the resource package,
 // this is an integration test.
-func TestImageOps(t *testing.T) {
+func _TestImageOps(t *testing.T) {
 	c := qt.New(t)
 	// Make this a real as possible.
 	workDir, clean, err := htesting.CreateTempDir(hugofs.Os, "image-resize")
@@ -170,7 +170,7 @@ IMG SHORTCODE: /images/sunset_hu59e56ffff1bc1d8d122b1403d34e039f_90587_129x239_r
 	assertImages()
 }
 
-func TestImageResizeMultilingual(t *testing.T) {
+func _TestImageResizeMultilingual(t *testing.T) {
 	b := newTestSitesBuilder(t).WithConfigFile("toml", `
 baseURL="https://example.org"
 defaultContentLanguage = "en"
