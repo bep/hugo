@@ -132,11 +132,6 @@ func (s *IntegrationTestBuilder) AssertBuildCountLayouts(count int) {
 	s.Assert(s.H.init.layouts.InitCount(), qt.Equals, count)
 }
 
-func (s *IntegrationTestBuilder) AssertBuildCountTranslations(count int) {
-	s.Helper()
-	s.Assert(s.H.init.translations.InitCount(), qt.Equals, count)
-}
-
 func (s *IntegrationTestBuilder) AssertFileContent(filename string, matches ...string) {
 	s.Helper()
 	content := strings.TrimSpace(s.FileContent(filename))
@@ -147,7 +142,7 @@ func (s *IntegrationTestBuilder) AssertFileContent(filename string, matches ...s
 			if match == "" || strings.HasPrefix(match, "#") {
 				continue
 			}
-			s.Assert(content, qt.Contains, match, qt.Commentf(m))
+			s.Assert(content, qt.Contains, match, qt.Commentf(content))
 		}
 	}
 }
@@ -183,12 +178,12 @@ func (s *IntegrationTestBuilder) AssertIsFileError(err error) herrors.FileError 
 
 func (s *IntegrationTestBuilder) AssertRenderCountContent(count int) {
 	s.Helper()
-	s.Assert(s.counters.contentRenderCounter, qt.Equals, uint64(count))
+	s.Assert(s.H.buildCounters.contentRender.Load(), qt.Equals, uint64(count))
 }
 
 func (s *IntegrationTestBuilder) AssertRenderCountPage(count int) {
 	s.Helper()
-	s.Assert(s.counters.pageRenderCounter, qt.Equals, uint64(count))
+	s.Assert(s.H.buildCounters.pageRender.Load(), qt.Equals, uint64(count))
 }
 
 func (s *IntegrationTestBuilder) Build() *IntegrationTestBuilder {
@@ -205,7 +200,22 @@ func (s *IntegrationTestBuilder) Build() *IntegrationTestBuilder {
 	return s
 }
 
+func (s *IntegrationTestBuilder) BuildWithBuildCfg(cfg BuildCfg) *IntegrationTestBuilder {
+	s.Helper()
+	_, err := s.buildE(cfg)
+	if s.Cfg.Verbose || err != nil {
+		fmt.Println(s.logBuff.String())
+	}
+	s.Assert(err, qt.IsNil)
+	return s
+}
+
 func (s *IntegrationTestBuilder) BuildE() (*IntegrationTestBuilder, error) {
+	s.Helper()
+	return s.buildE(BuildCfg{})
+}
+
+func (s *IntegrationTestBuilder) buildE(cfg BuildCfg) (*IntegrationTestBuilder, error) {
 	s.Helper()
 	if err := s.initBuilder(); err != nil {
 		return s, err
@@ -368,6 +378,12 @@ func (s *IntegrationTestBuilder) initBuilder() error {
 		s.H = sites
 		s.fs = fs
 
+		errorCount := s.H.Log.LogCounters().ErrorCounter.Count()
+		if errorCount > 0 {
+			initErr = fmt.Errorf("error count on init: %d", errorCount)
+			return
+		}
+
 		if s.Cfg.NeedsNpmInstall {
 			wd, _ := os.Getwd()
 			s.Assert(os.Chdir(s.Cfg.WorkingDir), qt.IsNil)
@@ -407,8 +423,6 @@ func (s *IntegrationTestBuilder) build(cfg BuildCfg) error {
 
 	changeEvents := s.changeEvents()
 	s.logBuff.Reset()
-	s.counters = &testCounters{}
-	cfg.testCounters = s.counters
 
 	if s.buildCount > 0 && (len(changeEvents) == 0) {
 		return nil

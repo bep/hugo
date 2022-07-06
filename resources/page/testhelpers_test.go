@@ -24,7 +24,6 @@ import (
 	"github.com/gohugoio/hugo/hugofs/files"
 	"github.com/gohugoio/hugo/identity"
 	"github.com/gohugoio/hugo/markup/tableofcontents"
-	"github.com/gohugoio/hugo/tpl"
 
 	"github.com/gohugoio/hugo/resources/resource"
 
@@ -107,7 +106,7 @@ type testPage struct {
 	params map[string]any
 	data   map[string]any
 
-	file source.File
+	file *source.File
 
 	currentSection *testPage
 	sectionEntries []string
@@ -201,12 +200,12 @@ func (p *testPage) Extension() string {
 	panic("tespage: not implemented")
 }
 
-func (p *testPage) File() source.File {
+func (p *testPage) File() *source.File {
 	return p.file
 }
 
-func (p *testPage) FileInfo() hugofs.FileMetaInfo {
-	panic("tespage: not implemented")
+func (p *testPage) FileInfo() hugofs.FileMetaDirEntry {
+	panic("not implemented")
 }
 
 func (p *testPage) Filename() string {
@@ -222,10 +221,6 @@ func (p *testPage) FuzzyWordCount(context.Context) int {
 }
 
 func (p *testPage) GetPage(ref string) (Page, error) {
-	panic("tespage: not implemented")
-}
-
-func (p *testPage) GetPageWithTemplateInfo(info tpl.Info, ref string) (Page, error) {
 	panic("tespage: not implemented")
 }
 
@@ -261,16 +256,16 @@ func (p *testPage) Hugo() hugo.HugoInfo {
 	panic("tespage: not implemented")
 }
 
-func (p *testPage) InSection(other any) (bool, error) {
-	panic("tespage: not implemented")
+func (p *testPage) InSection(other any) bool {
+	panic("not implemented")
 }
 
-func (p *testPage) IsAncestor(other any) (bool, error) {
-	panic("tespage: not implemented")
+func (p *testPage) IsAncestor(other any) bool {
+	panic("not implemented")
 }
 
-func (p *testPage) IsDescendant(other any) (bool, error) {
-	panic("tespage: not implemented")
+func (p *testPage) IsDescendant(other any) bool {
+	panic("not implemented")
 }
 
 func (p *testPage) IsDraft() bool {
@@ -423,10 +418,6 @@ func (p *testPage) Path() string {
 	return p.path
 }
 
-func (p *testPage) Pathc() string {
-	return p.path
-}
-
 func (p *testPage) Permalink() string {
 	panic("tespage: not implemented")
 }
@@ -488,7 +479,7 @@ func (p *testPage) RelRefFrom(argsm map[string]any, source any) (string, error) 
 }
 
 func (p *testPage) Render(ctx context.Context, layout ...string) (template.HTML, error) {
-	panic("tespage: not implemented")
+	panic("not implemented")
 }
 
 func (p *testPage) RenderString(ctx context.Context, args ...any) (template.HTML, error) {
@@ -600,8 +591,12 @@ func (p *testPage) WordCount(context.Context) int {
 	panic("tespage: not implemented")
 }
 
-func (p *testPage) GetIdentity() identity.Identity {
-	panic("tespage: not implemented")
+func (p *testPage) IdentifierBase() any {
+	return p.path
+}
+
+func (p *testPage) GetDependencyManager() identity.Manager {
+	return identity.NopManager
 }
 
 func createTestPages(num int) Pages {

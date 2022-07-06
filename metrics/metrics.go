@@ -52,6 +52,8 @@ type diff struct {
 	simSum   int
 }
 
+var counter = 0
+
 func (d *diff) add(v any) *diff {
 	if types.IsNil(d.baseline) {
 		d.baseline = v

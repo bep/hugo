@@ -18,6 +18,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"regexp"
 	"strings"
 
@@ -36,7 +37,36 @@ var _ Result = (*pageLexer)(nil)
 
 // Parse parses the page in the given reader according to the given Config.
 func Parse(r io.Reader, cfg Config) (Result, error) {
-	return parseSection(r, cfg, lexIntroSection)
+
+	panic("TODO1: remove this")
+}
+
+// ParseBytes parses the page in b according to the given Config.
+// TODO1 remove Parse and rename this.
+func ParseBytes(b []byte, cfg Config) (Items, error) {
+	l, err := parseBytes(b, cfg, lexIntroSection)
+	if err != nil {
+		return nil, err
+	}
+	return l.items, nil
+}
+
+// ParseBytesIntroOnly stops parsing after the intro section.
+func ParseBytesIntroOnly(b []byte, cfg Config) (Items, error) {
+	l, err := parseBytes(b, cfg, lexIntroSectionAndStop)
+	if err != nil {
+		return nil, err
+	}
+	return l.items, nil
+}
+
+// ParseBytesMain parses b starting with the main section.
+func ParseBytesMain(b []byte, cfg Config) (Items, error) {
+	l, err := parseBytes(b, cfg, lexMainSection)
+	if err != nil {
+		return nil, err
+	}
+	return l.items, nil
 }
 
 type ContentFrontMatter struct {
@@ -50,24 +80,29 @@ type ContentFrontMatter struct {
 func ParseFrontMatterAndContent(r io.Reader) (ContentFrontMatter, error) {
 	var cf ContentFrontMatter
 
-	psr, err := Parse(r, Config{})
+	input, err := ioutil.ReadAll(r)
+	if err != nil {
+		return cf, fmt.Errorf("failed to read page content: %w", err)
+	}
+
+	psr, err := ParseBytes(input, Config{})
 	if err != nil {
 		return cf, err
 	}
 
 	var frontMatterSource []byte
 
-	iter := psr.Iterator()
+	iter := NewIterator(psr)
 
 	walkFn := func(item Item) bool {
 		if frontMatterSource != nil {
 			// The rest is content.
-			cf.Content = psr.Input()[item.low:]
+			cf.Content = input[item.low:]
 			// Done
 			return false
 		} else if item.IsFrontMatter() {
 			cf.FrontMatterFormat = FormatFromFrontMatterType(item.Type)
-			frontMatterSource = item.Val(psr.Input())
+			frontMatterSource = item.Val(input)
 		}
 		return true
 	}
@@ -106,10 +141,10 @@ func parseSection(r io.Reader, cfg Config, start stateFunc) (Result, error) {
 	return parseBytes(b, cfg, start)
 }
 
-func parseBytes(b []byte, cfg Config, start stateFunc) (Result, error) {
+func parseBytes(b []byte, cfg Config, start stateFunc) (*pageLexer, error) {
 	lexer := newPageLexer(b, start, cfg)
 	lexer.run()
-	return lexer, nil
+	return lexer, lexer.err
 }
 
 // NewIterator creates a new Iterator.

@@ -133,7 +133,7 @@ func (c *convertCommand) convertAndSavePage(p page.Page, site *hugolib.Site, tar
 		}
 	}
 
-	if p.File().IsZero() {
+	if p.File() == nil {
 		// No content file.
 		return nil
 	}

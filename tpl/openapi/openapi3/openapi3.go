@@ -1,4 +1,4 @@
-// Copyright 2020 The Hugo Authors. All rights reserved.
+// Copyright 2021 The Hugo Authors. All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -15,6 +15,7 @@
 package openapi3
 
 import (
+	"context"
 	"fmt"
 	"io"
 
@@ -23,33 +24,28 @@ import (
 	"errors"
 
 	kopenapi3 "github.com/getkin/kin-openapi/openapi3"
-	"github.com/gohugoio/hugo/cache/namedmemcache"
+	"github.com/gohugoio/hugo/cache/memcache"
 	"github.com/gohugoio/hugo/deps"
+	"github.com/gohugoio/hugo/identity"
 	"github.com/gohugoio/hugo/parser/metadecoders"
 	"github.com/gohugoio/hugo/resources/resource"
 )
 
 // New returns a new instance of the openapi3-namespaced template functions.
 func New(deps *deps.Deps) *Namespace {
-	// TODO(bep) consolidate when merging that "other branch" -- but be aware of the keys.
-	cache := namedmemcache.New()
-	deps.BuildStartListeners.Add(
-		func() {
-			cache.Clear()
-		})
-
 	return &Namespace{
-		cache: cache,
+		cache: memcache.GetOrCreatePartition[string, *T](deps.MemCache, "tpl/openapi3", memcache.OptionsPartition{Weight: 30, ClearWhen: memcache.ClearOnChange}),
 		deps:  deps,
 	}
 }
 
 // Namespace provides template functions for the "openapi3".
 type Namespace struct {
-	cache *namedmemcache.Cache
+	cache *memcache.Partition[string, *T]
 	deps  *deps.Deps
 }
 
+<<<<<<< HEAD
 // OpenAPIDocument represents an OpenAPI 3 document.
 type OpenAPIDocument struct {
 	*kopenapi3.T
@@ -57,21 +53,44 @@ type OpenAPIDocument struct {
 
 // Unmarshal unmarshals the given resource into an OpenAPI 3 document.
 func (ns *Namespace) Unmarshal(r resource.UnmarshableResource) (*OpenAPIDocument, error) {
+=======
+var _ identity.IdentityGroupProvider = (*T)(nil)
+
+// T shares cache life cycle with the other members of the same identity group.
+type T struct {
+	*kopenapi3.T
+	identityGroup identity.Identity
+}
+
+func (t *T) GetIdentityGroup() identity.Identity {
+	return t.identityGroup
+}
+
+// Unmarshal unmarshals the OpenAPI schemas in r into T.
+// Note that ctx is provided by the framework.
+func (ns *Namespace) Unmarshal(ctx context.Context, r resource.UnmarshableResource) (*T, error) {
+>>>>>>> 9a9ea8ca9 (Improve content map, memory cache and dependency resolution)
 	key := r.Key()
 	if key == "" {
 		return nil, errors.New("no Key set in Resource")
 	}
 
+<<<<<<< HEAD
 	v, err := ns.cache.GetOrCreate(key, func() (any, error) {
 		f := metadecoders.FormatFromStrings(r.MediaType().Suffixes()...)
+=======
+	v, err := ns.cache.GetOrCreate(ctx, key, func(string) (*T, error) {
+		f := metadecoders.FormatFromMediaType(r.MediaType())
+>>>>>>> 9a9ea8ca9 (Improve content map, memory cache and dependency resolution)
 		if f == "" {
-			return nil, fmt.Errorf("MIME %q not supported", r.MediaType())
+			return nil, fmt.Errorf("unknown media type: %q", r.MediaType())
 		}
 
 		reader, err := r.ReadSeekCloser()
 		if err != nil {
 			return nil, err
 		}
+
 		defer reader.Close()
 
 		b, err := io.ReadAll(reader)
@@ -92,6 +111,7 @@ func (ns *Namespace) Unmarshal(r resource.UnmarshableResource) (*OpenAPIDocument
 
 		err = kopenapi3.NewLoader().ResolveRefsIn(s, nil)
 
+<<<<<<< HEAD
 		return &OpenAPIDocument{T: s}, err
 	})
 	if err != nil {
@@ -99,4 +119,11 @@ func (ns *Namespace) Unmarshal(r resource.UnmarshableResource) (*OpenAPIDocument
 	}
 
 	return v.(*OpenAPIDocument), nil
+=======
+		return &T{T: s, identityGroup: identity.FirstIdentity(r)}, nil
+
+	})
+
+	return v, err
+>>>>>>> 9a9ea8ca9 (Improve content map, memory cache and dependency resolution)
 }

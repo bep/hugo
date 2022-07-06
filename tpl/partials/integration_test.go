@@ -217,6 +217,7 @@ D1
 	got = normalize(got)
 
 	expect := `
+	0        0       0      1  _internal/_default/robots.txt
 	0        0       0      1  index.html
 	100        0       0      1  partials/static2.html
 	100       50       1      2  partials/static1.html
@@ -224,7 +225,7 @@ D1
 	66       33       1      3  partials/halfdynamic1.html
 	`
 
-	b.Assert(got, hqt.IsSameString, expect)
+	b.Assert(got, hqt.IsSameString, expect, qt.Commentf(got))
 }
 
 // gobench --package ./tpl/partials

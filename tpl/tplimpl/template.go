@@ -17,6 +17,7 @@ import (
 	"bytes"
 	"context"
 	"embed"
+	"errors"
 	"fmt"
 	"io"
 	"io/fs"
@@ -42,7 +43,6 @@ import (
 
 	"github.com/gohugoio/hugo/common/herrors"
 	"github.com/gohugoio/hugo/hugofs"
-	"github.com/gohugoio/hugo/hugofs/files"
 
 	htmltemplate "github.com/gohugoio/hugo/tpl/internal/go_templates/htmltemplate"
 	texttemplate "github.com/gohugoio/hugo/tpl/internal/go_templates/texttemplate"
@@ -121,10 +121,6 @@ func needsBaseTemplate(templ string) bool {
 	return baseTemplateDefineRe.MatchString(templ[idx:])
 }
 
-func newIdentity(name string) identity.Manager {
-	return identity.NewManager(identity.NewPathIdentity(files.ComponentFolderLayouts, name))
-}
-
 func newStandaloneTextTemplate(funcs map[string]any) tpl.TemplateParseFinder {
 	return &textTemplateWrapperWithLock{
 		RWMutex:  &sync.RWMutex{},
@@ -147,7 +143,6 @@ func newTemplateHandlers(d *deps.Deps) (*tpl.TemplateHandlers, error) {
 	h := &templateHandler{
 		nameBaseTemplateName: make(map[string]string),
 		transformNotFound:    make(map[string]*templateState),
-		identityNotFound:     make(map[string][]identity.Manager),
 
 		shortcodes:   make(map[string]*shortcodeTemplates),
 		templateInfo: make(map[string]tpl.Info),
@@ -172,8 +167,18 @@ func newTemplateHandlers(d *deps.Deps) (*tpl.TemplateHandlers, error) {
 		return nil, err
 	}
 
+	timeout := 30 * time.Second
+	if d.Language.IsSet("timeout") {
+		v := d.Language.Get("timeout")
+		d, err := types.ToDurationE(v)
+		if err == nil {
+			timeout = d
+		}
+	}
+
 	e := &templateExec{
 		d:               d,
+		timeout:         timeout,
 		executor:        exec,
 		funcs:           funcs,
 		templateHandler: h,
@@ -201,13 +206,15 @@ func newTemplateNamespace(funcs map[string]any) *templateNamespace {
 }
 
 func newTemplateState(templ tpl.Template, info templateInfo) *templateState {
-	return &templateState{
+	s := &templateState{
 		info:      info,
 		typ:       info.resolveType(),
 		Template:  templ,
-		Manager:   newIdentity(info.name),
+		Manager:   identity.NewManager(tpl.NewTemplateIdentity(templ)),
 		parseInfo: tpl.DefaultParseInfo,
 	}
+
+	return s
 }
 
 type layoutCacheKey struct {
@@ -217,6 +224,7 @@ type layoutCacheKey struct {
 
 type templateExec struct {
 	d        *deps.Deps
+	timeout  time.Duration
 	executor texttemplate.Executer
 	funcs    map[string]reflect.Value
 
@@ -240,6 +248,7 @@ func (t *templateExec) ExecuteWithContext(ctx context.Context, templ tpl.Templat
 		rlocker.RLock()
 		defer rlocker.RUnlock()
 	}
+
 	if t.Metrics != nil {
 		defer t.Metrics.MeasureSince(templ.Name(), time.Now())
 	}
@@ -261,11 +270,37 @@ func (t *templateExec) ExecuteWithContext(ctx context.Context, templ tpl.Templat
 		}
 	}
 
-	execErr := t.executor.ExecuteWithContext(ctx, templ, wr, data)
-	if execErr != nil {
-		execErr = t.addFileContext(templ, execErr)
+	return t.withTimeout(ctx, t.timeout, func(ctx context.Context) error {
+		execErr := t.executor.ExecuteWithContext(ctx, templ, wr, data)
+		if execErr != nil {
+			execErr = t.addFileContext(templ, execErr)
+		}
+		return execErr
+	})
+
+}
+
+func (t *templateExec) withTimeout(parent context.Context, timeout time.Duration, f func(ctx context.Context) error) error {
+	ctx, cancel := context.WithTimeout(parent, timeout)
+	defer cancel()
+	errc := make(chan error, 1)
+
+	go func() {
+		err := f(ctx)
+		select {
+		case <-ctx.Done():
+			return
+		default:
+			errc <- err
+		}
+	}()
+
+	select {
+	case <-ctx.Done():
+		return errors.New("timed out executing a template. You may have a circular loop in a shortcode, or your site may have resources that take longer to build than the `timeout` limit in your Hugo config file.")
+	case e := <-errc:
+		return e
 	}
-	return execErr
 }
 
 func (t *templateExec) UnusedTemplates() []tpl.FileInfo {
@@ -345,9 +380,6 @@ type templateHandler struct {
 	// Holds name and source of template definitions not found during the first
 	// AST transformation pass.
 	transformNotFound map[string]*templateState
-
-	// Holds identities of templates not found during first pass.
-	identityNotFound map[string][]identity.Manager
 
 	// shortcodes maps shortcode name to template variants
 	// (language, output format etc.) of that shortcode.
@@ -456,10 +488,34 @@ func (t *templateHandler) HasTemplate(name string) bool {
 	return found
 }
 
+<<<<<<< HEAD
 func (t *templateHandler) findLayout(d layouts.LayoutDescriptor, f output.Format) (tpl.Template, bool, error) {
 	d.OutputFormatName = f.Name
 	d.Suffix = f.MediaType.FirstSuffix.Suffix
 	layouts, _ := t.layoutHandler.For(d)
+=======
+func (t *templateHandler) GetIdentity(name string) (identity.Identity, bool) {
+	if _, found := t.baseof[name]; found {
+		// TODO1
+		return identity.StringIdentity(name), true
+	}
+
+	if _, found := t.needsBaseof[name]; found {
+		// TODO1
+		return identity.StringIdentity(name), true
+
+	}
+
+	tt, found := t.Lookup(name)
+	if !found {
+		return nil, false
+	}
+	return tt.(identity.Identity), found
+}
+
+func (t *templateHandler) findLayout(d output.LayoutDescriptor, f output.Format) (tpl.Template, bool, error) {
+	layouts, _ := t.layoutHandler.For(d, f)
+>>>>>>> 9a9ea8ca9 (Improve content map, memory cache and dependency resolution)
 	for _, name := range layouts {
 		templ, found := t.main.Lookup(name)
 		if found {
@@ -492,9 +548,8 @@ func (t *templateHandler) findLayout(d layouts.LayoutDescriptor, f output.Format
 
 		if found {
 			ts.baseInfo = base
-
 			// Add the base identity to detect changes
-			ts.Add(identity.NewPathIdentity(files.ComponentFolderLayouts, base.name))
+			ts.AddIdentity(identity.StringIdentity(base.name))
 		}
 
 		t.applyTemplateTransformers(t.main, ts)
@@ -633,7 +688,7 @@ func (t *templateHandler) addTemplateFile(name, path string) error {
 
 		realFilename := filename
 		if fi, err := fs.Stat(filename); err == nil {
-			if fim, ok := fi.(hugofs.FileMetaInfo); ok {
+			if fim, ok := fi.(hugofs.FileMetaDirEntry); ok {
 				realFilename = fim.Meta().Filename
 			}
 		}
@@ -741,11 +796,6 @@ func (t *templateHandler) applyTemplateTransformers(ns *templateNamespace, ts *t
 
 	for k := range c.templateNotFound {
 		t.transformNotFound[k] = ts
-		t.identityNotFound[k] = append(t.identityNotFound[k], c.t)
-	}
-
-	for k := range c.identityNotFound {
-		t.identityNotFound[k] = append(t.identityNotFound[k], c.t)
 	}
 
 	return c, err
@@ -801,13 +851,18 @@ func (t *templateHandler) loadEmbedded() error {
 }
 
 func (t *templateHandler) loadTemplates() error {
-	walker := func(path string, fi hugofs.FileMetaInfo, err error) error {
+	walker := func(path string, fi hugofs.FileMetaDirEntry, err error) error {
 		if err != nil || fi.IsDir() {
 			return err
 		}
 
 		if isDotFile(path) || isBackupFile(path) {
 			return nil
+		}
+
+		if !strings.HasSuffix(path, fi.Name()) {
+			// TODO1
+			panic(fmt.Sprintf("loadTemplates: %q vs %q", path, fi.Name()))
 		}
 
 		name := strings.TrimPrefix(filepath.ToSlash(path), "/")
@@ -920,15 +975,6 @@ func (t *templateHandler) postTransform() error {
 			_, err := applyTemplateTransformers(templ, lookup)
 			if err != nil {
 				return err
-			}
-		}
-	}
-
-	for k, v := range t.identityNotFound {
-		ts := t.findTemplate(k)
-		if ts != nil {
-			for _, im := range v {
-				im.Add(ts)
 			}
 		}
 	}
@@ -1057,6 +1103,10 @@ type templateState struct {
 
 func (t *templateState) ParseInfo() tpl.ParseInfo {
 	return t.parseInfo
+}
+
+func (t *templateState) IdentifierBase() any {
+	return t.Name()
 }
 
 func (t *templateState) isText() bool {

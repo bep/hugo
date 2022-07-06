@@ -82,8 +82,8 @@ tags_weight: %d
 	c.Assert(len(b.H.Sites[0].RegularPages()), qt.Equals, 2)
 
 	b.AssertFileContent("public/index.html",
-		"pages:2:page.Pages:Page(/page1.md)/Page(/page2.md)",
-		"pageGroups:2:page.PagesGroup:Page(/page1.md)/Page(/page2.md)",
+		"pages:2:page.Pages:Page(/page1)/Page(/page2)",
+		"pageGroups:2:page.PagesGroup:Page(/page1)/Page(/page2)",
 		`weightedPages:2::page.WeightedPages:[WeightedPage(10,"Page") WeightedPage(20,"Page")]`)
 }
 
@@ -96,7 +96,6 @@ title: "Page"
 tags: ["blue", "green"]
 tags_weight: %d
 ---
-
 `
 	b := newTestSitesBuilder(t)
 	b.WithSimpleConfigFile().
@@ -178,6 +177,10 @@ tags_weight: %d
 	b.WithSimpleConfigFile().
 		WithContent("page1.md", fmt.Sprintf(pageContent, 10), "page2.md", fmt.Sprintf(pageContent, 20)).
 		WithTemplatesAdded("index.html", `
+
+Pages: {{ range site.Pages }}{{ .Kind }}|{{ end }}
+RegularPages: {{ range site.RegularPages }}{{ .Kind }}|{{ end }}
+
 {{ $p1 := index .Site.RegularPages 0 }}{{ $p2 := index .Site.RegularPages 1 }}
 
 {{ $pages := slice }}
@@ -207,7 +210,7 @@ tags_weight: %d
 	c.Assert(len(b.H.Sites[0].RegularPages()), qt.Equals, 2)
 
 	b.AssertFileContent("public/index.html",
-		"pages:2:page.Pages:Page(/page2.md)/Page(/page1.md)",
+		"pages:2:page.Pages:Page(/page2)/Page(/page1)",
 		"appendPages:9:page.Pages:home/page",
 		"appendStrings:[]string:[a b c d e]",
 		"appendStringsSlice:[]string:[a b c c d]",

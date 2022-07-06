@@ -333,6 +333,8 @@ func TestFastMD5FromFile(t *testing.T) {
 
 	sf1, err := fs.Open("small.txt")
 	c.Assert(err, qt.IsNil)
+	fi1, err := fs.Stat("small.txt")
+	c.Assert(err, qt.IsNil)
 	sf2, err := fs.Open("small2.txt")
 	c.Assert(err, qt.IsNil)
 
@@ -349,6 +351,7 @@ func TestFastMD5FromFile(t *testing.T) {
 	m1, err := helpers.MD5FromFileFast(sf1)
 	c.Assert(err, qt.IsNil)
 	c.Assert(m1, qt.Equals, "e9c8989b64b71a88b4efb66ad05eea96")
+	c.Assert(s1, qt.Equals, fi1.Size())
 
 	m2, err := helpers.MD5FromFileFast(sf2)
 	c.Assert(err, qt.IsNil)

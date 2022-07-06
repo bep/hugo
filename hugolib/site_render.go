@@ -21,16 +21,15 @@ import (
 	"sync"
 
 	"github.com/gohugoio/hugo/output/layouts"
+	"github.com/gohugoio/hugo/hugolib/doctree"
+	"github.com/gohugoio/hugo/output"
+
+	"github.com/gohugoio/hugo/tpl"
 
 	"github.com/gohugoio/hugo/config"
 	"github.com/gohugoio/hugo/tpl"
 
-	"errors"
-
-	"github.com/gohugoio/hugo/output"
-
 	"github.com/gohugoio/hugo/resources/page"
-	"github.com/gohugoio/hugo/resources/page/pagemeta"
 )
 
 type siteRenderContext struct {
@@ -48,7 +47,7 @@ type siteRenderContext struct {
 
 // Whether to render 404.html, robotsTXT.txt which usually is rendered
 // once only in the site root.
-func (s siteRenderContext) renderSingletonPages() bool {
+func (s siteRenderContext) shouldRenderSingletonPages() bool {
 	if s.multihost {
 		// 1 per site
 		return s.outIdx == 0
@@ -58,9 +57,8 @@ func (s siteRenderContext) renderSingletonPages() bool {
 	return s.sitesOutIdx == 0
 }
 
-// renderPages renders pages each corresponding to a markdown file.
-// TODO(bep np doc
-func (s *Site) renderPages(ctx *siteRenderContext) error {
+// renderPages renders this Site's pages for the output format defined in ctx.
+func (s *Site) renderPages(rctx *siteRenderContext) error {
 	numWorkers := config.GetNumWorkerMultiplier()
 
 	results := make(chan error)
@@ -70,12 +68,12 @@ func (s *Site) renderPages(ctx *siteRenderContext) error {
 	go s.errorCollator(results, errs)
 
 	wg := &sync.WaitGroup{}
-
 	for i := 0; i < numWorkers; i++ {
 		wg.Add(1)
-		go pageRenderer(ctx, s, pages, results, wg)
+		go s.renderPage(rctx, pages, results, wg)
 	}
 
+<<<<<<< HEAD
 	cfg := ctx.cfg
 
 	s.pageMap.pageTrees.Walk(func(ss string, n *contentNode) bool {
@@ -90,6 +88,28 @@ func (s *Site) renderPages(ctx *siteRenderContext) error {
 		}
 		return false
 	})
+=======
+	cfg := rctx.cfg
+	s.pageMap.treePages.Walk(
+		context.TODO(),
+		doctree.WalkConfig[contentNodeI]{
+			Callback: func(ctx *doctree.WalkContext[contentNodeI], key string, n contentNodeI) (bool, error) {
+				if p, ok := n.(*pageState); ok {
+					// TODO1 standalone, only render once.
+					if cfg.shouldRender(p) {
+						select {
+						case <-s.h.Done():
+							return true, nil
+						default:
+							pages <- p
+						}
+					}
+				}
+				return false, nil
+			},
+		},
+	)
+>>>>>>> 9a9ea8ca9 (Improve content map, memory cache and dependency resolution)
 
 	close(pages)
 
@@ -104,9 +124,8 @@ func (s *Site) renderPages(ctx *siteRenderContext) error {
 	return nil
 }
 
-func pageRenderer(
+func (s *Site) renderPage(
 	ctx *siteRenderContext,
-	s *Site,
 	pages <-chan *pageState,
 	results chan<- error,
 	wg *sync.WaitGroup) {
@@ -138,7 +157,15 @@ func pageRenderer(
 
 		targetPath := p.targetPaths().TargetFilename
 
-		if err := s.renderAndWritePage(&s.PathSpec.ProcessingStats.Pages, "page "+p.Title(), targetPath, p, templ); err != nil {
+		var statCounter *uint64
+		switch p.outputFormat().Name {
+		case output.SitemapFormat.Name:
+			statCounter = &s.PathSpec.ProcessingStats.Sitemaps
+		default:
+			statCounter = &s.PathSpec.ProcessingStats.Pages
+		}
+
+		if err := s.renderAndWritePage(statCounter, "page "+p.Title(), targetPath, p, templ); err != nil {
 			results <- err
 		}
 
@@ -152,7 +179,7 @@ func pageRenderer(
 
 func (s *Site) logMissingLayout(name, layout, kind, outputFormat string) {
 	log := s.Log.Warn()
-	if name != "" && infoOnMissingLayout[name] {
+	if infoOnMissingLayout[name] || infoOnMissingLayout[kind] {
 		log = s.Log.Info()
 	}
 
@@ -225,6 +252,7 @@ func (s *Site) renderPaginator(p *pageState, templ tpl.Template) error {
 	return nil
 }
 
+<<<<<<< HEAD
 func (s *Site) render404() error {
 	p, err := newPageStandalone(&pageMeta{
 		s:    s,
@@ -319,66 +347,87 @@ func (s *Site) renderRobotsTXT() error {
 	return s.renderAndWritePage(&s.PathSpec.ProcessingStats.Pages, "Robots Txt", p.targetPaths().TargetFilename, p, templ)
 }
 
+=======
+>>>>>>> 9a9ea8ca9 (Improve content map, memory cache and dependency resolution)
 // renderAliases renders shell pages that simply have a redirect in the header.
 func (s *Site) renderAliases() error {
-	var err error
-	s.pageMap.pageTrees.WalkLinkable(func(ss string, n *contentNode) bool {
-		p := n.p
-		if len(p.Aliases()) == 0 {
-			return false
-		}
+	return s.pageMap.treePages.Walk(
+		context.TODO(),
+		doctree.WalkConfig[contentNodeI]{
+			Callback: func(ctx *doctree.WalkContext[contentNodeI], key string, n contentNodeI) (bool, error) {
+				p := n.(*pageState)
 
-		pathSeen := make(map[string]bool)
-
-		for _, of := range p.OutputFormats() {
-			if !of.Format.IsHTML {
-				continue
-			}
-
-			f := of.Format
-
-			if pathSeen[f.Path] {
-				continue
-			}
-			pathSeen[f.Path] = true
-
-			plink := of.Permalink()
-
-			for _, a := range p.Aliases() {
-				isRelative := !strings.HasPrefix(a, "/")
-
-				if isRelative {
-					// Make alias relative, where "." will be on the
-					// same directory level as the current page.
-					basePath := path.Join(p.targetPaths().SubResourceBaseLink, "..")
-					a = path.Join(basePath, a)
-
-				} else {
-					// Make sure AMP and similar doesn't clash with regular aliases.
-					a = path.Join(f.Path, a)
+				// We cannot alias a page that's not rendered.
+				if p.m.noLink() {
+					return false, nil
 				}
 
+<<<<<<< HEAD
 				if s.conf.C.IsUglyURLSection(p.Section()) && !strings.HasSuffix(a, ".html") {
 					a += ".html"
+=======
+				if len(p.Aliases()) == 0 {
+					return false, nil
+>>>>>>> 9a9ea8ca9 (Improve content map, memory cache and dependency resolution)
 				}
 
-				lang := p.Language().Lang
+				pathSeen := make(map[string]bool)
+				for _, of := range p.OutputFormats() {
+					if !of.Format.IsHTML {
+						continue
+					}
 
+<<<<<<< HEAD
 				if s.h.Configs.IsMultihost && !strings.HasPrefix(a, "/"+lang) {
 					// These need to be in its language root.
 					a = path.Join(lang, a)
+=======
+					f := of.Format
+
+					if pathSeen[f.Path] {
+						continue
+					}
+					pathSeen[f.Path] = true
+
+					plink := of.Permalink()
+
+					for _, a := range p.Aliases() {
+						isRelative := !strings.HasPrefix(a, "/")
+
+						if isRelative {
+							// Make alias relative, where "." will be on the
+							// same directory level as the current page.
+							basePath := path.Join(p.targetPaths().SubResourceBaseLink, "..")
+							a = path.Join(basePath, a)
+
+						} else {
+							// Make sure AMP and similar doesn't clash with regular aliases.
+							a = path.Join(f.Path, a)
+						}
+
+						if s.UglyURLs && !strings.HasSuffix(a, ".html") {
+							a += ".html"
+						}
+
+						lang := p.Language().Lang
+
+						if s.h.multihost && !strings.HasPrefix(a, "/"+lang) {
+							// These need to be in its language root.
+							a = path.Join(lang, a)
+						}
+
+						err := s.writeDestAlias(a, plink, f, p)
+						if err != nil {
+							return true, err
+						}
+					}
+>>>>>>> 9a9ea8ca9 (Improve content map, memory cache and dependency resolution)
 				}
 
-				err = s.writeDestAlias(a, plink, f, p)
-				if err != nil {
-					return true
-				}
-			}
-		}
-		return false
-	})
+				return false, nil
+			},
+		})
 
-	return err
 }
 
 // renderMainLanguageRedirect creates a redirect to the main language home,

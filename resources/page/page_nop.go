@@ -163,13 +163,13 @@ func (p *nopPage) Extension() string {
 	return ""
 }
 
-var nilFile *source.FileInfo
+var nilFile *source.File
 
-func (p *nopPage) File() source.File {
+func (p *nopPage) File() *source.File {
 	return nilFile
 }
 
-func (p *nopPage) FileInfo() hugofs.FileMetaInfo {
+func (p *nopPage) FileInfo() hugofs.FileMetaDirEntry {
 	return nil
 }
 
@@ -221,16 +221,16 @@ func (p *nopPage) Hugo() (h hugo.HugoInfo) {
 	return
 }
 
-func (p *nopPage) InSection(other any) (bool, error) {
-	return false, nil
+func (p *nopPage) InSection(other any) bool {
+	return false
 }
 
-func (p *nopPage) IsAncestor(other any) (bool, error) {
-	return false, nil
+func (p *nopPage) IsAncestor(other any) bool {
+	return false
 }
 
-func (p *nopPage) IsDescendant(other any) (bool, error) {
-	return false, nil
+func (p *nopPage) IsDescendant(other any) bool {
+	return false
 }
 
 func (p *nopPage) IsDraft() bool {
@@ -354,10 +354,6 @@ func (p *nopPage) Ancestors() Pages {
 }
 
 func (p *nopPage) Path() string {
-	return ""
-}
-
-func (p *nopPage) Pathc() string {
 	return ""
 }
 
@@ -525,8 +521,12 @@ func (p *nopPage) WordCount(context.Context) int {
 	return 0
 }
 
-func (p *nopPage) GetIdentity() identity.Identity {
-	return identity.NewPathIdentity("content", "foo/bar.md")
+func (p *nopPage) IdentifierBase() any {
+	return ""
+}
+
+func (p *nopPage) GetDependencyManager() identity.Manager {
+	panic("Not implemented")
 }
 
 func (p *nopPage) Fragments(context.Context) *tableofcontents.Fragments {

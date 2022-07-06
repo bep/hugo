@@ -16,6 +16,7 @@ package create
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"fmt"
 	"io"
 	"mime"
@@ -23,7 +24,6 @@ import (
 	"net/http/httputil"
 	"net/url"
 	"path"
-	"path/filepath"
 	"strings"
 
 	"github.com/gohugoio/hugo/common/hugio"
@@ -99,7 +99,7 @@ func (c *Client) FromRemote(uri string, optionsm map[string]any) (resource.Resou
 
 	resourceID := calculateResourceID(uri, optionsm)
 
-	_, httpResponse, err := c.cacheGetResource.GetOrCreate(resourceID, func() (io.ReadCloser, error) {
+	_, httpResponse, err := c.cacheGetResource.GetOrCreate(context.TODO(), resourceID, func() (io.ReadCloser, error) {
 		options, err := decodeRemoteOptions(optionsm)
 		if err != nil {
 			return nil, fmt.Errorf("failed to decode options for resource %s: %w", uri, err)
@@ -223,7 +223,7 @@ func (c *Client) FromRemote(uri string, optionsm map[string]any) (resource.Resou
 			OpenReadSeekCloser: func() (hugio.ReadSeekCloser, error) {
 				return hugio.NewReadSeekerNoOpCloser(bytes.NewReader(body)), nil
 			},
-			RelTargetFilename: filepath.Clean(resourceID),
+			TargetPath: resourceID,
 		})
 }
 

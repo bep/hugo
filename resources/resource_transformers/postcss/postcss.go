@@ -424,7 +424,7 @@ func (imp *importResolver) toFileError(output string) error {
 		return inErr
 	}
 
-	meta := fi.(hugofs.FileMetaInfo).Meta()
+	meta := fi.(hugofs.FileMetaDirEntry).Meta()
 	realFilename := meta.Filename
 	f, err := meta.Open()
 	if err != nil {

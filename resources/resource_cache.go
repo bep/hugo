@@ -14,42 +14,32 @@
 package resources
 
 import (
+	"context"
 	"encoding/json"
 	"io"
-	"path"
-	"path/filepath"
-	"regexp"
-	"strings"
 	"sync"
 
 	"github.com/gohugoio/hugo/helpers"
 
 	hglob "github.com/gohugoio/hugo/hugofs/glob"
+	"github.com/gohugoio/hugo/cache/memcache"
 
 	"github.com/gohugoio/hugo/resources/resource"
 
 	"github.com/gohugoio/hugo/cache/filecache"
-
-	"github.com/BurntSushi/locker"
-)
-
-const (
-	CACHE_CLEAR_ALL = "clear_all"
-	CACHE_OTHER     = "other"
 )
 
 type ResourceCache struct {
 	sync.RWMutex
 
-	// Either resource.Resource or resource.Resources.
-	cache map[string]any
+	cacheResource               *memcache.Partition[string, resource.Resource]
+	cacheResources              *memcache.Partition[string, resource.Resources]
+	cacheResourceTransformation *memcache.Partition[string, *resourceAdapterInner]
 
 	fileCache *filecache.Cache
-
-	// Provides named resource locks.
-	nlocker *locker.Locker
 }
 
+<<<<<<< HEAD
 // ResourceCacheKey converts the filename into the format used in the resource
 // cache.
 func ResourceCacheKey(filename string) string {
@@ -128,68 +118,45 @@ func (c *ResourceCache) clear() {
 
 	c.cache = make(map[string]any)
 	c.nlocker = locker.NewLocker()
-}
-
-func (c *ResourceCache) Contains(key string) bool {
-	key = c.cleanKey(filepath.ToSlash(key))
-	_, found := c.get(key)
-	return found
-}
-
-func (c *ResourceCache) cleanKey(key string) string {
-	return strings.TrimPrefix(path.Clean(strings.ToLower(key)), "/")
-}
-
-func (c *ResourceCache) get(key string) (any, bool) {
-	c.RLock()
-	defer c.RUnlock()
-	r, found := c.cache[key]
-	return r, found
-}
-
-func (c *ResourceCache) GetOrCreate(key string, f func() (resource.Resource, error)) (resource.Resource, error) {
-	r, err := c.getOrCreate(key, func() (any, error) { return f() })
-	if r == nil || err != nil {
-		return nil, err
+=======
+func newResourceCache(rs *Spec, memCache *memcache.Cache) *ResourceCache {
+	return &ResourceCache{
+		rs:        rs,
+		fileCache: rs.FileCaches.AssetsCache(),
+		cacheResource: memcache.GetOrCreatePartition[string, resource.Resource](
+			memCache,
+			"resource",
+			memcache.OptionsPartition{ClearWhen: memcache.ClearOnChange, Weight: 40},
+		),
+		cacheResources: memcache.GetOrCreatePartition[string, resource.Resources](
+			memCache,
+			"resources",
+			memcache.OptionsPartition{ClearWhen: memcache.ClearOnChange, Weight: 40},
+		),
+		cacheResourceTransformation: memcache.GetOrCreatePartition[string, *resourceAdapterInner](
+			memCache,
+			"resourceTransformation",
+			memcache.OptionsPartition{ClearWhen: memcache.ClearOnChange, Weight: 40},
+		),
 	}
-	return r.(resource.Resource), nil
 }
 
-func (c *ResourceCache) GetOrCreateResources(key string, f func() (resource.Resources, error)) (resource.Resources, error) {
-	r, err := c.getOrCreate(key, func() (any, error) { return f() })
-	if r == nil || err != nil {
-		return nil, err
-	}
-	return r.(resource.Resources), nil
+func (c *ResourceCache) Get(ctx context.Context, key string) resource.Resource {
+	v, _ := c.cacheResource.Get(ctx, key)
+	return v
+>>>>>>> 9a9ea8ca9 (Improve content map, memory cache and dependency resolution)
 }
 
-func (c *ResourceCache) getOrCreate(key string, f func() (any, error)) (any, error) {
-	key = c.cleanKey(key)
-	// First check in-memory cache.
-	r, found := c.get(key)
-	if found {
-		return r, nil
-	}
-	// This is a potentially long running operation, so get a named lock.
-	c.nlocker.Lock(key)
+func (c *ResourceCache) GetOrCreate(ctx context.Context, key string, f func() (resource.Resource, error)) (resource.Resource, error) {
+	return c.cacheResource.GetOrCreate(ctx, key, func(key string) (resource.Resource, error) {
+		return f()
+	})
+}
 
-	// Double check in-memory cache.
-	r, found = c.get(key)
-	if found {
-		c.nlocker.Unlock(key)
-		return r, nil
-	}
-
-	defer c.nlocker.Unlock(key)
-
-	r, err := f()
-	if err != nil {
-		return nil, err
-	}
-
-	c.set(key, r)
-
-	return r, nil
+func (c *ResourceCache) GetOrCreateResources(ctx context.Context, key string, f func() (resource.Resources, error)) (resource.Resources, error) {
+	return c.cacheResources.GetOrCreate(ctx, key, func(key string) (resource.Resources, error) {
+		return f()
+	})
 }
 
 func (c *ResourceCache) getFilenames(key string) (string, string) {
@@ -242,6 +209,7 @@ func (c *ResourceCache) writeMeta(key string, meta transformedResourceMetadata) 
 
 	return fi, fc, err
 }
+<<<<<<< HEAD
 
 func (c *ResourceCache) set(key string, r any) {
 	c.Lock()
@@ -303,3 +271,5 @@ func (c *ResourceCache) DeleteMatches(match func(string) bool) {
 		}
 	}
 }
+=======
+>>>>>>> 9a9ea8ca9 (Improve content map, memory cache and dependency resolution)

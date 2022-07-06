@@ -35,6 +35,14 @@ import (
 	"github.com/gohugoio/hugo/deps"
 )
 
+<<<<<<< HEAD
+=======
+// TODO1 merge.
+// TestTemplateProvider is global deps.ResourceProvider.
+// NOTE: It's currently unused.
+var TestTemplateProvider deps.ResourceProvider
+
+>>>>>>> 9a9ea8ca9 (Improve content map, memory cache and dependency resolution)
 type partialCacheKey struct {
 	Name     string
 	Variants []any
@@ -247,5 +255,34 @@ func (ns *Namespace) IncludeCached(ctx context.Context, name string, context any
 		ns.deps.Metrics.TrackValue(key.templateName(), r.result, found)
 	}
 
+<<<<<<< HEAD
 	return r.result, nil
+=======
+	// This needs to be done outside the lock.
+	// See #9588
+	// TODO1
+	_, p, err = ns.include(ctx, key.name, context)
+	if err != nil {
+		return nil, err
+	}
+
+	ns.cachedPartials.Lock()
+	defer ns.cachedPartials.Unlock()
+	// Double-check.
+	if p2, ok := ns.cachedPartials.p[key]; ok {
+		if ns.deps.Metrics != nil {
+			ns.deps.Metrics.TrackValue(key.templateName(), p, true)
+			ns.deps.Metrics.MeasureSince(key.templateName(), start)
+		}
+		return p2, nil
+
+	}
+	if ns.deps.Metrics != nil {
+		ns.deps.Metrics.TrackValue(key.templateName(), p, false)
+	}
+
+	ns.cachedPartials.p[key] = p
+
+	return p, nil
+>>>>>>> 9a9ea8ca9 (Improve content map, memory cache and dependency resolution)
 }

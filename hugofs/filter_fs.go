@@ -16,14 +16,12 @@ package hugofs
 import (
 	"fmt"
 	"io"
+	"io/fs"
+	iofs "io/fs"
 	"os"
-	"path/filepath"
 	"sort"
-	"strings"
 	"syscall"
 	"time"
-
-	"github.com/gohugoio/hugo/hugofs/files"
 
 	"github.com/spf13/afero"
 )
@@ -34,81 +32,11 @@ var (
 	_ afero.File    = (*filterDir)(nil)
 )
 
-func NewLanguageFs(langs map[string]int, fs afero.Fs) (afero.Fs, error) {
-	applyMeta := func(fs *FilterFs, name string, fis []os.FileInfo) {
-		for i, fi := range fis {
-			if fi.IsDir() {
-				filename := filepath.Join(name, fi.Name())
-				fis[i] = decorateFileInfo(fi, fs, fs.getOpener(filename), "", "", nil)
-				continue
-			}
-
-			meta := fi.(FileMetaInfo).Meta()
-			lang := meta.Lang
-
-			fileLang, translationBaseName, translationBaseNameWithExt := langInfoFrom(langs, fi.Name())
-			weight := meta.Weight
-
-			if fileLang != "" {
-				if fileLang == lang {
-					// Give priority to myfile.sv.txt inside the sv filesystem.
-					weight++
-				}
-				lang = fileLang
-			}
-
-			fim := NewFileMetaInfo(
-				fi,
-				&FileMeta{
-					Lang:                       lang,
-					Weight:                     weight,
-					TranslationBaseName:        translationBaseName,
-					TranslationBaseNameWithExt: translationBaseNameWithExt,
-					Classifier:                 files.ClassifyContentFile(fi.Name(), meta.OpenFunc),
-				})
-
-			fis[i] = fim
-		}
-	}
-
-	all := func(fis []os.FileInfo) {
-		// Maps translation base name to a list of language codes.
-		translations := make(map[string][]string)
-		trackTranslation := func(meta *FileMeta) {
-			name := meta.TranslationBaseNameWithExt
-			translations[name] = append(translations[name], meta.Lang)
-		}
-		for _, fi := range fis {
-			if fi.IsDir() {
-				continue
-			}
-			meta := fi.(FileMetaInfo).Meta()
-
-			trackTranslation(meta)
-
-		}
-
-		for _, fi := range fis {
-			fim := fi.(FileMetaInfo)
-			langs := translations[fim.Meta().TranslationBaseNameWithExt]
-			if len(langs) > 0 {
-				fim.Meta().Translations = sortAndremoveStringDuplicates(langs)
-			}
-		}
-	}
-
-	return &FilterFs{
-		fs:             fs,
-		applyPerSource: applyMeta,
-		applyAll:       all,
-	}, nil
-}
-
 func NewFilterFs(fs afero.Fs) (afero.Fs, error) {
-	applyMeta := func(fs *FilterFs, name string, fis []os.FileInfo) {
+	applyMeta := func(fs *FilterFs, name string, fis []iofs.DirEntry) {
 		for i, fi := range fis {
 			if fi.IsDir() {
-				fis[i] = decorateFileInfo(fi, fs, fs.getOpener(fi.(FileMetaInfo).Meta().Filename), "", "", nil)
+				fis[i] = decorateFileInfo(fi, fs, fs.getOpener(fi.(MetaProvider).Meta().Filename), "", "", nil).(iofs.DirEntry)
 			}
 		}
 	}
@@ -129,8 +57,8 @@ var (
 type FilterFs struct {
 	fs afero.Fs
 
-	applyPerSource func(fs *FilterFs, name string, fis []os.FileInfo)
-	applyAll       func(fis []os.FileInfo)
+	applyPerSource func(fs *FilterFs, name string, fis []fs.DirEntry)
+	applyAll       func(fis []fs.DirEntry)
 }
 
 func (fs *FilterFs) Chmod(n string, m os.FileMode) error {
@@ -159,8 +87,9 @@ func (fs *FilterFs) LstatIfPossible(name string) (os.FileInfo, bool, error) {
 		return decorateFileInfo(fi, fs, fs.getOpener(name), "", "", nil), false, nil
 	}
 
-	parent := filepath.Dir(name)
-	fs.applyFilters(parent, -1, fi)
+	// TODO1?
+	//parent := filepath.Dir(name)
+	//fs.applyFilters(parent, -1, fi)
 
 	return fi, b, nil
 }
@@ -193,10 +122,6 @@ func (fs *FilterFs) OpenFile(name string, flag int, perm os.FileMode) (afero.Fil
 	return fs.fs.Open(name)
 }
 
-func (fs *FilterFs) ReadDir(name string) ([]os.FileInfo, error) {
-	panic("not implemented")
-}
-
 func (fs *FilterFs) Remove(n string) error {
 	return syscall.EPERM
 }
@@ -224,7 +149,7 @@ func (fs *FilterFs) getOpener(name string) func() (afero.File, error) {
 	}
 }
 
-func (fs *FilterFs) applyFilters(name string, count int, fis ...os.FileInfo) ([]os.FileInfo, error) {
+func (fs *FilterFs) applyFilters(name string, count int, fis ...fs.DirEntry) ([]fs.DirEntry, error) {
 	if fs.applyPerSource != nil {
 		fs.applyPerSource(fs, name, fis)
 	}
@@ -261,21 +186,27 @@ func (fs *FilterFs) applyFilters(name string, count int, fis ...os.FileInfo) ([]
 	return fis, nil
 }
 
+var _ fs.ReadDirFile = (*filterDir)(nil)
+
 type filterDir struct {
 	afero.File
 	ffs *FilterFs
 }
 
-func (f *filterDir) Readdir(count int) ([]os.FileInfo, error) {
-	fis, err := f.File.Readdir(-1)
+func (f *filterDir) ReadDir(count int) ([]fs.DirEntry, error) {
+	fis, err := f.File.(fs.ReadDirFile).ReadDir(-1)
 	if err != nil {
 		return nil, err
 	}
 	return f.ffs.applyFilters(f.Name(), count, fis...)
 }
 
+func (f *filterDir) Readdir(count int) ([]os.FileInfo, error) {
+	panic("not supported: Use ReadDir")
+}
+
 func (f *filterDir) Readdirnames(count int) ([]string, error) {
-	dirsi, err := f.Readdir(count)
+	dirsi, err := f.File.(iofs.ReadDirFile).ReadDir(count)
 	if err != nil {
 		return nil, err
 	}
@@ -285,37 +216,6 @@ func (f *filterDir) Readdirnames(count int) ([]string, error) {
 		dirs[i] = d.Name()
 	}
 	return dirs, nil
-}
-
-// Try to extract the language from the given filename.
-// Any valid language identifier in the name will win over the
-// language set on the file system, e.g. "mypost.en.md".
-func langInfoFrom(languages map[string]int, name string) (string, string, string) {
-	var lang string
-
-	baseName := filepath.Base(name)
-	ext := filepath.Ext(baseName)
-	translationBaseName := baseName
-
-	if ext != "" {
-		translationBaseName = strings.TrimSuffix(translationBaseName, ext)
-	}
-
-	fileLangExt := filepath.Ext(translationBaseName)
-	fileLang := strings.TrimPrefix(fileLangExt, ".")
-
-	if _, found := languages[fileLang]; found {
-		lang = fileLang
-		translationBaseName = strings.TrimSuffix(translationBaseName, fileLangExt)
-	}
-
-	translationBaseNameWithExt := translationBaseName
-
-	if ext != "" {
-		translationBaseNameWithExt += ext
-	}
-
-	return lang, translationBaseName, translationBaseNameWithExt
 }
 
 func printFs(fs afero.Fs, path string, w io.Writer) {

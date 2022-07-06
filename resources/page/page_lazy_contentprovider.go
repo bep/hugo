@@ -125,14 +125,14 @@ func (lcp *LazyContentProvider) ReadingTime(ctx context.Context) int {
 	return lcp.cp.ReadingTime(ctx)
 }
 
+func (lcp *LazyContentProvider) Render(ctx context.Context, layout ...string) (template.HTML, error) {
+	lcp.init.Do(ctx)
+	return lcp.cp.Render(ctx, layout...)
+}
+
 func (lcp *LazyContentProvider) Len(ctx context.Context) int {
 	lcp.init.Do(ctx)
 	return lcp.cp.Len(ctx)
-}
-
-func (lcp *LazyContentProvider) Render(ctx context.Context, layout ...string) (template.HTML, error) {
-	lcp.init.Do(context.TODO())
-	return lcp.cp.Render(ctx, layout...)
 }
 
 func (lcp *LazyContentProvider) RenderString(ctx context.Context, args ...any) (template.HTML, error) {

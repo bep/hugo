@@ -21,60 +21,140 @@ import (
 	"go.uber.org/atomic"
 
 	"github.com/gohugoio/hugo/common/hugo"
+	"fmt"
 
 	"github.com/gohugoio/hugo/common/maps"
-
-	"github.com/gohugoio/hugo/output"
-
+	"github.com/gohugoio/hugo/identity"
 	"github.com/gohugoio/hugo/lazy"
-
+	"github.com/gohugoio/hugo/resources"
 	"github.com/gohugoio/hugo/resources/page"
+	"github.com/gohugoio/hugo/resources/page/pagekinds"
+	"go.uber.org/atomic"
 )
 
-func newPageBase(metaProvider *pageMeta) (*pageState, error) {
-	if metaProvider.s == nil {
-		panic("must provide a Site")
+// bookmark
+func (h *HugoSites) newPage(m *pageMeta) (*pageState, error) {
+	if m.pathInfo != nil {
+		if m.f != nil {
+			m.pathInfo = m.f.FileInfo().Meta().PathInfo
+		}
+		if m.pathInfo == nil {
+			panic(fmt.Sprintf("missing pathInfo in %v", m))
+		}
 	}
 
-	s := metaProvider.s
+	m.Staler = &resources.AtomicStaler{}
+
+	if m.s == nil {
+		// Identify the Site/language to associate this Page with.
+		var lang string
+		if m.f != nil {
+			lang = m.f.Lang()
+		} else {
+			lang = m.pathInfo.Lang()
+		}
+
+		if lang == "" {
+			return nil, fmt.Errorf("no language set for %q", m.pathInfo.Path())
+		}
+		m.s = h.Sites[0]
+		for _, ss := range h.Sites {
+			if ss.Lang() == lang {
+				m.s = ss
+				break
+			}
+		}
+	}
+
+	// Identify Page Kind.
+	if m.kind == "" {
+		m.kind = pagekinds.Section
+		if m.pathInfo.Base() == "/" {
+			m.kind = pagekinds.Home
+		} else if m.pathInfo.IsBranchBundle() {
+			// A section, taxonomy or term.
+			tc := m.s.pageMap.cfg.getTaxonomyConfig(m.Path())
+			if !tc.IsZero() {
+				// Either a taxonomy or a term.
+				if tc.pluralTreeKey == m.Path() {
+					m.kind = pagekinds.Taxonomy
+				} else {
+					m.kind = pagekinds.Term
+				}
+			}
+		} else if m.f != nil {
+			m.kind = pagekinds.Page
+		}
+	}
+
+	// Parse page content.
+	cachedContent, err := newCachedContent(m)
+	if err != nil {
+		return nil, err
+	}
+
+	// bookmark
+	var dependencyManager identity.Manager = identity.NopManager
+	if m.s.running() {
+		dependencyManager = identity.NewManager(identity.Anonymous)
+	}
 
 	ps := &pageState{
 		pageOutput:                        nopPageOutput,
 		pageOutputTemplateVariationsState: atomic.NewUint32(0),
+		Staler:                            m,
 		pageCommon: &pageCommon{
-			FileProvider:            metaProvider,
-			AuthorProvider:          metaProvider,
+			content:                 cachedContent,
+			FileProvider:            m,
+			AuthorProvider:          m,
 			Scratcher:               maps.NewScratcher(),
 			store:                   maps.NewScratch(),
 			Positioner:              page.NopPage,
 			InSectionPositioner:     page.NopPage,
-			ResourceMetaProvider:    metaProvider,
-			ResourceParamsProvider:  metaProvider,
-			PageMetaProvider:        metaProvider,
-			RelatedKeywordsProvider: metaProvider,
+			ResourceMetaProvider:    m,
+			ResourceParamsProvider:  m,
+			PageMetaProvider:        m,
+			RelatedKeywordsProvider: m,
 			OutputFormatsProvider:   page.NopPage,
 			ResourceTypeProvider:    pageTypesProvider,
 			MediaTypeProvider:       pageTypesProvider,
 			RefProvider:             page.NopPage,
 			ShortcodeInfoProvider:   page.NopPage,
-			LanguageProvider:        s,
-			pagePages:               &pagePages{},
+			LanguageProvider:        m.s,
 
+<<<<<<< HEAD
 			InternalDependencies: s,
 			init:                 lazy.New(),
 			m:                    metaProvider,
 			s:                    s,
 			sWrapped:             page.WrapSite(s),
+=======
+			dependencyManagerPage: dependencyManager,
+			InternalDependencies:  m.s,
+			init:                  lazy.New(),
+			m:                     m,
+			s:                     m.s,
+>>>>>>> 9a9ea8ca9 (Improve content map, memory cache and dependency resolution)
 		},
 	}
 
-	ps.shortcodeState = newShortcodeHandler(ps, ps.s)
+	if m.f != nil {
+		gi, err := m.s.h.gitInfoForPage(ps)
+		if err != nil {
+			return nil, fmt.Errorf("failed to load Git data: %w", err)
+		}
+		ps.gitInfo = gi
 
-	siteAdapter := pageSiteAdapter{s: s, p: ps}
+		owners, err := m.s.h.codeownersForPage(ps)
+		if err != nil {
+			return nil, fmt.Errorf("failed to load CODEOWNERS: %w", err)
+		}
+		ps.codeowners = owners
+	}
 
 	ps.pageMenus = &pageMenus{p: ps}
 	ps.PageMenusProvider = ps.pageMenus
-	ps.GetPageProvider = siteAdapter
+	ps.GetPageProvider = pageSiteAdapter{s: m.s, p: ps}
 	ps.GitInfoProvider = ps
 	ps.TranslationsProvider = ps
 	ps.ResourceDataProvider = &pageData{pageState: ps}
@@ -86,7 +166,16 @@ func newPageBase(metaProvider *pageMeta) (*pageState, error) {
 	ps.ShortcodeInfoProvider = ps
 	ps.AlternativeOutputFormatsProvider = ps
 
+	if err := ps.setMetadataPre(); err != nil {
+		return nil, ps.wrapError(err)
+	}
+
+	if err := ps.initLazyProviders(); err != nil {
+		return nil, ps.wrapError(err)
+	}
+
 	return ps, nil
+<<<<<<< HEAD
 }
 
 func newPageBucket(p *pageState) *pagesMapBucket {
@@ -212,4 +301,7 @@ func (p *pageDeprecatedWarning) URL() string {
 	}
 	// Fall back to the relative permalink.
 	return p.p.RelPermalink()
+=======
+
+>>>>>>> 9a9ea8ca9 (Improve content map, memory cache and dependency resolution)
 }

@@ -27,7 +27,11 @@ import (
 func New(d *deps.Deps) *Namespace {
 	ignorableLogger, ok := d.Log.(loggers.IgnorableLogger)
 	if !ok {
+<<<<<<< HEAD
 		ignorableLogger = loggers.NewIgnorableLogger(d.Log, nil)
+=======
+		ignorableLogger = loggers.NewIgnorableLogger(d.Log, nil, nil)
+>>>>>>> 9a9ea8ca9 (Improve content map, memory cache and dependency resolution)
 	}
 
 	distinctLogger := helpers.NewDistinctLogger(d.Log)
@@ -81,5 +85,13 @@ func (ns *Namespace) Erroridf(id, format string, args ...any) string {
 // It returns an empty string.
 func (ns *Namespace) Warnf(format string, args ...any) string {
 	ns.distinctLogger.Warnf(format, args...)
+	return ""
+}
+
+// Warnidf formats according to a format specifier and logs a WARNING and
+// an information text that the error with the given ID can be suppressed in config.
+// It returns an empty string.
+func (ns *Namespace) Warnidf(id, format string, a ...any) string {
+	ns.distinctLogger.Warnsf(id, format, a...)
 	return ""
 }

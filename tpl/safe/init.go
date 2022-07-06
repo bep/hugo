@@ -70,10 +70,11 @@ func init() {
 			},
 		)
 
-		ns.AddMethodMapping(ctx.SanitizeURL,
+		// TODO1 create issue + remove this. Or rewrite it?
+		/*ns.AddMethodMapping(ctx.SanitizeURL,
 			[]string{"sanitizeURL", "sanitizeurl"},
 			[][2]string{},
-		)
+		)*/
 
 		return ns
 	}

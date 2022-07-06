@@ -54,6 +54,19 @@ func getOrdinals(p1, p2 Page) (int, int) {
 	return p1o.Ordinal(), p2o.Ordinal()
 }
 
+func getWeight0s(p1, p2 Page) (int, int) {
+	p1w, ok1 := p1.(resource.Weight0Provider)
+	if !ok1 {
+		return -1, -1
+	}
+	p2w, ok2 := p2.(resource.Weight0Provider)
+	if !ok2 {
+		return -1, -1
+	}
+
+	return p1w.Weight0(), p2w.Weight0()
+}
+
 // Sort stable sorts the pages given the receiver's sort order.
 func (by pageBy) Sort(pages Pages) {
 	ps := &pageSorter{
@@ -68,9 +81,15 @@ var (
 	// DefaultPageSort is the default sort func for pages in Hugo:
 	// Order by Ordinal, Weight, Date, LinkTitle and then full file path.
 	DefaultPageSort = func(p1, p2 Page) bool {
+		// Ordinal, as by the order of the taxonomy entrie in the front matter.
 		o1, o2 := getOrdinals(p1, p2)
 		if o1 != o2 && o1 != -1 && o2 != -1 {
 			return o1 < o2
+		}
+		// Weight0, as by the weight of the taxonomy entrie in the front matter.
+		w01, w02 := getWeight0s(p1, p2)
+		if w01 != w02 && w01 != -1 && w02 != -1 {
+			return w01 < w02
 		}
 		if p1.Weight() == p2.Weight() {
 			if p1.Date().Unix() == p2.Date().Unix() {

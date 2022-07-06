@@ -14,170 +14,156 @@
 package hugolib
 
 import (
-	"path"
+	"context"
+	"fmt"
 	"strings"
 
+	"github.com/gohugoio/hugo/common/paths"
 	"github.com/gohugoio/hugo/common/types"
+	"github.com/gohugoio/hugo/helpers"
+	"github.com/gohugoio/hugo/hugolib/doctree"
 	"github.com/gohugoio/hugo/resources/page"
 )
 
+// pageTree holds the treen navigational method for a Page.
 type pageTree struct {
 	p *pageState
 }
 
-func (pt pageTree) IsAncestor(other any) (bool, error) {
-	if pt.p == nil {
-		return false, nil
-	}
-
-	tp, ok := other.(treeRefProvider)
+func (pt pageTree) IsAncestor(other any) bool {
+	n, ok := other.(contentNodeI)
 	if !ok {
-		return false, nil
+		return false
 	}
 
-	ref1, ref2 := pt.p.getTreeRef(), tp.getTreeRef()
-	if ref1 != nil && ref2 != nil && ref1.key == ref2.key {
-		return false, nil
+	if n.Path() == pt.p.Path() {
+		return false
 	}
 
-	if ref1 != nil && ref1.key == "/" {
-		return true, nil
-	}
-
-	if ref1 == nil || ref2 == nil {
-		if ref1 == nil {
-			// A 404 or other similar standalone page.
-			return false, nil
-		}
-
-		return ref1.n.p.IsHome(), nil
-	}
-
-	if strings.HasPrefix(ref2.key, ref1.key) {
-		return true, nil
-	}
-
-	return strings.HasPrefix(ref2.key, ref1.key+cmBranchSeparator), nil
+	return strings.HasPrefix(n.Path(), helpers.AddTrailingSlash(pt.p.Path()))
 }
 
+func (pt pageTree) IsDescendant(other any) bool {
+	n, ok := other.(contentNodeI)
+	if !ok {
+		return false
+	}
+
+	if n.Path() == pt.p.Path() {
+		return false
+	}
+
+	return strings.HasPrefix(pt.p.Path(), helpers.AddTrailingSlash(n.Path()))
+}
+
+// 2 TODO1 create issue: CurrentSection should navigate sideways for all branch nodes.
 func (pt pageTree) CurrentSection() page.Page {
-	p := pt.p
-
-	if p.IsHome() || p.IsSection() {
-		return p
+	if pt.p.IsNode() {
+		return pt.p
 	}
 
-	return p.Parent()
-}
-
-func (pt pageTree) IsDescendant(other any) (bool, error) {
-	if pt.p == nil {
-		return false, nil
+	_, n := pt.p.s.pageMap.treePages.LongestPrefix(paths.Dir(pt.p.Path()), func(n contentNodeI) bool { return n.isContentNodeBranch() })
+	if n != nil {
+		return n.(page.Page)
 	}
 
-	tp, ok := other.(treeRefProvider)
-	if !ok {
-		return false, nil
-	}
-
-	ref1, ref2 := pt.p.getTreeRef(), tp.getTreeRef()
-	if ref1 != nil && ref2 != nil && ref1.key == ref2.key {
-		return false, nil
-	}
-
-	if ref2 != nil && ref2.key == "/" {
-		return true, nil
-	}
-
-	if ref1 == nil || ref2 == nil {
-		if ref2 == nil {
-			// A 404 or other similar standalone page.
-			return false, nil
-		}
-
-		return ref2.n.p.IsHome(), nil
-	}
-
-	if strings.HasPrefix(ref1.key, ref2.key) {
-		return true, nil
-	}
-
-	return strings.HasPrefix(ref1.key, ref2.key+cmBranchSeparator), nil
+	panic(fmt.Sprintf("CurrentSection not found for %q in lang %s", pt.p.Path(), pt.p.Lang()))
 }
 
 func (pt pageTree) FirstSection() page.Page {
-	ref := pt.p.getTreeRef()
-	if ref == nil {
-		return pt.p.s.home
-	}
-	key := ref.key
-
-	if !ref.isSection() {
-		key = path.Dir(key)
+	s := pt.p.Path()
+	if !pt.p.IsNode() {
+		s = paths.Dir(s)
 	}
 
-	_, b := ref.m.getFirstSection(key)
-	if b == nil {
-		return nil
+	for {
+		k, n := pt.p.s.pageMap.treePages.LongestPrefix(s, func(n contentNodeI) bool { return n.isContentNodeBranch() })
+		if n == nil {
+			return nil
+		}
+
+		// /blog
+		if strings.Count(k, "/") <= 1 {
+			return n.(page.Page)
+		}
+
+		if s == "" {
+			return nil
+		}
+
+		s = paths.Dir(s)
+
 	}
-	return b.p
 }
 
-func (pt pageTree) InSection(other any) (bool, error) {
+func (pt pageTree) InSection(other any) bool {
 	if pt.p == nil || types.IsNil(other) {
-		return false, nil
+		return false
 	}
 
-	tp, ok := other.(treeRefProvider)
+	p, ok := other.(page.Page)
 	if !ok {
-		return false, nil
+		return false
 	}
 
-	ref1, ref2 := pt.p.getTreeRef(), tp.getTreeRef()
+	return pt.CurrentSection() == p.CurrentSection()
 
-	if ref1 == nil || ref2 == nil {
-		if ref1 == nil {
-			// A 404 or other similar standalone page.
+}
+
+func (pt pageTree) Parent() page.Page {
+	if pt.p.IsHome() {
+		return nil
+	}
+	_, n := pt.p.s.pageMap.treePages.LongestPrefix(paths.Dir(pt.p.Path()), nil)
+	if n != nil {
+		return n.(page.Page)
+	}
+	return nil
+}
+
+func (pt pageTree) Sections() page.Pages {
+	var (
+		pages       page.Pages
+		otherBranch string
+		prefix      = helpers.AddTrailingSlash(pt.p.Path())
+	)
+
+	pt.p.s.pageMap.treePages.Walk(context.TODO(), doctree.WalkConfig[contentNodeI]{
+		Prefix: prefix,
+		Callback: func(ctx *doctree.WalkContext[contentNodeI], key string, n contentNodeI) (bool, error) {
+			if otherBranch == "" || !strings.HasPrefix(key, otherBranch) {
+				if p, ok := n.(*pageState); ok && p.IsSection() && p.m.shouldList(false) {
+					pages = append(pages, p)
+				}
+			}
+			if n.isContentNodeBranch() {
+				otherBranch = key
+			}
 			return false, nil
-		}
-		return ref1.n.p.IsHome(), nil
-	}
+		},
+	})
 
-	s1, _ := ref1.getCurrentSection()
-	s2, _ := ref2.getCurrentSection()
-
-	return s1 == s2, nil
+	page.SortByDefault(pages)
+	return pages
 }
 
 func (pt pageTree) Page() page.Page {
 	return pt.p
 }
 
-func (pt pageTree) Parent() page.Page {
-	p := pt.p
-
-	if p.parent != nil {
-		return p.parent
-	}
-
-	if pt.p.IsHome() {
+func (p pageTree) SectionsEntries() []string {
+	sp := p.SectionsPath()
+	if sp == "/" {
 		return nil
 	}
-
-	tree := p.getTreeRef()
-
-	if tree == nil || pt.p.Kind() == page.KindTaxonomy {
-		return pt.p.s.home
-	}
-
-	_, b := tree.getSection()
-	if b == nil {
+	entries := strings.Split(sp[1:], "/")
+	if len(entries) == 0 {
 		return nil
 	}
-
-	return b.p
+	return entries
 }
 
+<<<<<<< HEAD
 func (pt pageTree) Ancestors() page.Pages {
 	var ancestors page.Pages
 	parent := pt.Parent()
@@ -194,4 +180,8 @@ func (pt pageTree) Sections() page.Pages {
 	}
 
 	return pt.p.bucket.getSections()
+=======
+func (p pageTree) SectionsPath() string {
+	return p.CurrentSection().Path()
+>>>>>>> 9a9ea8ca9 (Improve content map, memory cache and dependency resolution)
 }

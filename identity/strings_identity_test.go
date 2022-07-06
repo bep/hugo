@@ -1,4 +1,4 @@
-// Copyright 2019 The Hugo Authors. All rights reserved.
+// Copyright 2022 The Hugo Authors. All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -11,21 +11,22 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package hugolib
+// Package provides ways to identify values in Hugo. Used for dependency tracking etc.
+package identity
 
 import (
 	"testing"
 
 	qt "github.com/frankban/quicktest"
-	"github.com/spf13/cast"
 )
 
-func TestFileInfo(t *testing.T) {
-	t.Run("String", func(t *testing.T) {
-		t.Parallel()
-		c := qt.New(t)
-		fi := &fileInfo{}
-		_, err := cast.ToStringE(fi)
-		c.Assert(err, qt.IsNil)
-	})
+func TestStringPrefixIdentity(t *testing.T) {
+	c := qt.New(t)
+
+	sid := StringPrefixIdentity("/a/b/mysuffix")
+
+	c.Assert(IsNotDependent(StringIdentity("/a/b"), sid), qt.IsFalse)
+	c.Assert(IsNotDependent(StringIdentity("/a/b/c"), sid), qt.IsTrue)
+	c.Assert(IsNotDependent(sid, StringIdentity("/a/b")), qt.IsFalse)
+	c.Assert(IsNotDependent(sid, StringIdentity("/a/b/c")), qt.IsTrue)
 }

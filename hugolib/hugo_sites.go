@@ -1,4 +1,4 @@
-// Copyright 2019 The Hugo Authors. All rights reserved.
+// Copyright 2022 The Hugo Authors. All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -17,14 +17,19 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"path/filepath"
 	"sort"
 	"strings"
 	"sync"
-	"sync/atomic"
 
 	"github.com/gohugoio/hugo/config/allconfig"
+	"go.uber.org/atomic"
+
+	"github.com/gohugoio/hugo/cache/memcache"
 	"github.com/gohugoio/hugo/hugofs/glob"
+	"github.com/gohugoio/hugo/hugolib/doctree"
+	"github.com/gohugoio/hugo/resources"
+	"github.com/gohugoio/hugo/resources/page/pagekinds"
+	"github.com/gohugoio/hugo/resources/resource"
 
 	"github.com/fsnotify/fsnotify"
 
@@ -37,6 +42,7 @@ import (
 
 	"github.com/gohugoio/hugo/common/hugo"
 	"github.com/gohugoio/hugo/common/para"
+	"github.com/gohugoio/hugo/common/paths"
 	"github.com/gohugoio/hugo/hugofs"
 
 	"github.com/gohugoio/hugo/source"
@@ -48,7 +54,6 @@ import (
 	"github.com/gohugoio/hugo/lazy"
 
 	"github.com/gohugoio/hugo/resources/page"
-	"github.com/gohugoio/hugo/resources/page/pagemeta"
 	"github.com/gohugoio/hugo/tpl"
 )
 
@@ -74,8 +79,10 @@ type HugoSites struct {
 	// As loaded from the /data dirs
 	data map[string]any
 
-	contentInit sync.Once
-	content     *pageMaps
+	// Cache for page listings.
+	cachePages *memcache.Partition[string, page.Pages]
+
+	pageTrees *pageTrees
 
 	// Keeps track of bundle directories and symlinks to enable partial rebuilding.
 	ContentChanges *contentChangeMap
@@ -90,7 +97,7 @@ type HugoSites struct {
 	numWorkers int
 
 	*fatalErrorHandler
-	*testCounters
+	buildCounters *buildCounters
 }
 
 // ShouldSkipFileChangeEvent allows skipping filesystem event early before
@@ -101,31 +108,9 @@ func (h *HugoSites) ShouldSkipFileChangeEvent(ev fsnotify.Event) bool {
 	return h.skipRebuildForFilenames[ev.Name]
 }
 
-func (h *HugoSites) getContentMaps() *pageMaps {
-	h.contentInit.Do(func() {
-		h.content = newPageMaps(h)
-	})
-	return h.content
-}
-
-// Only used in tests.
-type testCounters struct {
-	contentRenderCounter uint64
-	pageRenderCounter    uint64
-}
-
-func (h *testCounters) IncrContentRender() {
-	if h == nil {
-		return
-	}
-	atomic.AddUint64(&h.contentRenderCounter, 1)
-}
-
-func (h *testCounters) IncrPageRender() {
-	if h == nil {
-		return
-	}
-	atomic.AddUint64(&h.pageRenderCounter, 1)
+type buildCounters struct {
+	contentRender atomic.Uint64
+	pageRender    atomic.Uint64
 }
 
 type fatalErrorHandler struct {
@@ -170,16 +155,12 @@ type hugoSitesInit struct {
 
 	// Loads the Git info and CODEOWNERS for all the pages if enabled.
 	gitInfo *lazy.Init
-
-	// Maps page translations.
-	translations *lazy.Init
 }
 
 func (h *hugoSitesInit) Reset() {
 	h.data.Reset()
 	h.layouts.Reset()
 	h.gitInfo.Reset()
-	h.translations.Reset()
 }
 
 func (h *HugoSites) Data() map[string]any {
@@ -281,14 +262,21 @@ func (h *HugoSites) PrintProcessingStats(w io.Writer) {
 func (h *HugoSites) GetContentPage(filename string) page.Page {
 	var p page.Page
 
-	h.getContentMaps().walkBundles(func(b *contentNode) bool {
-		if b.p == nil || b.fi == nil {
+	h.withPage(func(s string, p2 *pageState) bool {
+		if p2.File() == nil {
 			return false
 		}
-
-		if b.fi.Meta().Filename == filename {
-			p = b.p
+		if p2.File().FileInfo().Meta().Filename == filename {
+			p = p2
 			return true
+		}
+
+		for _, r := range p2.Resources().ByType(pageResourceType) {
+			p3 := r.(page.Page)
+			if p3.File() != nil && p3.File().FileInfo().Meta().Filename == filename {
+				p = p3
+				return true
+			}
 		}
 
 		return false
@@ -297,6 +285,115 @@ func (h *HugoSites) GetContentPage(filename string) page.Page {
 	return p
 }
 
+<<<<<<< HEAD
+=======
+// NewHugoSites creates a new collection of sites given the input sites, building
+// a language configuration based on those.
+func newHugoSites(cfg deps.DepsCfg, sites ...*Site) (*HugoSites, error) {
+	if cfg.Language != nil {
+		return nil, errors.New("Cannot provide Language in Cfg when sites are provided")
+	}
+
+	// Return error at the end. Make the caller decide if it's fatal or not.
+	var initErr error
+
+	langConfig, err := newMultiLingualFromSites(cfg.Cfg, sites...)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create language config: %w", err)
+	}
+
+	var contentChangeTracker *contentChangeMap
+
+	numWorkers := config.GetNumWorkerMultiplier()
+	if numWorkers > len(sites) {
+		numWorkers = len(sites)
+	}
+	var workers *para.Workers
+	if numWorkers > 1 {
+		workers = para.New(numWorkers)
+	}
+
+	h := &HugoSites{
+		running:                 cfg.Running,
+		multilingual:            langConfig,
+		multihost:               cfg.Cfg.GetBool("multihost"),
+		Sites:                   sites,
+		workers:                 workers,
+		numWorkers:              numWorkers,
+		skipRebuildForFilenames: make(map[string]bool),
+		init: &hugoSitesInit{
+			data:    lazy.New(),
+			layouts: lazy.New(),
+			gitInfo: lazy.New(),
+		},
+	}
+
+	h.fatalErrorHandler = &fatalErrorHandler{
+		h:     h,
+		donec: make(chan bool),
+	}
+
+	h.init.data.Add(func() (any, error) {
+		err := h.loadData(h.PathSpec.BaseFs.Data.Dirs)
+		if err != nil {
+			return nil, fmt.Errorf("failed to load data: %w", err)
+		}
+		return nil, nil
+	})
+
+	h.init.layouts.Add(func() (any, error) {
+		for _, s := range h.Sites {
+			if err := s.Tmpl().(tpl.TemplateManager).MarkReady(); err != nil {
+				return nil, err
+			}
+		}
+		return nil, nil
+	})
+
+	h.init.gitInfo.Add(func() (any, error) {
+		err := h.loadGitInfo()
+		if err != nil {
+			return nil, fmt.Errorf("failed to load Git info: %w", err)
+		}
+		return nil, nil
+	})
+
+	for _, s := range sites {
+		s.h = h
+	}
+
+	var l configLoader
+	if err := l.applyDeps(cfg, sites...); err != nil {
+		initErr = fmt.Errorf("add site dependencies: %w", err)
+	}
+
+	h.Deps = sites[0].Deps
+	if h.Deps == nil {
+		return nil, initErr
+	}
+
+	h.cachePages = memcache.GetOrCreatePartition[string, page.Pages](
+		h.Deps.MemCache,
+		"hugo-sites-pages",
+		memcache.OptionsPartition{Weight: 10, ClearWhen: memcache.ClearOnRebuild},
+	)
+
+	// Only needed in server mode.
+	// TODO(bep) clean up the running vs watching terms
+	if cfg.Running {
+		contentChangeTracker = &contentChangeMap{
+			pathSpec:      h.PathSpec,
+			symContent:    make(map[string]map[string]bool),
+			leafBundles:   radix.New(),
+			branchBundles: make(map[string]bool),
+		}
+		h.ContentChanges = contentChangeTracker
+	}
+
+	return h, initErr
+}
+
+>>>>>>> 9a9ea8ca9 (Improve content map, memory cache and dependency resolution)
 func (h *HugoSites) loadGitInfo() error {
 	if h.Configs.Base.EnableGitInfo {
 		gi, err := newGitInfo(h.Conf)
@@ -316,6 +413,156 @@ func (h *HugoSites) loadGitInfo() error {
 	return nil
 }
 
+<<<<<<< HEAD
+=======
+func (l configLoader) applyDeps(cfg deps.DepsCfg, sites ...*Site) error {
+	if cfg.TemplateProvider == nil {
+		cfg.TemplateProvider = tplimpl.DefaultTemplateProvider
+	}
+
+	if cfg.TranslationProvider == nil {
+		cfg.TranslationProvider = i18n.NewTranslationProvider()
+	}
+
+	var (
+		d   *deps.Deps
+		err error
+	)
+
+	for i, s := range sites {
+		if s.Deps != nil {
+			continue
+		}
+
+		onCreated := func(d *deps.Deps) error {
+			s.Deps = d
+
+			// Set up the main publishing chain.
+			pub, err := publisher.NewDestinationPublisher(
+				d.ResourceSpec,
+				s.outputFormatsConfig,
+				s.mediaTypesConfig,
+			)
+			if err != nil {
+				return err
+			}
+			s.publisher = pub
+
+			if err := s.initializeSiteInfo(); err != nil {
+				return err
+			}
+
+			d.Site = s.Info
+
+			siteConfig, err := l.loadSiteConfig(s.language)
+			if err != nil {
+				return fmt.Errorf("load site config: %w", err)
+			}
+			s.siteConfigConfig = siteConfig
+
+			if s.h.pageTrees == nil {
+				langIntToLang := map[int]string{}
+				langLangToInt := map[string]int{}
+
+				for i, s := range sites {
+					langIntToLang[i] = s.language.Lang
+					langLangToInt[s.language.Lang] = i
+				}
+
+				dimensions := []int{0} // language
+
+				pageTreeConfig := doctree.Config[contentNodeI]{
+					Dimensions: dimensions,
+					Shifter:    &contentNodeShifter{langIntToLang: langIntToLang, langLangToInt: langLangToInt},
+				}
+
+				resourceTreeConfig := doctree.Config[doctree.NodeGetter[resource.Resource]]{
+					Dimensions: dimensions,
+					Shifter:    &notSupportedShifter{},
+				}
+
+				taxonomyEntriesTreeConfig := doctree.Config[*weightedContentNode]{
+					Dimensions: []int{0}, // Language
+					Shifter:    &weightedContentNodeShifter{},
+				}
+
+				s.h.pageTrees = &pageTrees{
+					treePages: doctree.New(
+						pageTreeConfig,
+					),
+					treeResources: doctree.New(
+						resourceTreeConfig,
+					),
+					treeTaxonomyEntries: doctree.New(
+						taxonomyEntriesTreeConfig,
+					),
+				}
+
+				s.h.pageTrees.resourceTrees = doctree.MutableTrees{
+					s.h.pageTrees.treeResources,
+					s.h.pageTrees.treeTaxonomyEntries,
+				}
+			}
+
+			pm := newPageMap(i, s)
+
+			s.pageFinder = newPageFinder(pm)
+			s.siteRefLinker, err = newSiteRefLinker(s.language, s)
+			return err
+		}
+
+		cfg.Language = s.language
+		cfg.MediaTypes = s.mediaTypesConfig
+		cfg.OutputFormats = s.outputFormatsConfig
+
+		if d == nil {
+			cfg.WithTemplate = s.withSiteTemplates(cfg.WithTemplate)
+
+			var err error
+			d, err = deps.New(cfg)
+			if err != nil {
+				return fmt.Errorf("create deps: %w", err)
+			}
+
+			d.OutputFormatsConfig = s.outputFormatsConfig
+
+			if err := onCreated(d); err != nil {
+				return fmt.Errorf("on created: %w", err)
+			}
+
+			if err = d.LoadResources(); err != nil {
+				return fmt.Errorf("load resources: %w", err)
+			}
+
+		} else {
+			d, err = d.ForLanguage(cfg, onCreated)
+			if err != nil {
+				return err
+			}
+			d.OutputFormatsConfig = s.outputFormatsConfig
+		}
+	}
+
+	return nil
+}
+
+// NewHugoSites creates HugoSites from the given config.
+func NewHugoSites(cfg deps.DepsCfg) (*HugoSites, error) {
+	if cfg.Logger == nil {
+		cfg.Logger = loggers.NewErrorLogger()
+	}
+	if cfg.Fs == nil {
+		return nil, errors.New("no filesystem given")
+	}
+	sites, err := createSitesFromConfig(cfg)
+	if err != nil {
+		return nil, fmt.Errorf("from config: %w", err)
+	}
+
+	return newHugoSites(cfg, sites...)
+}
+
+>>>>>>> 9a9ea8ca9 (Improve content map, memory cache and dependency resolution)
 func (s *Site) withSiteTemplates(withTemplates ...func(templ tpl.TemplateManager) error) func(templ tpl.TemplateManager) error {
 	return func(templ tpl.TemplateManager) error {
 		for _, wt := range withTemplates {
@@ -331,7 +578,35 @@ func (s *Site) withSiteTemplates(withTemplates ...func(templ tpl.TemplateManager
 	}
 }
 
+<<<<<<< HEAD
+=======
+func createSitesFromConfig(cfg deps.DepsCfg) ([]*Site, error) {
+	var sites []*Site
+
+	languages := getLanguages(cfg.Cfg)
+
+	for i, lang := range languages {
+		if lang.Disabled {
+			continue
+		}
+		var s *Site
+		var err error
+		cfg.Language = lang
+		s, err = newSite(i, cfg)
+
+		if err != nil {
+			return nil, err
+		}
+
+		sites = append(sites, s)
+	}
+
+	return sites, nil
+}
+
+>>>>>>> 9a9ea8ca9 (Improve content map, memory cache and dependency resolution)
 // Reset resets the sites and template caches etc., making it ready for a full rebuild.
+// TODO1
 func (h *HugoSites) reset(config *BuildCfg) {
 	if config.ResetState {
 		for _, s := range h.Sites {
@@ -359,8 +634,8 @@ func (h *HugoSites) resetLogs() {
 	}
 }
 
-func (h *HugoSites) withSite(fn func(s *Site) error) error {
-	if h.workers == nil {
+func (h *HugoSites) withSite(para bool, fn func(s *Site) error) error {
+	if !para || h.workers == nil {
 		for _, s := range h.Sites {
 			if err := fn(s); err != nil {
 				return err
@@ -379,6 +654,90 @@ func (h *HugoSites) withSite(fn func(s *Site) error) error {
 	return g.Wait()
 }
 
+<<<<<<< HEAD
+=======
+func (h *HugoSites) withPage(fn func(s string, p *pageState) bool) {
+	h.withSite(true, func(s *Site) error {
+		s.pageMap.treePages.Walk(context.TODO(), doctree.WalkConfig[contentNodeI]{
+			LockType: doctree.LockTypeRead,
+			Callback: func(ctx *doctree.WalkContext[contentNodeI], key string, n contentNodeI) (bool, error) {
+				return fn(key, n.(*pageState)), nil
+			},
+		})
+
+		return nil
+	})
+}
+
+// getPageFirstDimension returns the first dimension of the page.
+// Use this if you don't really care about the dimension.
+func (h *HugoSites) getPageFirstDimension(s string) *pageState {
+	all := h.Sites[0].pageMap.treePages.GetAll(s)
+	if len(all) == 0 {
+		return nil
+	}
+	return all[0].(*pageState)
+}
+
+func (h *HugoSites) createSitesFromConfig(cfg config.Provider) error {
+	oldLangs, _ := h.Cfg.Get("languagesSorted").(langs.Languages)
+
+	l := configLoader{cfg: h.Cfg}
+	if err := l.loadLanguageSettings(oldLangs); err != nil {
+		return err
+	}
+
+	depsCfg := deps.DepsCfg{Fs: h.Fs, Cfg: l.cfg}
+
+	sites, err := createSitesFromConfig(depsCfg)
+	if err != nil {
+		return err
+	}
+
+	langConfig, err := newMultiLingualFromSites(depsCfg.Cfg, sites...)
+	if err != nil {
+		return err
+	}
+
+	h.Sites = sites
+
+	for _, s := range sites {
+		s.h = h
+	}
+
+	var cl configLoader
+	if err := cl.applyDeps(depsCfg, sites...); err != nil {
+		return err
+	}
+
+	h.Deps = sites[0].Deps
+
+	h.multilingual = langConfig
+	h.multihost = h.Deps.Cfg.GetBool("multihost")
+
+	return nil
+}
+
+func (h *HugoSites) GetDependencyManager() identity.Manager {
+	// TODO1 consider this
+	return identity.NopManager
+}
+
+type siteInfos []*SiteInfo
+
+func (s siteInfos) GetDependencyManager() identity.Manager {
+	return s[0].s.h.GetDependencyManager()
+}
+
+func (h *HugoSites) toSiteInfos() siteInfos {
+	infos := make(siteInfos, len(h.Sites))
+	for i, s := range h.Sites {
+		infos[i] = s.Info
+	}
+	return infos
+}
+
+>>>>>>> 9a9ea8ca9 (Improve content map, memory cache and dependency resolution)
 // BuildCfg holds build options used to, as an example, skip the render step.
 type BuildCfg struct {
 	// Reset site state before build. Use to force full rebuilds.
@@ -403,8 +762,6 @@ type BuildCfg struct {
 
 	// Set when the buildlock is already acquired (e.g. the archetype content builder).
 	NoBuildLock bool
-
-	testCounters *testCounters
 }
 
 // shouldRender is used in the Fast Render Mode to determine if we need to re-render
@@ -413,29 +770,72 @@ type BuildCfg struct {
 // For regular builds, this will always return true.
 // TODO(bep) rename/work this.
 func (cfg *BuildCfg) shouldRender(p *pageState) bool {
-	if p == nil {
-		return false
-	}
+	return p.renderState == 0
+	/*
+		if p.forceRender {
+			//panic("TODO1")
+		}
 
-	if p.forceRender {
-		return true
-	}
+		if len(cfg.RecentlyVisited) == 0 {
+			return true
+		}
 
-	if len(cfg.RecentlyVisited) == 0 {
-		return true
-	}
+		if cfg.RecentlyVisited[p.RelPermalink()] {
+			return true
+		}
 
-	if cfg.RecentlyVisited[p.RelPermalink()] {
-		return true
-	}
+		// TODO1 stale?
 
-	if cfg.whatChanged != nil && !p.File().IsZero() {
-		return cfg.whatChanged.files[p.File().Filename()]
-	}
-
-	return false
+		return false*/
 }
 
+func (h *HugoSites) resolveDimension(d int, v any) doctree.Dimension {
+	if d != pageTreeDimensionLanguage {
+		panic("dimension not supported")
+	}
+	switch vv := v.(type) {
+	case *pageState:
+		return h.resolveDimension(d, vv.s)
+	case *Site:
+		return doctree.Dimension{
+			Name:      vv.Language().Lang,
+			Dimension: d,
+			Index:     vv.languageIndex,
+			Size:      len(h.Sites),
+		}
+	case resources.PathInfoProvder:
+		return h.resolveDimension(d, vv.PathInfo())
+	case *paths.Path:
+		lang := vv.Lang()
+		languageIndex := -1
+
+		for _, s := range h.Sites {
+			if s.Language().Lang == lang {
+				languageIndex = s.languageIndex
+				break
+			}
+		}
+
+		// TODO defaultContentLanguage.
+		if languageIndex == -1 {
+			lang = h.Sites[0].Lang()
+			languageIndex = h.Sites[0].languageIndex
+		}
+
+		return doctree.Dimension{
+			Name:      lang,
+			Dimension: d,
+			Index:     languageIndex,
+			Size:      len(h.Sites),
+		}
+	default:
+		panic(fmt.Sprintf("unsupported type %T", v))
+
+	}
+
+}
+
+// TODO(bep) improve this.
 func (h *HugoSites) renderCrossSitesSitemap() error {
 	if !h.isMultiLingual() || h.Conf.IsMultihost() {
 		return nil
@@ -443,7 +843,11 @@ func (h *HugoSites) renderCrossSitesSitemap() error {
 
 	sitemapEnabled := false
 	for _, s := range h.Sites {
+<<<<<<< HEAD
 		if s.conf.IsKindEnabled(kindSitemap) {
+=======
+		if s.isEnabled(pagekinds.Sitemap) {
+>>>>>>> 9a9ea8ca9 (Improve content map, memory cache and dependency resolution)
 			sitemapEnabled = true
 			break
 		}
@@ -462,6 +866,7 @@ func (h *HugoSites) renderCrossSitesSitemap() error {
 		s.conf.Sitemap.Filename, h.Sites, templ)
 }
 
+<<<<<<< HEAD
 func (h *HugoSites) renderCrossSitesRobotsTXT() error {
 	if h.Configs.IsMultihost {
 		return nil
@@ -515,62 +920,168 @@ func (h *HugoSites) createPageCollections() error {
 		var pages page.Pages
 		for _, s := range h.Sites {
 			pages = append(pages, s.Pages()...)
+=======
+func (h *HugoSites) removePageByFilename(filename string) error {
+	// TODO1
+	/*exclude := func(s string, n *contentNode) bool {
+		if n.p == nil {
+			return true
+>>>>>>> 9a9ea8ca9 (Improve content map, memory cache and dependency resolution)
 		}
 
-		page.SortByDefault(pages)
+		fi := n.FileInfo()
+		if fi == nil {
+			return true
+		}
 
-		return pages
-	})
-
-	allRegularPages := newLazyPagesFactory(func() page.Pages {
-		return h.findPagesByKindIn(page.KindPage, allPages.get())
-	})
-
-	for _, s := range h.Sites {
-		s.PageCollections.allPages = allPages
-		s.PageCollections.allRegularPages = allRegularPages
-	}
+		return fi.Meta().Filename != filename
+	}*/
 
 	return nil
+
+	/*
+		return h.getContentMaps().withMaps(func(runner para.Runner, m *pageMapOld) error {
+			var sectionsToDelete []string
+			var pagesToDelete []contentTreeRefProvider
+
+			q := branchMapQuery{
+				Exclude: exclude,
+				Branch: branchMapQueryCallBacks{
+					Key: newBranchMapQueryKey("", true),
+					Page: func(np contentNodeProvider) bool {
+						sectionsToDelete = append(sectionsToDelete, np.Key())
+						return false
+					},
+				},
+				Leaf: branchMapQueryCallBacks{
+					Page: func(np contentNodeProvider) bool {
+						n := np.GetNode()
+						pagesToDelete = append(pagesToDelete, n.p.m.treeRef)
+						return false
+					},
+				},
+			}
+
+			if err := m.Walk(q); err != nil {
+				return err
+			}
+
+			// Delete pages and sections marked for deletion.
+			for _, p := range pagesToDelete {
+				p.GetBranch().pages.nodes.Delete(p.Key())
+				p.GetBranch().pageResources.nodes.Delete(p.Key() + "/")
+				if !p.GetBranch().n.HasFi() && p.GetBranch().pages.nodes.Len() == 0 {
+					// Delete orphan section.
+					sectionsToDelete = append(sectionsToDelete, p.GetBranch().n.key)
+				}
+			}
+
+			for _, s := range sectionsToDelete {
+				m.branches.Delete(s)
+				m.branches.DeletePrefix(s + "/")
+			}
+
+			return nil
+		})
+	*/
 }
 
 func (s *Site) preparePagesForRender(isRenderingSite bool, idx int) error {
 	var err error
-	s.pageMap.withEveryBundlePage(func(p *pageState) bool {
-		if err = p.initOutputFormat(isRenderingSite, idx); err != nil {
-			return true
+
+	initPage := func(p *pageState) error {
+		// TODO1 err handling this and all walks
+		if err := p.initPage(); err != nil {
+			return err
 		}
-		return false
-	})
+		if err = p.initOutputFormat(isRenderingSite, idx); err != nil {
+			return err
+		}
+
+		return nil
+
+	}
+
+	err = s.pageMap.treePages.Walk(
+		context.TODO(),
+		doctree.WalkConfig[contentNodeI]{
+			Callback: func(ctx *doctree.WalkContext[contentNodeI], key string, n contentNodeI) (bool, error) {
+				if p, ok := n.(*pageState); ok {
+					if p == nil {
+						panic("nil page")
+					}
+					// TODO1 page resources?
+					if err := initPage(p); err != nil {
+						return true, err
+					}
+				}
+				return false, nil
+			},
+		},
+	)
+
+	if err != nil {
+		return err
+	}
+
 	return nil
+
 }
 
 // Pages returns all pages for all sites.
 func (h *HugoSites) Pages() page.Pages {
-	return h.Sites[0].AllPages()
+	key := "pages"
+	v, err := h.cachePages.GetOrCreate(context.TODO(), key, func(string) (page.Pages, error) {
+		var pages page.Pages
+		for _, s := range h.Sites {
+			pages = append(pages, s.Pages()...)
+		}
+		page.SortByDefault(pages)
+		return pages, nil
+	})
+	if err != nil {
+		panic(err)
+	}
+	return v
 }
 
-func (h *HugoSites) loadData(fis []hugofs.FileMetaInfo) (err error) {
+// Pages returns all regularpages for all sites.
+func (h *HugoSites) RegularPages() page.Pages {
+	key := "regular-pages"
+	v, err := h.cachePages.GetOrCreate(context.TODO(), key, func(string) (page.Pages, error) {
+		var pages page.Pages
+		for _, s := range h.Sites {
+			pages = append(pages, s.RegularPages()...)
+		}
+		page.SortByDefault(pages)
+
+		return pages, nil
+	})
+
+	if err != nil {
+		panic(err)
+	}
+	return v
+}
+
+func (h *HugoSites) loadData(fis []hugofs.FileMetaDirEntry) (err error) {
 	spec := source.NewSourceSpec(h.PathSpec, nil, nil)
 
 	h.data = make(map[string]any)
 	for _, fi := range fis {
-		fileSystem := spec.NewFilesystemFromFileMetaInfo(fi)
-		files, err := fileSystem.Files()
+		src := spec.NewFilesystemFromFileMetaDirEntry(fi)
+		err := src.Walk(func(file *source.File) error {
+			return h.handleDataFile(file)
+		})
 		if err != nil {
 			return err
-		}
-		for _, r := range files {
-			if err := h.handleDataFile(r); err != nil {
-				return err
-			}
 		}
 	}
 
 	return
 }
 
-func (h *HugoSites) handleDataFile(r source.File) error {
+func (h *HugoSites) handleDataFile(r *source.File) error {
 	var current map[string]any
 
 	f, err := r.FileInfo().Meta().Open()
@@ -648,18 +1159,15 @@ func (h *HugoSites) handleDataFile(r source.File) error {
 	return nil
 }
 
-func (h *HugoSites) errWithFileContext(err error, f source.File) error {
-	fim, ok := f.FileInfo().(hugofs.FileMetaInfo)
-	if !ok {
-		return err
-	}
+func (h *HugoSites) errWithFileContext(err error, f *source.File) error {
+	fim := f.FileInfo()
 	realFilename := fim.Meta().Filename
 
 	return herrors.NewFileErrorFromFile(err, realFilename, h.SourceSpec.Fs.Source, nil)
 
 }
 
-func (h *HugoSites) readData(f source.File) (any, error) {
+func (h *HugoSites) readData(f *source.File) (any, error) {
 	file, err := f.FileInfo().Meta().Open()
 	if err != nil {
 		return nil, fmt.Errorf("readData: failed to open data file: %w", err)
@@ -671,73 +1179,50 @@ func (h *HugoSites) readData(f source.File) (any, error) {
 	return metadecoders.Default.Unmarshal(content, format)
 }
 
-func (h *HugoSites) findPagesByKindIn(kind string, inPages page.Pages) page.Pages {
-	return h.Sites[0].findPagesByKindIn(kind, inPages)
-}
+func (h *HugoSites) resetPageRenderStateForIdentities(ids ...identity.Identity) {
+	if ids == nil {
+		return
+	}
 
-func (h *HugoSites) resetPageState() {
-	h.getContentMaps().walkBundles(func(n *contentNode) bool {
-		if n.p == nil {
-			return false
-		}
-		p := n.p
-		for _, po := range p.pageOutputs {
-			if po.cp == nil {
-				continue
+	h.withPage(func(s string, p *pageState) bool {
+		var probablyDependent bool
+		for _, id := range ids {
+			if !identity.IsNotDependent(p, id) {
+				probablyDependent = true
+				break
 			}
-			po.cp.Reset()
 		}
 
-		return false
-	})
-}
-
-func (h *HugoSites) resetPageStateFromEvents(idset identity.Identities) {
-	h.getContentMaps().walkBundles(func(n *contentNode) bool {
-		if n.p == nil {
-			return false
+		if probablyDependent {
+			// This will re-render the top level Page.
+			for _, po := range p.pageOutputs {
+				po.renderState = 0
+			}
 		}
-		p := n.p
+
+		// We may also need to re-render one or more .Content
+		// for this Page's output formats (e.g. when a shortcode template changes).
 	OUTPUTS:
 		for _, po := range p.pageOutputs {
 			if po.cp == nil {
 				continue
 			}
-			for id := range idset {
-				if po.cp.dependencyTracker.Search(id) != nil {
+			for _, id := range ids {
+				if !identity.IsNotDependent(po.GetDependencyManager(), id) {
 					po.cp.Reset()
+					po.renderState = 0
 					continue OUTPUTS
 				}
 			}
 		}
 
-		if p.shortcodeState == nil {
-			return false
-		}
-
-		for _, s := range p.shortcodeState.shortcodes {
-			for _, templ := range s.templs {
-				sid := templ.(identity.Manager)
-				for id := range idset {
-					if sid.Search(id) != nil {
-						for _, po := range p.pageOutputs {
-							if po.cp != nil {
-								po.cp.Reset()
-							}
-						}
-						return false
-					}
-				}
-			}
-		}
 		return false
 	})
+
 }
 
 // Used in partial reloading to determine if the change is in a bundle.
 type contentChangeMap struct {
-	mu sync.RWMutex
-
 	// Holds directories with leaf bundles.
 	leafBundles *radix.Tree
 
@@ -753,10 +1238,13 @@ type contentChangeMap struct {
 	// This map is only used in watch mode.
 	// It maps either file to files or the real dir to a set of content directories
 	// where it is in use.
+	// TODO1 replace all of this with DependencyManager
 	symContentMu sync.Mutex
 	symContent   map[string]map[string]bool
 }
 
+// TODO1 remove
+/*
 func (m *contentChangeMap) add(dirname string, tp bundleDirType) {
 	m.mu.Lock()
 	if !strings.HasSuffix(dirname, helpers.FilePathSeparator) {
@@ -773,39 +1261,10 @@ func (m *contentChangeMap) add(dirname string, tp bundleDirType) {
 	}
 	m.mu.Unlock()
 }
+*/
 
-func (m *contentChangeMap) resolveAndRemove(filename string) (string, bundleDirType) {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-
-	// Bundles share resources, so we need to start from the virtual root.
-	relFilename := m.pathSpec.RelContentDir(filename)
-	dir, name := filepath.Split(relFilename)
-	if !strings.HasSuffix(dir, helpers.FilePathSeparator) {
-		dir += helpers.FilePathSeparator
-	}
-
-	if _, found := m.branchBundles[dir]; found {
-		delete(m.branchBundles, dir)
-		return dir, bundleBranch
-	}
-
-	if key, _, found := m.leafBundles.LongestPrefix(dir); found {
-		m.leafBundles.Delete(key)
-		dir = string(key)
-		return dir, bundleLeaf
-	}
-
-	fileTp, isContent := classifyBundledFile(name)
-	if isContent && fileTp != bundleNot {
-		// A new bundle.
-		return dir, fileTp
-	}
-
-	return dir, bundleNot
-}
-
-func (m *contentChangeMap) addSymbolicLinkMapping(fim hugofs.FileMetaInfo) {
+// TODO1 add test for this and replace this. Also re remove.
+func (m *contentChangeMap) addSymbolicLinkMapping(fim hugofs.FileMetaDirEntry) {
 	meta := fim.Meta()
 	if !meta.IsSymlink {
 		return
@@ -844,4 +1303,43 @@ func (m *contentChangeMap) GetSymbolicLinkMappings(dir string) []string {
 	sort.Strings(dirs)
 
 	return dirs
+}
+
+// Debug helper.
+func printInfoAboutHugoSites(h *HugoSites) {
+	fmt.Println("Num sites:", len(h.Sites))
+
+	for i, s := range h.Sites {
+		fmt.Printf("Site %d: %s\n", i, s.Lang())
+		s.pageMap.treePages.Walk(context.TODO(), doctree.WalkConfig[contentNodeI]{
+			Callback: func(ctx *doctree.WalkContext[contentNodeI], key string, n contentNodeI) (bool, error) {
+
+				p := n.(*pageState)
+				kind := p.Kind()
+				var filename string
+				if p.File() != nil {
+					filename = p.File().Path()
+				}
+
+				fmt.Printf("\t%q [%s] %s\n", key, kind, filename)
+
+				/*resourceTree := s.pageMap.treeLeafResources
+				if n.isContentNodeBranch() {
+					resourceTree = s.pageMap.treeBranchResources
+				}
+				resourceTree.Walk(context.TODO(), doctree.WalkConfig[doctree.Getter[resource.Resource]]{
+					Prefix: key + "/",
+					Callback: func(ctx *doctree.WalkContext[doctree.Getter[resource.Resource]], key string, n doctree.Getter[resource.Resource]) (bool, error) {
+						fmt.Println("\t\t", key, n.(resource.Resource).RelPermalink())
+						return false, nil
+					},
+				})*/
+
+				return false, nil
+
+			},
+		})
+
+	}
+
 }

@@ -25,6 +25,7 @@ import (
 	bp "github.com/gohugoio/hugo/bufferpool"
 	"github.com/gohugoio/hugo/output/layouts"
 
+	"github.com/gohugoio/hugo/identity"
 	"github.com/gohugoio/hugo/output"
 
 	htmltemplate "github.com/gohugoio/hugo/tpl/internal/go_templates/htmltemplate"
@@ -68,6 +69,7 @@ type TemplateHandler interface {
 	TemplateFinder
 	ExecuteWithContext(ctx context.Context, t Template, wr io.Writer, data any) error
 	LookupLayout(d layouts.LayoutDescriptor, f output.Format) (Template, bool, error)
+	GetIdentity(name string) (identity.Identity, bool)
 	HasTemplate(name string) bool
 }
 
@@ -173,6 +175,24 @@ type page interface {
 	IsNode() bool
 }
 
+// GetDataFromContext returns the template data context (usually .Page) from ctx if set.
+// NOte: This is not fully implemented yet.
+// NewTemplateIdentity creates a new identity.Identity based on the given tpl.
+func NewTemplateIdentity(tpl Template) *TemplateIdentity {
+	return &TemplateIdentity{
+		tpl: tpl,
+	}
+}
+
+// TemplateIdentity wraps a Template and implemnents identity.Identity.
+type TemplateIdentity struct {
+	tpl Template
+}
+
+func (id *TemplateIdentity) IdentifierBase() any {
+	return id.tpl.Name()
+}
+
 func GetHasLockFromContext(ctx context.Context) bool {
 	if v := ctx.Value(texttemplate.HasLockContextKey); v != nil {
 		return v.(bool)
@@ -182,6 +202,32 @@ func GetHasLockFromContext(ctx context.Context) bool {
 
 func SetHasLockInContext(ctx context.Context, hasLock bool) context.Context {
 	return context.WithValue(ctx, texttemplate.HasLockContextKey, hasLock)
+}
+
+func AddOrReplaceQuestionToContext(ctx context.Context, q *identity.Question) context.Context {
+	questionsSet := make(map[identity.Identity]*identity.Question)
+	if v := ctx.Value(texttemplate.QuestionsContextKey); v != nil {
+		vv := v.(map[identity.Identity]*identity.Question)
+		for k, v := range vv {
+			questionsSet[k] = v
+		}
+	}
+	questionsSet[q.Identity] = q
+
+	return context.WithValue(ctx, texttemplate.QuestionsContextKey, questionsSet)
+}
+
+func GetUnansweredQuestionFromContext(ctx context.Context, id identity.Identity) *identity.Question {
+	if v := ctx.Value(texttemplate.QuestionsContextKey); v != nil {
+		set := v.(map[identity.Identity]*identity.Question)
+		if q, ok := set[id]; ok {
+			_, answered := q.Result()
+			if !answered {
+				return q
+			}
+		}
+	}
+	return nil
 }
 
 const hugoNewLinePlaceholder = "___hugonl_"
@@ -223,4 +269,22 @@ func StripHTML(s string) string {
 	}
 
 	return s
+
+}
+
+// AddIdentiesToDataContext adds the identities found in v to the
+// DependencyManager found in ctx.
+func AddIdentiesToDataContext(ctx context.Context, v any) {
+	if v == nil {
+		return
+	}
+	if dot := GetPageFromContext(ctx); dot != nil {
+		if dp, ok := dot.(identity.DependencyManagerProvider); ok {
+			idm := dp.GetDependencyManager()
+			identity.WalkIdentities(v, false, func(level int, id identity.Identity) bool {
+				idm.AddIdentity(id)
+				return false
+			})
+		}
+	}
 }

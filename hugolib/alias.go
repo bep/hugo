@@ -25,6 +25,7 @@ import (
 	"strings"
 
 	"github.com/gohugoio/hugo/common/loggers"
+	"github.com/gohugoio/hugo/identity"
 
 	"github.com/gohugoio/hugo/output"
 	"github.com/gohugoio/hugo/publisher"
@@ -43,8 +44,13 @@ func newAliasHandler(t tpl.TemplateHandler, l loggers.Logger, allowRoot bool) al
 }
 
 type aliasPage struct {
+	identity.DependencyManagerProvider
 	Permalink string
-	page.Page
+	p         page.Page
+}
+
+func (p aliasPage) Page() page.Page {
+	return p.p
 }
 
 func (a aliasHandler) renderAlias(permalink string, p page.Page) (io.Reader, error) {
@@ -61,8 +67,9 @@ func (a aliasHandler) renderAlias(permalink string, p page.Page) (io.Reader, err
 	}
 
 	data := aliasPage{
-		permalink,
-		p,
+		DependencyManagerProvider: identity.NoopDependencyManagerProvider,
+		Permalink:                 permalink,
+		p:                         p,
 	}
 
 	ctx := tpl.SetPageInContext(context.Background(), p)

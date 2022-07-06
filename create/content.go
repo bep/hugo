@@ -103,7 +103,6 @@ func NewContent(h *hugolib.HugoSites, kind, targetPath string, force bool) error
 		}
 
 		return b.buildFile()
-
 	}
 
 	filename, err := withBuildLock()
@@ -116,7 +115,6 @@ func NewContent(h *hugolib.HugoSites, kind, targetPath string, force bool) error
 	}
 
 	return nil
-
 }
 
 type contentBuilder struct {
@@ -170,7 +168,6 @@ func (b *contentBuilder) buildDir() error {
 			}
 			return false
 		})
-
 	}
 
 	if err := b.h.Build(hugolib.BuildCfg{NoBuildLock: true, SkipRender: true, ContentInclusionFilter: contentInclusionFilter}); err != nil {
@@ -269,7 +266,6 @@ func (b *contentBuilder) setArcheTypeFilenameToUse(ext string) {
 			return
 		}
 	}
-
 }
 
 func (b *contentBuilder) applyArcheType(contentFilename, archetypeFilename string) error {
@@ -295,7 +291,7 @@ func (b *contentBuilder) applyArcheType(contentFilename, archetypeFilename strin
 func (b *contentBuilder) mapArcheTypeDir() error {
 	var m archetypeMap
 
-	walkFn := func(path string, fi hugofs.FileMetaInfo, err error) error {
+	walkFn := func(path string, fi hugofs.FileMetaDirEntry, err error) error {
 		if err != nil {
 			return err
 		}
@@ -304,7 +300,7 @@ func (b *contentBuilder) mapArcheTypeDir() error {
 			return nil
 		}
 
-		fil := fi.(hugofs.FileMetaInfo)
+		fil := fi.(hugofs.FileMetaDirEntry)
 
 		if files.IsContentFile(path) {
 			m.contentFiles = append(m.contentFiles, fil)
@@ -380,14 +376,13 @@ func (b *contentBuilder) usesSiteVar(filename string) (bool, error) {
 	}
 
 	return bytes.Contains(bb, []byte(".Site")) || bytes.Contains(bb, []byte("site.")), nil
-
 }
 
 type archetypeMap struct {
 	// These needs to be parsed and executed as Go templates.
-	contentFiles []hugofs.FileMetaInfo
+	contentFiles []hugofs.FileMetaDirEntry
 	// These are just copied to destination.
-	otherFiles []hugofs.FileMetaInfo
+	otherFiles []hugofs.FileMetaDirEntry
 	// If the templates needs a fully built site. This can potentially be
 	// expensive, so only do when needed.
 	siteUsed bool

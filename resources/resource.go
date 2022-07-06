@@ -18,17 +18,20 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"io/ioutil"
 	"path"
 	"path/filepath"
-	"strings"
 	"sync"
+	"sync/atomic"
+
+	"github.com/gohugoio/hugo/identity"
 
 	"github.com/gohugoio/hugo/resources/internal"
 
 	"github.com/gohugoio/hugo/common/herrors"
+	"github.com/gohugoio/hugo/common/paths"
 
-	"github.com/gohugoio/hugo/hugofs"
-
+	"github.com/gohugoio/hugo/common/types"
 	"github.com/gohugoio/hugo/media"
 	"github.com/gohugoio/hugo/source"
 
@@ -36,33 +39,33 @@ import (
 
 	"github.com/gohugoio/hugo/common/hugio"
 	"github.com/gohugoio/hugo/common/maps"
-	"github.com/gohugoio/hugo/resources/page"
 	"github.com/gohugoio/hugo/resources/resource"
-	"github.com/spf13/afero"
 
 	"github.com/gohugoio/hugo/helpers"
 )
 
 var (
-	_ resource.ContentResource         = (*genericResource)(nil)
-	_ resource.ReadSeekCloserResource  = (*genericResource)(nil)
-	_ resource.Resource                = (*genericResource)(nil)
-	_ resource.Source                  = (*genericResource)(nil)
-	_ resource.Cloner                  = (*genericResource)(nil)
-	_ resource.ResourcesLanguageMerger = (*resource.Resources)(nil)
-	_ permalinker                      = (*genericResource)(nil)
-	_ resource.Identifier              = (*genericResource)(nil)
-	_ fileInfo                         = (*genericResource)(nil)
+	_ resource.ContentResource           = (*genericResource)(nil)
+	_ resource.ReadSeekCloserResource    = (*genericResource)(nil)
+	_ resource.Resource                  = (*genericResource)(nil)
+	_ identity.DependencyManagerProvider = (*genericResource)(nil)
+	_ resource.Source                    = (*genericResource)(nil)
+	_ resource.Cloner                    = (*genericResource)(nil)
+	_ resource.ResourcesLanguageMerger   = (*resource.Resources)(nil)
+	_ permalinker                        = (*genericResource)(nil)
+	_ types.Identifier                   = (*genericResource)(nil)
+	_ fileInfo                           = (*genericResource)(nil)
 )
 
 type ResourceSourceDescriptor struct {
-	// TargetPaths is a callback to fetch paths's relative to its owner.
-	TargetPaths func() page.TargetPaths
 
 	// Need one of these to load the resource content.
-	SourceFile         source.File
+	SourceFile *source.File
+
+	// Keep
 	OpenReadSeekCloser resource.OpenReadSeekCloser
 
+<<<<<<< HEAD
 	FileInfo os.FileInfo
 
 	// If OpenReadSeekerCloser is not set, we use this to open the file.
@@ -78,15 +81,35 @@ type ResourceSourceDescriptor struct {
 	// The relative target filename without any language code.
 	RelTargetFilename string
 
+=======
+	Path       *paths.Path
+	TargetPath string
+	Name       string
+>>>>>>> 9a9ea8ca9 (Improve content map, memory cache and dependency resolution)
 	// Any base paths prepended to the target path. This will also typically be the
 	// language code, but setting it here means that it should not have any effect on
 	// the permalink.
 	// This may be several values. In multihost mode we may publish the same resources to
 	// multiple targets.
 	TargetBasePaths []string
+	RelPermalink    string
+	// Keep
 
 	// Delay publishing until either Permalink or RelPermalink is called. Maybe never.
 	LazyPublish bool
+
+	// If OpenReadSeekerCloser is not set, we use this to open the file.
+	SourceFilename string
+
+	// Set when its known up front, else it's resolved from the target filename.
+	MediaType media.Type
+
+	// Used to track depenencies (e.g. imports). May be nil if that's of no concern.
+	DependencyManager identity.Manager
+
+	// A shared identity for this resource and all its clones.
+	// If this is not set, an Identity is created.
+	GroupIdentity identity.Identity
 }
 
 func (r ResourceSourceDescriptor) Filename() string {
@@ -142,7 +165,9 @@ type baseResourceResource interface {
 	resourceCopier
 	resource.ContentProvider
 	resource.Resource
-	resource.Identifier
+	types.Identifier
+	identity.IdentityGroupProvider
+	identity.DependencyManagerProvider
 }
 
 type baseResourceInternal interface {
@@ -158,8 +183,9 @@ type baseResourceInternal interface {
 	cloneWithUpdates(*transformationUpdate) (baseResource, error)
 	tryTransformedFileCache(key string, u *transformationUpdate) io.ReadCloser
 
+	getTargetPathDirFile() dirFile
+
 	specProvider
-	getResourcePaths() *resourcePathDescriptor
 	getTargetFilenames() []string
 	openDestinationsForWriting() (io.WriteCloser, error)
 	openPublishFileForWriting(relTargetPath string) (io.WriteCloser, error)
@@ -176,8 +202,7 @@ type baseResource interface {
 	baseResourceInternal
 }
 
-type commonResource struct {
-}
+type commonResource struct{}
 
 // Slice is for internal use.
 // for the template functions. See collections.Slice.
@@ -193,8 +218,7 @@ func (commonResource) Slice(in any) (any, error) {
 				return nil, fmt.Errorf("type %T is not a Resource", v)
 			}
 			groups[i] = g
-			{
-			}
+
 		}
 		return groups, nil
 	default:
@@ -214,19 +238,53 @@ func (d dirFile) path() string {
 }
 
 type fileInfo interface {
-	getSourceFilename() string
-	setSourceFilename(string)
-	setSourceFs(afero.Fs)
-	getFileInfo() hugofs.FileMetaInfo
-	hash() (string, error)
-	size() int
+	setOpenSource(resource.OpenReadSeekCloser)
+	setTargetPath(dirFile)
+	size() int64
+	hashProvider
+}
+
+type hashProvider interface {
+	hash() string
+}
+
+type StaleValue[V any] struct {
+	// The value.
+	Value V
+
+	// IsStaleFunc reports whether the value is stale.
+	IsStaleFunc func() bool
+}
+
+func (s *StaleValue[V]) IsStale() bool {
+	return s.IsStaleFunc()
+}
+
+type AtomicStaler struct {
+	stale uint32
+}
+
+func (s *AtomicStaler) MarkStale() {
+	atomic.StoreUint32(&s.stale, 1)
+}
+
+func (s *AtomicStaler) IsStale() bool {
+	return atomic.LoadUint32(&(s.stale)) > 0
 }
 
 // genericResource represents a generic linkable resource.
 type genericResource struct {
-	*resourcePathDescriptor
-	*resourceFileInfo
-	*resourceContent
+	*resourceContent //
+
+	openSource   resource.OpenReadSeekCloser
+	targetPath   dirFile
+	relPermalink dirFile
+
+	// A hash of the source content. Is only calculated in caching situations.
+	h *resourceHash
+
+	groupIdentity     identity.Identity
+	dependencyManager identity.Manager
 
 	spec *Spec
 
@@ -239,6 +297,56 @@ type genericResource struct {
 	mediaType    media.Type
 }
 
+func (l *genericResource) GetIdentityGroup() identity.Identity {
+	return l.groupIdentity
+}
+
+func (l *genericResource) GetDependencyManager() identity.Manager {
+	return l.dependencyManager
+}
+
+func (l *genericResource) ReadSeekCloser() (hugio.ReadSeekCloser, error) {
+	return l.openSource()
+}
+
+func (l *genericResource) size() int64 {
+	l.hash()
+	return l.h.size
+}
+
+func (l *genericResource) hash() string {
+	l.h.init.Do(func() {
+		var hash string
+		var size int64
+		var f hugio.ReadSeekCloser
+		f, err := l.ReadSeekCloser()
+		if err != nil {
+			err = fmt.Errorf("failed to open source: %w", err)
+			return
+		}
+		defer f.Close()
+
+		hash, size, err = helpers.MD5FromReaderFast(f)
+		if err != nil {
+			return
+		}
+		l.h.value = hash
+		l.h.size = size
+	})
+
+	return l.h.value
+}
+
+func (l *genericResource) setOpenSource(openSource resource.OpenReadSeekCloser) {
+	l.openSource = openSource
+}
+
+func (l *genericResource) setTargetPath(d dirFile) {
+	// TODO1 add a setTargetName
+	l.targetPath = d
+	l.relPermalink = d
+}
+
 func (l *genericResource) Clone() resource.Resource {
 	return l.clone()
 }
@@ -248,10 +356,8 @@ func (l *genericResource) cloneTo(targetPath string) resource.Resource {
 
 	targetPath = helpers.ToSlashTrimLeading(targetPath)
 	dir, file := path.Split(targetPath)
-
-	c.resourcePathDescriptor = &resourcePathDescriptor{
-		relTargetDirFile: dirFile{dir: dir, file: file},
-	}
+	c.targetPath = dirFile{dir: dir, file: file}
+	c.relPermalink = c.targetPath
 
 	return c
 
@@ -274,11 +380,32 @@ func (l *genericResource) Data() any {
 }
 
 func (l *genericResource) Key() string {
+<<<<<<< HEAD
 	basePath := l.spec.Cfg.BaseURL().BasePath
 	if basePath == "" {
 		return l.RelPermalink()
 	}
 	return strings.TrimPrefix(l.RelPermalink(), basePath)
+=======
+	// TODO1 consider repeating the section in the path segment.
+
+	/*if l.fi != nil {
+		// Create a key that at least shares the base folder with the source,
+		// to facilitate effective cache busting on changes.
+		meta := l.fi.Meta()
+		p := meta.Path
+		if p != "" {
+			d, _ := filepath.Split(p)
+			p = path.Join(d, l.targetPath.file)
+			key := memcache.CleanKey(p)
+			key = memcache.InsertKeyPathElements(key, meta.Lang)
+
+			return key
+		}
+	}*/
+
+	return l.relPermalink.path()
+>>>>>>> 9a9ea8ca9 (Improve content map, memory cache and dependency resolution)
 }
 
 func (l *genericResource) MediaType() media.Type {
@@ -297,8 +424,17 @@ func (l *genericResource) Params() maps.Params {
 	return l.params
 }
 
+// TODO1 UrlEscape.
+func (l *genericResource) RelPermalink() string {
+	return helpers.AddLeadingSlash(path.Join(l.spec.PathSpec.GetBasePath(false), l.relPermalink.path()))
+}
+
 func (l *genericResource) Permalink() string {
+<<<<<<< HEAD
 	return l.spec.PermalinkForBaseURL(l.relPermalinkForRel(l.relTargetDirFile.path(), true), l.spec.Cfg.BaseURL().HostURL())
+=======
+	return l.spec.BaseURLString + helpers.AddLeadingSlash(l.relPermalink.path())
+>>>>>>> 9a9ea8ca9 (Improve content map, memory cache and dependency resolution)
 }
 
 func (l *genericResource) Publish() error {
@@ -312,7 +448,7 @@ func (l *genericResource) Publish() error {
 		defer fr.Close()
 
 		var fw io.WriteCloser
-		fw, err = helpers.OpenFilesForWriting(l.spec.BaseFs.PublishFs, l.getTargetFilenames()...)
+		fw, err = helpers.OpenFilesForWriting(l.spec.BaseFs.PublishFs, l.targetPath.path()) // TODO1 multiple.
 		if err != nil {
 			return
 		}
@@ -322,10 +458,6 @@ func (l *genericResource) Publish() error {
 	})
 
 	return err
-}
-
-func (l *genericResource) RelPermalink() string {
-	return l.relPermalinkFor(l.relTargetDirFile.path())
 }
 
 func (l *genericResource) ResourceType() string {
@@ -338,7 +470,7 @@ func (l *genericResource) String() string {
 
 // Path is stored with Unix style slashes.
 func (l *genericResource) TargetPath() string {
-	return l.relTargetDirFile.path()
+	return l.targetPath.path()
 }
 
 func (l *genericResource) Title() string {
@@ -346,17 +478,14 @@ func (l *genericResource) Title() string {
 }
 
 func (l *genericResource) createBasePath(rel string, isURL bool) string {
-	if l.targetPathBuilder == nil {
-		return rel
-	}
-	tp := l.targetPathBuilder()
-
-	if isURL {
+	return "TODO1"
+	/*if isURL {
 		return path.Join(tp.SubResourceBaseLink, rel)
 	}
 
 	// TODO(bep) path
 	return path.Join(filepath.ToSlash(tp.SubResourceBaseTarget), rel)
+	*/
 }
 
 func (l *genericResource) initContent() error {
@@ -385,20 +514,18 @@ func (l *genericResource) setName(name string) {
 	l.name = name
 }
 
-func (l *genericResource) getResourcePaths() *resourcePathDescriptor {
-	return l.resourcePathDescriptor
-}
-
 func (l *genericResource) getSpec() *Spec {
 	return l.spec
 }
 
 func (l *genericResource) getTargetFilenames() []string {
-	paths := l.relTargetPaths()
-	for i, p := range paths {
-		paths[i] = filepath.Clean(p)
-	}
-	return paths
+	// TODO1 multiple.
+	return []string{filepath.FromSlash(l.targetPath.path())}
+
+}
+
+func (l *genericResource) getTargetPathDirFile() dirFile {
+	return l.targetPath
 }
 
 func (l *genericResource) setTitle(title string) {
@@ -438,7 +565,7 @@ func (rc *genericResource) cloneWithUpdates(u *transformationUpdate) (baseResour
 	if u.content != nil {
 		r.contentInit.Do(func() {
 			r.content = *u.content
-			r.openReadSeekerCloser = func() (hugio.ReadSeekCloser, error) {
+			r.openSource = func() (hugio.ReadSeekCloser, error) {
 				return hugio.NewReadSeekerNoOpCloserFromString(r.content), nil
 			}
 		})
@@ -447,11 +574,14 @@ func (rc *genericResource) cloneWithUpdates(u *transformationUpdate) (baseResour
 	r.mediaType = u.mediaType
 
 	if u.sourceFilename != nil {
-		r.setSourceFilename(*u.sourceFilename)
-	}
-
-	if u.sourceFs != nil {
-		r.setSourceFs(u.sourceFs)
+		if u.sourceFs == nil {
+			return nil, errors.New("sourceFs is nil")
+		}
+		r.setOpenSource(func() (hugio.ReadSeekCloser, error) {
+			return u.sourceFs.Open(*u.sourceFilename)
+		})
+	} else if u.sourceFs != nil {
+		return nil, errors.New("sourceFs is set without sourceFilename")
 	}
 
 	if u.targetPath == "" {
@@ -459,7 +589,7 @@ func (rc *genericResource) cloneWithUpdates(u *transformationUpdate) (baseResour
 	}
 
 	fpath, fname := path.Split(u.targetPath)
-	r.resourcePathDescriptor.relTargetDirFile = dirFile{dir: fpath, file: fname}
+	r.setTargetPath(dirFile{dir: fpath, file: fname})
 
 	r.mergeData(u.data)
 
@@ -467,10 +597,6 @@ func (rc *genericResource) cloneWithUpdates(u *transformationUpdate) (baseResour
 }
 
 func (l genericResource) clone() *genericResource {
-	gi := *l.resourceFileInfo
-	rp := *l.resourcePathDescriptor
-	l.resourceFileInfo = &gi
-	l.resourcePathDescriptor = &rp
 	l.resourceContent = &resourceContent{}
 	return &l
 }
@@ -503,7 +629,7 @@ func (l *genericResource) openDestinationsForWriting() (w io.WriteCloser, err er
 }
 
 func (r *genericResource) openPublishFileForWriting(relTargetPath string) (io.WriteCloser, error) {
-	return helpers.OpenFilesForWriting(r.spec.BaseFs.PublishFs, r.relTargetPathsFor(relTargetPath)...)
+	return helpers.OpenFilesForWriting(r.spec.BaseFs.PublishFs, filepath.FromSlash(relTargetPath)) // TODO1
 }
 
 func (l *genericResource) permalinkFor(target string) string {
@@ -519,60 +645,11 @@ func (l *genericResource) relPermalinkForRel(rel string, isAbs bool) string {
 }
 
 func (l *genericResource) relTargetPathForRel(rel string, addBaseTargetPath, isAbs, isURL bool) string {
-	if addBaseTargetPath && len(l.baseTargetPathDirs) > 1 {
-		panic("multiple baseTargetPathDirs")
-	}
-	var basePath string
-	if addBaseTargetPath && len(l.baseTargetPathDirs) > 0 {
-		basePath = l.baseTargetPathDirs[0]
-	}
-
-	return l.relTargetPathForRelAndBasePath(rel, basePath, isAbs, isURL)
+	panic("relTargetPathForRel: TODO1 remove this")
 }
 
 func (l *genericResource) relTargetPathForRelAndBasePath(rel, basePath string, isAbs, isURL bool) string {
-	rel = l.createBasePath(rel, isURL)
-
-	if basePath != "" {
-		rel = path.Join(basePath, rel)
-	}
-
-	if l.baseOffset != "" {
-		rel = path.Join(l.baseOffset, rel)
-	}
-
-	if isURL {
-		bp := l.spec.PathSpec.GetBasePath(!isAbs)
-		if bp != "" {
-			rel = path.Join(bp, rel)
-		}
-	}
-
-	if len(rel) == 0 || rel[0] != '/' {
-		rel = "/" + rel
-	}
-
-	return rel
-}
-
-func (l *genericResource) relTargetPaths() []string {
-	return l.relTargetPathsForRel(l.TargetPath())
-}
-
-func (l *genericResource) relTargetPathsFor(target string) []string {
-	return l.relTargetPathsForRel(target)
-}
-
-func (l *genericResource) relTargetPathsForRel(rel string) []string {
-	if len(l.baseTargetPathDirs) == 0 {
-		return []string{l.relTargetPathForRelAndBasePath(rel, "", false, false)}
-	}
-
-	targetPaths := make([]string, len(l.baseTargetPathDirs))
-	for i, dir := range l.baseTargetPathDirs {
-		targetPaths[i] = l.relTargetPathForRelAndBasePath(rel, dir, false, false)
-	}
-	return targetPaths
+	panic("relTargetPathForRelAndBasePath: TODO1 remove this")
 }
 
 func (l *genericResource) updateParams(params map[string]any) {
@@ -597,8 +674,6 @@ type permalinker interface {
 	targetPather
 	permalinkFor(target string) string
 	relPermalinkFor(target string) string
-	relTargetPaths() []string
-	relTargetPathsFor(target string) []string
 }
 
 type resourceContent struct {
@@ -608,106 +683,8 @@ type resourceContent struct {
 	publishInit sync.Once
 }
 
-type resourceFileInfo struct {
-	// Will be set if this resource is backed by something other than a file.
-	openReadSeekerCloser resource.OpenReadSeekCloser
-
-	// This may be set to tell us to look in another filesystem for this resource.
-	// We, by default, use the sourceFs filesystem in the spec below.
-	sourceFs afero.Fs
-
-	// Absolute filename to the source, including any content folder path.
-	// Note that this is absolute in relation to the filesystem it is stored in.
-	// It can be a base path filesystem, and then this filename will not match
-	// the path to the file on the real filesystem.
-	sourceFilename string
-
-	fi hugofs.FileMetaInfo
-
-	// A hash of the source content. Is only calculated in caching situations.
-	h *resourceHash
-}
-
-func (fi *resourceFileInfo) ReadSeekCloser() (hugio.ReadSeekCloser, error) {
-	if fi.openReadSeekerCloser != nil {
-		return fi.openReadSeekerCloser()
-	}
-
-	f, err := fi.getSourceFs().Open(fi.getSourceFilename())
-	if err != nil {
-		return nil, err
-	}
-	return f, nil
-}
-
-func (fi *resourceFileInfo) getFileInfo() hugofs.FileMetaInfo {
-	return fi.fi
-}
-
-func (fi *resourceFileInfo) getSourceFilename() string {
-	return fi.sourceFilename
-}
-
-func (fi *resourceFileInfo) setSourceFilename(s string) {
-	// Make sure it's always loaded by sourceFilename.
-	fi.openReadSeekerCloser = nil
-	fi.sourceFilename = s
-}
-
-func (fi *resourceFileInfo) getSourceFs() afero.Fs {
-	return fi.sourceFs
-}
-
-func (fi *resourceFileInfo) setSourceFs(fs afero.Fs) {
-	fi.sourceFs = fs
-}
-
-func (fi *resourceFileInfo) hash() (string, error) {
-	var err error
-	fi.h.init.Do(func() {
-		var hash string
-		var f hugio.ReadSeekCloser
-		f, err = fi.ReadSeekCloser()
-		if err != nil {
-			err = fmt.Errorf("failed to open source file: %w", err)
-			return
-		}
-		defer f.Close()
-
-		hash, err = helpers.MD5FromFileFast(f)
-		if err != nil {
-			return
-		}
-		fi.h.value = hash
-	})
-
-	return fi.h.value, err
-}
-
-func (fi *resourceFileInfo) size() int {
-	if fi.fi == nil {
-		return 0
-	}
-
-	return int(fi.fi.Size())
-}
-
 type resourceHash struct {
 	value string
+	size  int64
 	init  sync.Once
-}
-
-type resourcePathDescriptor struct {
-	// The relative target directory and filename.
-	relTargetDirFile dirFile
-
-	// Callback used to construct a target path relative to its owner.
-	targetPathBuilder func() page.TargetPaths
-
-	// This will normally be the same as above, but this will only apply to publishing
-	// of resources. It may be multiple values when in multihost mode.
-	baseTargetPathDirs []string
-
-	// baseOffset is set when the output format's path has a offset, e.g. for AMP.
-	baseOffset string
 }

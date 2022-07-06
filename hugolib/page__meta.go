@@ -15,21 +15,23 @@ package hugolib
 
 import (
 	"fmt"
-	"path"
 	"path/filepath"
 	"regexp"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/gobuffalo/flect"
+	"github.com/gohugoio/hugo/resources/page/pagekinds"
+
 	"github.com/gohugoio/hugo/langs"
 
-	"github.com/gobuffalo/flect"
 	"github.com/gohugoio/hugo/markup/converter"
 
 	"github.com/gohugoio/hugo/hugofs/files"
 
 	"github.com/gohugoio/hugo/common/hugo"
+	"github.com/gohugoio/hugo/common/paths"
 
 	"github.com/gohugoio/hugo/related"
 
@@ -48,6 +50,11 @@ import (
 
 var cjkRe = regexp.MustCompile(`\p{Han}|\p{Hangul}|\p{Hiragana}|\p{Katakana}`)
 
+var (
+	_ resource.Dated  = (*pageMeta)(nil)
+	_ resource.Staler = (*pageMeta)(nil)
+)
+
 type pageMeta struct {
 	// kind is the discriminator that identifies the different page types
 	// in the different page collections. This can, as an example, be used
@@ -58,18 +65,19 @@ type pageMeta struct {
 	// the templates.
 	kind string
 
-	// This is a standalone page not part of any page collection. These
-	// include sitemap, robotsTXT and similar. It will have no pageOutputs, but
-	// a fixed pageOutput.
-	standalone bool
+	resource.Staler
+
+	// Set for standalone pages, e.g. robotsTXT.
+	standaloneOutputFormat output.Format
 
 	draft       bool // Only published when running with -D flag
 	buildConfig pagemeta.BuildConfig
+	bundleType  files.ContentClass
 
-	bundleType files.ContentClass
-
-	// Params contains configuration defined in the params section of page frontmatter.
-	params map[string]any
+	// params contains configuration defined in the params section of page frontmatter.
+	params maps.Params
+	// cascade contains default configuration to be cascaded downwards.
+	cascade map[page.PageMatcher]maps.Params
 
 	title     string
 	linkTitle string
@@ -95,7 +103,9 @@ type pageMeta struct {
 
 	urlPaths pagemeta.URLPath
 
-	resource.Dates
+	// The 4 front matter dates that Hugo cares about.
+	// Note that we have a mapping setup that maps from other keys.
+	pageMetaDates
 
 	// Set if this page is bundled inside another.
 	bundled bool
@@ -111,17 +121,40 @@ type pageMeta struct {
 	// the Resources above.
 	resourcesMetadata []map[string]any
 
-	f source.File
+	// Always set. Thi is the cannonical path to the Page.
+	pathInfo *paths.Path
 
-	sections []string
+	// Set if backed by a file.
+	f *source.File
 
 	// Sitemap overrides from front matter.
 	sitemap config.SitemapConfig
 
+	// Convenience shortcuts to the Site.
 	s *Site
 
 	contentConverterInit sync.Once
 	contentConverter     converter.Converter
+}
+
+type pageMetaDates struct {
+	dates resource.Dates
+}
+
+func (d *pageMetaDates) Date() time.Time {
+	return d.dates.Date()
+}
+
+func (d *pageMetaDates) Lastmod() time.Time {
+	return d.dates.Lastmod()
+}
+
+func (d *pageMetaDates) PublishDate() time.Time {
+	return d.dates.PublishDate()
+}
+
+func (d *pageMetaDates) ExpiryDate() time.Time {
+	return d.dates.ExpiryDate()
 }
 
 func (p *pageMeta) Aliases() []string {
@@ -159,20 +192,20 @@ func (p *pageMeta) Draft() bool {
 	return p.draft
 }
 
-func (p *pageMeta) File() source.File {
+func (p *pageMeta) File() *source.File {
 	return p.f
 }
 
 func (p *pageMeta) IsHome() bool {
-	return p.Kind() == page.KindHome
-}
-
-func (p *pageMeta) Keywords() []string {
-	return p.keywords
+	return p.Kind() == pagekinds.Home
 }
 
 func (p *pageMeta) Kind() string {
 	return p.kind
+}
+
+func (p *pageMeta) Keywords() []string {
+	return p.keywords
 }
 
 func (p *pageMeta) Layout() string {
@@ -195,11 +228,11 @@ func (p *pageMeta) Name() string {
 }
 
 func (p *pageMeta) IsNode() bool {
-	return !p.IsPage()
+	return !(p.IsPage() || p.isStandalone())
 }
 
 func (p *pageMeta) IsPage() bool {
-	return p.Kind() == page.KindPage
+	return p.Kind() == pagekinds.Page
 }
 
 // Param is a convenience method to do lookups in Page's and Site's Params map,
@@ -216,28 +249,7 @@ func (p *pageMeta) Params() maps.Params {
 }
 
 func (p *pageMeta) Path() string {
-	if !p.File().IsZero() {
-		const example = `
-  {{ $path := "" }}
-  {{ with .File }}
-	{{ $path = .Path }}
-  {{ else }}
-	{{ $path = .Path }}
-  {{ end }}
-`
-		helpers.Deprecated(".Path when the page is backed by a file", "We plan to use Path for a canonical source path and you probably want to check the source is a file. To get the current behaviour, you can use a construct similar to the one below:\n"+example, false)
-
-	}
-
-	return p.Pathc()
-}
-
-// This is just a bridge method, use Path in templates.
-func (p *pageMeta) Pathc() string {
-	if !p.File().IsZero() {
-		return p.File().Path()
-	}
-	return p.SectionsPath()
+	return p.pathInfo.Base()
 }
 
 // RelatedKeywords implements the related.Document interface needed for fast page searches.
@@ -251,35 +263,12 @@ func (p *pageMeta) RelatedKeywords(cfg related.IndexConfig) ([]related.Keyword, 
 }
 
 func (p *pageMeta) IsSection() bool {
-	return p.Kind() == page.KindSection
+	return p.Kind() == pagekinds.Section
 }
 
 func (p *pageMeta) Section() string {
-	if p.IsHome() {
-		return ""
-	}
-
-	if p.IsNode() {
-		if len(p.sections) == 0 {
-			// May be a sitemap or similar.
-			return ""
-		}
-		return p.sections[0]
-	}
-
-	if !p.File().IsZero() {
-		return p.File().Section()
-	}
-
-	panic("invalid page state")
-}
-
-func (p *pageMeta) SectionsEntries() []string {
-	return p.sections
-}
-
-func (p *pageMeta) SectionsPath() string {
-	return path.Join(p.SectionsEntries()...)
+	// TODO1 make sure pathInfo is always set.
+	return p.pathInfo.Section()
 }
 
 func (p *pageMeta) Sitemap() config.SitemapConfig {
@@ -308,79 +297,128 @@ func (p *pageMeta) Weight() int {
 	return p.weight
 }
 
-func (pm *pageMeta) mergeBucketCascades(b1, b2 *pagesMapBucket) {
-	if b1.cascade == nil {
-		b1.cascade = make(map[page.PageMatcher]maps.Params)
-	}
+func (ps *pageState) initLazyProviders() error {
+	ps.init.Add(func() (any, error) {
+		pp, err := newPagePaths(ps)
+		if err != nil {
+			return nil, err
+		}
 
-	if b2 != nil && b2.cascade != nil {
-		for k, v := range b2.cascade {
+		var outputFormatsForPage output.Formats
+		var renderFormats output.Formats
 
-			vv, found := b1.cascade[k]
-			if !found {
-				b1.cascade[k] = v
-			} else {
-				// Merge
-				for ck, cv := range v {
-					if _, found := vv[ck]; !found {
-						vv[ck] = cv
+		if ps.m.standaloneOutputFormat.IsZero() {
+			outputFormatsForPage = ps.m.outputFormats()
+			renderFormats = ps.s.h.renderFormats
+		} else {
+			// One of the fixed output format pages, e.g. 404.
+			outputFormatsForPage = output.Formats{ps.m.standaloneOutputFormat}
+			renderFormats = outputFormatsForPage
+		}
+
+		// Prepare output formats for all sites.
+		// We do this even if this page does not get rendered on
+		// its own. It may be referenced via one of the site collections etc.
+		// it will then need an output format.
+		ps.pageOutputs = make([]*pageOutput, len(renderFormats))
+		created := make(map[string]*pageOutput)
+		shouldRenderPage := !ps.m.noRender()
+
+		for i, f := range renderFormats {
+
+			if po, found := created[f.Name]; found {
+				ps.pageOutputs[i] = po
+				continue
+			}
+
+			render := shouldRenderPage
+			if render {
+				_, render = outputFormatsForPage.GetByName(f.Name)
+			}
+
+			po := newPageOutput(ps, pp, f, render)
+
+			// Create a content provider for the first,
+			// we may be able to reuse it.
+			if i == 0 {
+				contentProvider, err := newPageContentOutput(po)
+				if err != nil {
+					return nil, err
+				}
+				po.setContentProvider(contentProvider)
+			}
+
+			ps.pageOutputs[i] = po
+			created[f.Name] = po
+
+		}
+
+		if err := ps.initCommonProviders(pp); err != nil {
+			return nil, err
+		}
+
+		return nil, nil
+	})
+
+	return nil
+}
+
+func (ps *pageState) setMetadatPost(cascade map[page.PageMatcher]maps.Params) error {
+	// Apply cascades first so they can be overriden later.
+	if cascade != nil {
+		if ps.m.cascade != nil {
+			for k, v := range cascade {
+				vv, found := ps.m.cascade[k]
+				if !found {
+					ps.m.cascade[k] = v
+				} else {
+					// Merge
+					for ck, cv := range v {
+						if _, found := vv[ck]; !found {
+							vv[ck] = cv
+						}
 					}
 				}
 			}
+			cascade = ps.m.cascade
 		}
 	}
-}
 
-func (pm *pageMeta) setMetadata(parentBucket *pagesMapBucket, p *pageState, frontmatter map[string]any) error {
-	pm.params = make(maps.Params)
-
-	if frontmatter == nil && (parentBucket == nil || parentBucket.cascade == nil) {
-		return nil
+	if cascade == nil {
+		cascade = ps.m.cascade
 	}
 
-	if frontmatter != nil {
-		// Needed for case insensitive fetching of params values
-		maps.PrepareParams(frontmatter)
-		if p.bucket != nil {
-			// Check for any cascade define on itself.
-			if cv, found := frontmatter["cascade"]; found {
-				var err error
-				p.bucket.cascade, err = page.DecodeCascade(cv)
-				if err != nil {
-					return err
+	// Cascade is also applied to itself.
+	if cascade != nil {
+		for m, v := range cascade {
+			if !m.Matches(ps) {
+				continue
+			}
+			for kk, vv := range v {
+				if _, found := ps.m.params[kk]; !found {
+					ps.m.params[kk] = vv
 				}
 			}
 		}
-	} else {
-		frontmatter = make(map[string]any)
+
 	}
 
-	var cascade map[page.PageMatcher]maps.Params
-
-	if p.bucket != nil {
-		if parentBucket != nil {
-			// Merge missing keys from parent into this.
-			pm.mergeBucketCascades(p.bucket, parentBucket)
-		}
-		cascade = p.bucket.cascade
-	} else if parentBucket != nil {
-		cascade = parentBucket.cascade
+	if err := ps.setMetaDataPostParams(); err != nil {
+		return err
 	}
 
-	for m, v := range cascade {
-		if !m.Matches(p) {
-			continue
-		}
-		for kk, vv := range v {
-			if _, found := frontmatter[kk]; !found {
-				frontmatter[kk] = vv
-			}
-		}
+	if err := ps.m.applyDefaultValues(); err != nil {
+		return err
 	}
 
+	return nil
+}
+
+func (p *pageState) setMetaDataPostParams() error {
+	pm := p.m
 	var mtime time.Time
 	var contentBaseName string
-	if !p.File().IsZero() {
+	if p.File() != nil {
 		contentBaseName = p.File().ContentBaseName()
 		if p.File().FileInfo() != nil {
 			mtime = p.File().FileInfo().ModTime()
@@ -393,9 +431,9 @@ func (pm *pageMeta) setMetadata(parentBucket *pagesMapBucket, p *pageState, fron
 	}
 
 	descriptor := &pagemeta.FrontMatterDescriptor{
-		Frontmatter:   frontmatter,
+		Frontmatter:   pm.params, // TODO1 remove me.
 		Params:        pm.params,
-		Dates:         &pm.Dates,
+		Dates:         &pm.pageMetaDates.dates,
 		PageURLs:      &pm.urlPaths,
 		BaseFilename:  contentBaseName,
 		ModTime:       mtime,
@@ -411,15 +449,22 @@ func (pm *pageMeta) setMetadata(parentBucket *pagesMapBucket, p *pageState, fron
 		p.s.Log.Errorf("Failed to handle dates for page %q: %s", p.pathOrTitle(), err)
 	}
 
-	pm.buildConfig, err = pagemeta.DecodeBuildConfig(frontmatter["_build"])
+	pm.buildConfig, err = pagemeta.DecodeBuildConfig(pm.params["_build"])
 	if err != nil {
 		return err
+	}
+
+	// TODO1
+	isStandalone := false
+	if isStandalone {
+		// Standalone pages, e.g. 404.
+		pm.buildConfig.List = pagemeta.Never
 	}
 
 	var sitemapSet bool
 
 	var draft, published, isCJKLanguage *bool
-	for k, v := range frontmatter {
+	for k, v := range pm.params {
 		loki := strings.ToLower(k)
 
 		if loki == "published" { // Intentionally undocumented
@@ -480,6 +525,7 @@ func (pm *pageMeta) setMetadata(parentBucket *pagesMapBucket, p *pageState, fron
 			// pages.
 			isHeadless := cast.ToBool(v)
 			pm.params[loki] = isHeadless
+			// TODO1 when File is nil.
 			if p.File().TranslationBaseName() == "index" && isHeadless {
 				pm.buildConfig.List = pagemeta.Never
 				pm.buildConfig.Render = pagemeta.Never
@@ -576,6 +622,7 @@ func (pm *pageMeta) setMetadata(parentBucket *pagesMapBucket, p *pageState, fron
 							break
 						}
 					}
+<<<<<<< HEAD
 					if allStrings {
 						// We need tags, keywords etc. to be []string, not []interface{}.
 						a := make([]string, len(vv))
@@ -588,6 +635,11 @@ func (pm *pageMeta) setMetadata(parentBucket *pagesMapBucket, p *pageState, fron
 					}
 				} else {
 					pm.params[loki] = []string{}
+=======
+				default:
+					pm.params[loki] = vv
+
+>>>>>>> 9a9ea8ca9 (Improve content map, memory cache and dependency resolution)
 				}
 
 			default:
@@ -614,8 +666,13 @@ func (pm *pageMeta) setMetadata(parentBucket *pagesMapBucket, p *pageState, fron
 
 	if isCJKLanguage != nil {
 		pm.isCJKLanguage = *isCJKLanguage
+<<<<<<< HEAD
 	} else if p.s.conf.HasCJKLanguage && p.source.parsed != nil {
 		if cjkRe.Match(p.source.parsed.Input()) {
+=======
+	} else if p.s.siteCfg.hasCJKLanguage && p.content.openSource != nil {
+		if cjkRe.Match(p.content.mustSource()) {
+>>>>>>> 9a9ea8ca9 (Improve content map, memory cache and dependency resolution)
 			pm.isCJKLanguage = true
 		} else {
 			pm.isCJKLanguage = false
@@ -627,28 +684,71 @@ func (pm *pageMeta) setMetadata(parentBucket *pagesMapBucket, p *pageState, fron
 	return nil
 }
 
+func (ps *pageState) setMetadataPre() error {
+	pm := ps.m
+	p := ps
+	frontmatter := p.content.frontMatter
+
+	if frontmatter != nil {
+		// Needed for case insensitive fetching of params values
+		maps.PrepareParams(frontmatter)
+		pm.params = frontmatter
+		if p.IsNode() {
+			// Check for any cascade define on itself.
+			if cv, found := frontmatter["cascade"]; found {
+				var err error
+				pm.cascade, err = page.DecodeCascade(cv)
+				if err != nil {
+					return err
+				}
+
+			}
+		}
+	} else {
+		pm.params = make(maps.Params)
+	}
+
+	if true {
+		return nil
+	}
+
+	return nil
+
+}
+
 func (p *pageMeta) noListAlways() bool {
 	return p.buildConfig.List != pagemeta.Always
 }
 
-func (p *pageMeta) getListFilter(local bool) contentTreeNodeCallback {
-	return newContentTreeFilter(func(n *contentNode) bool {
-		if n == nil {
-			return true
-		}
+// shouldList returns whether this page should be included in the list of pages.
+// glogal indicates site.Pages etc.
+func (p *pageMeta) shouldList(global bool) bool {
+	if p.isStandalone() {
+		// Never list 404, sitemap and similar.
+		return false
+	}
 
-		var shouldList bool
-		switch n.p.m.buildConfig.List {
-		case pagemeta.Always:
-			shouldList = true
-		case pagemeta.Never:
-			shouldList = false
-		case pagemeta.ListLocally:
-			shouldList = local
-		}
+	switch p.buildConfig.List {
+	case pagemeta.Always:
+		return true
+	case pagemeta.Never:
+		return false
+	case pagemeta.ListLocally:
+		return !global
+	}
+	return false
+}
 
-		return !shouldList
-	})
+func (p *pageMeta) shouldBeCheckedForMenuDefinitions() bool {
+	if !p.shouldList(false) {
+		return false
+	}
+
+	return p.kind == pagekinds.Home || p.kind == pagekinds.Section || p.kind == pagekinds.Page
+}
+
+func (p *pageMeta) isStandalone() bool {
+	return !p.standaloneOutputFormat.IsZero()
 }
 
 func (p *pageMeta) noRender() bool {
@@ -659,7 +759,7 @@ func (p *pageMeta) noLink() bool {
 	return p.buildConfig.Render == pagemeta.Never
 }
 
-func (p *pageMeta) applyDefaultValues(n *contentNode) error {
+func (p *pageMeta) applyDefaultValues() error {
 	if p.buildConfig.IsZero() {
 		p.buildConfig, _ = pagemeta.DecodeBuildConfig(nil)
 	}
@@ -669,7 +769,7 @@ func (p *pageMeta) applyDefaultValues(n *contentNode) error {
 	}
 
 	if p.markup == "" {
-		if !p.File().IsZero() {
+		if p.File() != nil {
 			// Fall back to file extension
 			p.markup = p.s.ContentSpec.ResolveMarkup(p.File().Ext())
 		}
@@ -678,8 +778,9 @@ func (p *pageMeta) applyDefaultValues(n *contentNode) error {
 		}
 	}
 
-	if p.title == "" && p.f.IsZero() {
+	if p.title == "" && p.f == nil {
 		switch p.Kind() {
+<<<<<<< HEAD
 		case page.KindHome:
 			p.title = p.s.Title()
 		case page.KindSection:
@@ -690,12 +791,19 @@ func (p *pageMeta) applyDefaultValues(n *contentNode) error {
 				sectionName = p.sections[0]
 			}
 
+=======
+		case pagekinds.Home:
+			p.title = p.s.Info.title
+		case pagekinds.Section:
+			sectionName := p.pathInfo.BaseNameNoIdentifier()
+>>>>>>> 9a9ea8ca9 (Improve content map, memory cache and dependency resolution)
 			sectionName = helpers.FirstUpper(sectionName)
 			if p.s.conf.PluralizeListTitles {
 				p.title = flect.Pluralize(sectionName)
 			} else {
 				p.title = sectionName
 			}
+<<<<<<< HEAD
 		case page.KindTerm:
 			// TODO(bep) improve
 			key := p.sections[len(p.sections)-1]
@@ -703,22 +811,25 @@ func (p *pageMeta) applyDefaultValues(n *contentNode) error {
 		case page.KindTaxonomy:
 			p.title = p.s.conf.C.CreateTitle(p.sections[0])
 		case kind404:
+=======
+		case pagekinds.Term, pagekinds.Taxonomy:
+			p.title = strings.Replace(p.s.titleFunc(p.pathInfo.BaseNameNoIdentifier()), "-", " ", -1)
+		case pagekinds.Status404:
+>>>>>>> 9a9ea8ca9 (Improve content map, memory cache and dependency resolution)
 			p.title = "404 Page not found"
-
 		}
 	}
 
 	if p.IsNode() {
 		p.bundleType = files.ContentClassBranch
-	} else {
-		source := p.File()
-		if fi, ok := source.(*fileInfo); ok {
-			class := fi.FileInfo().Meta().Classifier
-			switch class {
-			case files.ContentClassBranch, files.ContentClassLeaf:
-				p.bundleType = class
-			}
+	} else if p.File() != nil {
+		class := p.File().FileInfo().Meta().Classifier
+		switch class {
+		case files.ContentClassBranch, files.ContentClassLeaf, files.ContentClassContent:
+			p.bundleType = class
+
 		}
+
 	}
 
 	return nil
@@ -735,20 +846,16 @@ func (p *pageMeta) newContentConverter(ps *pageState, markup string) (converter.
 
 	var id string
 	var filename string
-	var path string
 	if !p.f.IsZero() {
 		id = p.f.UniqueID()
 		filename = p.f.Filename()
-		path = p.f.Path()
-	} else {
-		path = p.Pathc()
 	}
 
 	cpp, err := cp.New(
 		converter.DocumentContext{
 			Document:     newPageForRenderHook(ps),
 			DocumentID:   id,
-			DocumentName: path,
+			DocumentName: p.Path(),
 			Filename:     filename,
 		},
 	)

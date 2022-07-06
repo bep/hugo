@@ -155,6 +155,13 @@ type RenderContext struct {
 
 	// GerRenderer provides hook renderers on demand.
 	GetRenderer hooks.GetRendererFunc
+
+	// Used to track dependencies.
+	DependencyManagerProvider identity.DependencyManagerProvider
 }
 
-var FeatureRenderHooks = identity.NewPathIdentity("markup", "renderingHooks")
+const (
+	FeatureRenderHookImage   = identity.StringIdentity("feature/renderHooks/image ")
+	FeatureRenderHookLink    = identity.StringIdentity("feature/renderHooks/link")
+	FeatureRenderHookHeading = identity.StringIdentity("feature/renderHooks/heading ")
+)

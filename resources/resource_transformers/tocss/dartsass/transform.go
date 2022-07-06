@@ -97,7 +97,7 @@ func (t *transform) Transform(ctx *resources.ResourceTransformationCtx) error {
 	for _, ip := range opts.IncludePaths {
 		info, err := t.c.workFs.Stat(filepath.Clean(ip))
 		if err == nil {
-			filename := info.(hugofs.FileMetaInfo).Meta().Filename
+			filename := info.(hugofs.FileMetaDirEntry).Meta().Filename
 			args.IncludePaths = append(args.IncludePaths, filename)
 		}
 	}
@@ -174,7 +174,7 @@ func (t importResolver) CanonicalizeURL(url string) (string, error) {
 		filenameToCheck := filepath.Join(basePath, fmt.Sprintf(namePattern, name))
 		fi, err := t.c.sfs.Fs.Stat(filenameToCheck)
 		if err == nil {
-			if fim, ok := fi.(hugofs.FileMetaInfo); ok {
+			if fim, ok := fi.(hugofs.FileMetaDirEntry); ok {
 				return "file://" + filepath.ToSlash(fim.Meta().Filename), nil
 			}
 		}

@@ -44,7 +44,7 @@ type ErrorSender interface {
 func Recover(args ...any) {
 	if r := recover(); r != nil {
 		fmt.Println("ERR:", r)
-		args = append(args, "stacktrace from panic: \n"+string(debug.Stack()), "\n")
+		args := append(args, "stacktrace from panic: \n"+string(debug.Stack()), "\n")
 		fmt.Println(args...)
 	}
 }

@@ -9,6 +9,7 @@ import (
 	"sync"
 	"sync/atomic"
 
+	"github.com/gohugoio/hugo/cache/memcache"
 	"github.com/gohugoio/hugo/common/hexec"
 	"github.com/gohugoio/hugo/common/loggers"
 	"github.com/gohugoio/hugo/config"
@@ -61,6 +62,9 @@ type Deps struct {
 
 	// The configuration to use
 	Conf config.AllProvider `json:"-"`
+
+	// The memory cache to use.
+	MemCache *memcache.Cache
 
 	// The translation func to use
 	Translate func(ctx context.Context, translationID string, templateData any) string `json:"-"`
@@ -294,6 +298,13 @@ func (b *Listeners) Notify() {
 type ResourceProvider interface {
 	NewResource(dst *Deps) error
 	CloneResource(dst, src *Deps) error
+}
+
+// Stop stops all running caches etc.
+func (d *Deps) Stop() {
+	if d.MemCache != nil {
+		d.MemCache.Stop()
+	}
 }
 
 func (d *Deps) Tmpl() tpl.TemplateHandler {

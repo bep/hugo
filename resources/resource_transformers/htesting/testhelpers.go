@@ -16,6 +16,9 @@ package htesting
 import (
 	"path/filepath"
 
+	"github.com/gohugoio/hugo/cache/filecache"
+	"github.com/gohugoio/hugo/cache/memcache"
+	"github.com/gohugoio/hugo/common/hugio"
 	"github.com/gohugoio/hugo/config"
 	"github.com/gohugoio/hugo/config/testconfig"
 	"github.com/gohugoio/hugo/helpers"
@@ -43,7 +46,17 @@ func NewTestResourceSpec() (*resources.Spec, error) {
 		return nil, err
 	}
 
+<<<<<<< HEAD
 	spec, err := resources.NewSpec(s, nil, nil, nil, nil, nil, nil)
+=======
+	filecaches, err := filecache.NewCaches(s)
+	if err != nil {
+		return nil, err
+	}
+	memCache := memcache.New(memcache.Options{})
+
+	spec, err := resources.NewSpec(s, filecaches, memCache, nil, nil, nil, nil, output.DefaultFormats, media.DefaultTypes)
+>>>>>>> 9a9ea8ca9 (Improve content map, memory cache and dependency resolution)
 	return spec, err
 }
 
@@ -55,15 +68,21 @@ func NewResourceTransformer(filename, content string) (resources.ResourceTransfo
 	return NewResourceTransformerForSpec(spec, filename, content)
 }
 
-func NewResourceTransformerForSpec(spec *resources.Spec, filename, content string) (resources.ResourceTransformer, error) {
-	filename = filepath.FromSlash(filename)
+func NewResourceTransformerForSpec(spec *resources.Spec, pathname, content string) (resources.ResourceTransformer, error) {
+	filename := filepath.FromSlash(pathname)
 
 	fs := spec.Fs.Source
 	if err := afero.WriteFile(fs, filename, []byte(content), 0777); err != nil {
 		return nil, err
 	}
 
-	r, err := spec.New(resources.ResourceSourceDescriptor{Fs: fs, SourceFilename: filename})
+	r, err := spec.New(
+		resources.ResourceSourceDescriptor{
+			TargetPath: pathname,
+			OpenReadSeekCloser: func() (hugio.ReadSeekCloser, error) {
+				return fs.Open(filename)
+			},
+		})
 	if err != nil {
 		return nil, err
 	}

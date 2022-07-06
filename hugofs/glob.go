@@ -25,7 +25,7 @@ import (
 
 // Glob walks the fs and passes all matches to the handle func.
 // The handle func can return true to signal a stop.
-func Glob(fs afero.Fs, pattern string, handle func(fi FileMetaInfo) (bool, error)) error {
+func Glob(fs afero.Fs, pattern string, handle func(fi FileMetaDirEntry) (bool, error)) error {
 	pattern = glob.NormalizePathNoLower(pattern)
 	if pattern == "" {
 		return nil
@@ -44,7 +44,7 @@ func Glob(fs afero.Fs, pattern string, handle func(fi FileMetaInfo) (bool, error
 	// Signals that we're done.
 	done := errors.New("done")
 
-	wfn := func(p string, info FileMetaInfo, err error) error {
+	wfn := func(p string, info FileMetaDirEntry, err error) error {
 		p = glob.NormalizePath(p)
 		if info.IsDir() {
 			if !hasSuperAsterisk {

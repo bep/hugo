@@ -22,7 +22,6 @@ import (
 
 	"github.com/gohugoio/hugo/config/allconfig"
 	"github.com/gohugoio/hugo/config/security"
-	"github.com/gohugoio/hugo/htesting"
 
 	"github.com/gohugoio/hugo/output"
 
@@ -59,6 +58,8 @@ var (
 )
 
 type sitesBuilder struct {
+	RewriteTest bool
+
 	Cfg     config.Provider
 	Configs *allconfig.Configs
 
@@ -605,6 +606,32 @@ func (s *sitesBuilder) build(cfg BuildCfg, shouldFail bool) *sitesBuilder {
 	s.Helper()
 	defer func() {
 		s.changedFiles = nil
+		s.removedFiles = nil
+
+		if s.RewriteTest {
+			files := s.DumpTxtar()
+			name := s.Name()
+
+			newTestTempl := `func %sNew(t *testing.T) {
+				c := qt.New(t)
+			
+				files := %s
+			
+				b := NewIntegrationTestBuilder(
+					IntegrationTestConfig{
+						T:               c,
+						NeedsOsFS:       false,
+						NeedsNpmInstall: false,
+						TxtarString:     files,
+					}).Build()
+			
+				b.Assert(true, qt.IsTrue)
+			}
+			`
+
+			newTest := fmt.Sprintf(newTestTempl, name, "`\n"+files+"\n`")
+			fmt.Println(newTest)
+		}
 	}()
 
 	if s.H == nil {
@@ -747,12 +774,12 @@ func (s *sitesBuilder) AssertHome(matches ...string) {
 
 func (s *sitesBuilder) AssertFileContent(filename string, matches ...string) {
 	s.T.Helper()
-	content := s.FileContent(filename)
+	content := strings.TrimSpace(s.FileContent(filename))
 	for _, m := range matches {
 		lines := strings.Split(m, "\n")
 		for _, match := range lines {
 			match = strings.TrimSpace(match)
-			if match == "" {
+			if match == "" || strings.HasPrefix(match, "#") {
 				continue
 			}
 			if !strings.Contains(content, match) {
@@ -800,9 +827,10 @@ func (s *sitesBuilder) AssertObject(expected string, object any) {
 	expected = strings.TrimSpace(expected)
 
 	if expected != got {
-		fmt.Println(got)
-		diff := htesting.DiffStrings(expected, got)
-		s.Fatalf("diff:\n%s\nexpected\n%s\ngot\n%s", diff, expected, got)
+		s.Fatal("object diff")
+		// fmt.Println(got)
+		// diff := htesting.DiffStrings(expected, got)
+		// s.Fatalf("diff:\n%s\nexpected\n%s\ngot\n%s", diff, expected, got)
 	}
 }
 
@@ -824,6 +852,14 @@ func (s *sitesBuilder) GetPage(ref string) page.Page {
 	p, err := s.H.Sites[0].getPageNew(nil, ref)
 	s.Assert(err, qt.IsNil)
 	return p
+}
+
+func (s *sitesBuilder) PrintDebug() {
+	for _, ss := range s.H.Sites {
+		fmt.Println("Page map for site", ss.Lang())
+		// TODO1
+
+	}
 }
 
 func (s *sitesBuilder) GetPageRel(p page.Page, ref string) page.Page {
@@ -1047,7 +1083,7 @@ func content(c resource.ContentProvider) string {
 func pagesToString(pages ...page.Page) string {
 	var paths []string
 	for _, p := range pages {
-		paths = append(paths, p.Pathc())
+		paths = append(paths, p.Path())
 	}
 	sort.Strings(paths)
 	return strings.Join(paths, "|")
@@ -1069,7 +1105,7 @@ func dumpPages(pages ...page.Page) {
 	fmt.Println("---------")
 	for _, p := range pages {
 		fmt.Printf("Kind: %s Title: %-10s RelPermalink: %-10s Path: %-10s sections: %s Lang: %s\n",
-			p.Kind(), p.Title(), p.RelPermalink(), p.Pathc(), p.SectionsPath(), p.Lang())
+			p.Kind(), p.Title(), p.RelPermalink(), p.Path(), p.SectionsPath(), p.Lang())
 	}
 }
 
@@ -1077,7 +1113,7 @@ func dumpSPages(pages ...*pageState) {
 	for i, p := range pages {
 		fmt.Printf("%d: Kind: %s Title: %-10s RelPermalink: %-10s Path: %-10s sections: %s\n",
 			i+1,
-			p.Kind(), p.Title(), p.RelPermalink(), p.Pathc(), p.SectionsPath())
+			p.Kind(), p.Title(), p.RelPermalink(), p.Path(), p.SectionsPath())
 	}
 }
 

@@ -15,20 +15,16 @@
 package goldmark
 
 import (
-	"bytes"
-
 	"github.com/gohugoio/hugo/identity"
 
 	"github.com/gohugoio/hugo/markup/goldmark/codeblocks"
 	"github.com/gohugoio/hugo/markup/goldmark/goldmark_config"
 	"github.com/gohugoio/hugo/markup/goldmark/images"
 	"github.com/gohugoio/hugo/markup/goldmark/internal/extensions/attributes"
-	"github.com/gohugoio/hugo/markup/goldmark/internal/render"
 
 	"github.com/gohugoio/hugo/markup/converter"
 	"github.com/gohugoio/hugo/markup/tableofcontents"
 	"github.com/yuin/goldmark"
-	"github.com/yuin/goldmark/ast"
 	"github.com/yuin/goldmark/extension"
 	"github.com/yuin/goldmark/parser"
 	"github.com/yuin/goldmark/renderer"
@@ -162,8 +158,6 @@ func newMarkdown(pcfg converter.ProviderConfig) goldmark.Markdown {
 	return md
 }
 
-var _ identity.IdentitiesProvider = (*converterResult)(nil)
-
 type parserResult struct {
 	doc any
 	toc *tableofcontents.Fragments
@@ -179,24 +173,18 @@ func (p parserResult) TableOfContents() *tableofcontents.Fragments {
 
 type renderResult struct {
 	converter.ResultRender
-	ids identity.Identities
-}
-
-func (r renderResult) GetIdentities() identity.Identities {
-	return r.ids
 }
 
 type converterResult struct {
 	converter.ResultRender
 	tableOfContentsProvider
-	identity.IdentitiesProvider
 }
 
 type tableOfContentsProvider interface {
 	TableOfContents() *tableofcontents.Fragments
 }
 
-var converterIdentity = identity.KeyValueIdentity{Key: "goldmark", Value: "converter"}
+var converterIdentity = identity.StringIdentity("feature/markdown/goldmark")
 
 func (c *goldmarkConverter) Parse(ctx converter.RenderContext) (converter.ResultParse, error) {
 	pctx := c.newParserContext(ctx)
@@ -214,27 +202,17 @@ func (c *goldmarkConverter) Parse(ctx converter.RenderContext) (converter.Result
 
 }
 func (c *goldmarkConverter) Render(ctx converter.RenderContext, doc any) (converter.ResultRender, error) {
-	n := doc.(ast.Node)
-	buf := &render.BufWriter{Buffer: &bytes.Buffer{}}
-
-	rcx := &render.RenderContextDataHolder{
-		Rctx: ctx,
-		Dctx: c.ctx,
-		IDs:  identity.NewManager(converterIdentity),
-	}
-
-	w := &render.Context{
-		BufWriter:   buf,
-		ContextData: rcx,
-	}
-
-	if err := c.md.Renderer().Render(w, ctx.Src, n); err != nil {
+	parseResult, err := c.Parse(ctx)
+	if err != nil {
 		return nil, err
 	}
-
-	return renderResult{
-		ResultRender: buf,
-		ids:          rcx.IDs.GetIdentities(),
+	renderResult, err := c.Render(ctx, parseResult.Doc())
+	if err != nil {
+		return nil, err
+	}
+	return converterResult{
+		ResultRender:            renderResult,
+		tableOfContentsProvider: parseResult,
 	}, nil
 
 }
@@ -251,17 +229,18 @@ func (c *goldmarkConverter) Convert(ctx converter.RenderContext) (converter.Resu
 	return converterResult{
 		ResultRender:            renderResult,
 		tableOfContentsProvider: parseResult,
-		IdentitiesProvider:      renderResult.(identity.IdentitiesProvider),
 	}, nil
 
 }
 
 var featureSet = map[identity.Identity]bool{
-	converter.FeatureRenderHooks: true,
+	converter.FeatureRenderHookHeading: true,
+	converter.FeatureRenderHookImage:   true,
+	converter.FeatureRenderHookLink:    true,
 }
 
 func (c *goldmarkConverter) Supports(feature identity.Identity) bool {
-	return featureSet[feature.GetIdentity()]
+	return featureSet[feature]
 }
 
 func (c *goldmarkConverter) newParserContext(rctx converter.RenderContext) *parserContext {

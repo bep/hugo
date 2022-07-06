@@ -59,7 +59,9 @@ type keyer interface {
 // so rewrite the input slice for known identity types.
 func toHashable(v any) any {
 	switch t := v.(type) {
-	case Provider:
+	case Identity:
+		return t
+	case IdentityProvider:
 		return t.GetIdentity()
 	case keyer:
 		return t.Key()

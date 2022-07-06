@@ -15,12 +15,14 @@ package helpers_test
 
 import (
 	"fmt"
+	"net/url"
+	"path"
 	"strings"
 	"testing"
 
 	qt "github.com/frankban/quicktest"
+	"github.com/gohugoio/hugo/common/paths"
 	"github.com/gohugoio/hugo/config"
-	"github.com/gohugoio/hugo/helpers"
 )
 
 func TestURLize(t *testing.T) {
@@ -44,6 +46,72 @@ func TestURLize(t *testing.T) {
 			t.Errorf("Expected %#v, got %#v\n", test.expected, output)
 		}
 	}
+}
+
+// TODO1 remove this.
+func BenchmarkURLEscape(b *testing.B) {
+	const (
+		input                   = "трям/трям"
+		expect                  = "%D1%82%D1%80%D1%8F%D0%BC/%D1%82%D1%80%D1%8F%D0%BC"
+		forwardSlashReplacement = "ABC"
+	)
+
+	fn1 := func(s string) string {
+		ss, err := url.Parse(s)
+		if err != nil {
+			panic(err)
+		}
+		return ss.EscapedPath()
+	}
+
+	fn2 := func(s string) string {
+		s = strings.ReplaceAll(s, "/", forwardSlashReplacement)
+		s = url.PathEscape(s)
+		s = strings.ReplaceAll(s, forwardSlashReplacement, "/")
+
+		return s
+	}
+
+	fn3 := func(s string) string {
+		parts := paths.FieldsSlash(s)
+		for i, part := range parts {
+			parts[i] = url.PathEscape(part)
+		}
+
+		return path.Join(parts...)
+	}
+
+	benchFunc := func(b *testing.B, fn func(s string) string) {
+		for i := 0; i < b.N; i++ {
+			res := fn(input)
+			if res != expect {
+				b.Fatal(res)
+			}
+		}
+	}
+
+	b.Run("url.Parse", func(b *testing.B) {
+		benchFunc(b, fn1)
+	})
+
+	b.Run("url.PathEscape_replace", func(b *testing.B) {
+		benchFunc(b, fn2)
+	})
+
+	b.Run("url.PathEscape_fields", func(b *testing.B) {
+		benchFunc(b, fn3)
+	})
+
+	b.Run("url.PathEscape", func(b *testing.B) {
+		for i := 0; i < b.N; i++ {
+			res := url.PathEscape(input)
+			// url.PathEscape also escapes forward slash.
+			if res != "%D1%82%D1%80%D1%8F%D0%BC%2F%D1%82%D1%80%D1%8F%D0%BC" {
+				panic(res)
+			}
+		}
+	})
+
 }
 
 func TestAbsURL(t *testing.T) {
@@ -231,34 +299,5 @@ func doTestRelURL(t *testing.T, defaultInSubDir, addLanguage, multilingual bool,
 			c.Assert(output, qt.Equals, expected, qt.Commentf("[%d] %s", i, test.input))
 		})
 
-	}
-}
-
-func TestSanitizeURL(t *testing.T) {
-	tests := []struct {
-		input    string
-		expected string
-	}{
-		{"http://foo.bar/", "http://foo.bar"},
-		{"http://foo.bar", "http://foo.bar"},          // issue #1105
-		{"http://foo.bar/zoo/", "http://foo.bar/zoo"}, // issue #931
-	}
-
-	for i, test := range tests {
-		o1 := helpers.SanitizeURL(test.input)
-		o2 := helpers.SanitizeURLKeepTrailingSlash(test.input)
-
-		expected2 := test.expected
-
-		if strings.HasSuffix(test.input, "/") && !strings.HasSuffix(expected2, "/") {
-			expected2 += "/"
-		}
-
-		if o1 != test.expected {
-			t.Errorf("[%d] 1: Expected %#v, got %#v\n", i, test.expected, o1)
-		}
-		if o2 != expected2 {
-			t.Errorf("[%d] 2: Expected %#v, got %#v\n", i, expected2, o2)
-		}
 	}
 }

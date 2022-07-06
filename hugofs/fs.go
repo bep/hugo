@@ -16,7 +16,9 @@ package hugofs
 
 import (
 	"fmt"
+	iofs "io/fs"
 	"os"
+	"sort"
 	"strings"
 
 	"github.com/bep/overlayfs"
@@ -113,7 +115,7 @@ func newFs(source, destination afero.Fs, workingDir, publishDir string) *Fs {
 
 	// Sanity check
 	if IsOsFs(source) && len(workingDir) < 2 {
-		panic("workingDir is too short")
+		panic(fmt.Sprintf("workingDir %q is too short", workingDir))
 	}
 
 	// If this does not exist, it will be created later.
@@ -233,4 +235,26 @@ func WalkFilesystems(fs afero.Fs, fn WalkFn) bool {
 	}
 
 	return false
+}
+
+// ReadDir reads a directory using ReadDir (as introduced in Go 1.16).
+// Note that Afero also have a func named ReadDir,
+// but that uses Readdir.
+// We prefer ReadDir because it is more efficient.
+//
+// This will panic if the target dir does not implement iofs.ReadDirFile.
+func ReadDir(fs afero.Fs, dirname string) ([]iofs.DirEntry, error) {
+	f, err := fs.Open(dirname)
+	if err != nil {
+		return nil, err
+	}
+	list, err := f.(iofs.ReadDirFile).ReadDir(-1)
+	f.Close()
+	if err != nil {
+		return nil, err
+	}
+
+	sort.Slice(list, func(i, j int) bool { return list[i].Name() < list[j].Name() })
+
+	return list, nil
 }

@@ -33,6 +33,8 @@ type AttributesProvider interface {
 
 // LinkContext is the context passed to a link render hook.
 type LinkContext interface {
+	identity.DependencyManagerProvider
+
 	// The Page being rendered.
 	Page() any
 
@@ -63,6 +65,7 @@ type ImageLinkContext interface {
 
 // CodeblockContext is the context passed to a code block render hook.
 type CodeblockContext interface {
+	identity.DependencyManagerProvider
 	AttributesProvider
 	text.Positioner
 
@@ -89,12 +92,10 @@ type AttributesOptionsSliceProvider interface {
 
 type LinkRenderer interface {
 	RenderLink(cctx context.Context, w io.Writer, ctx LinkContext) error
-	identity.Provider
 }
 
 type CodeBlockRenderer interface {
 	RenderCodeblock(cctx context.Context, w hugio.FlexiWriter, ctx CodeblockContext) error
-	identity.Provider
 }
 
 type IsDefaultCodeBlockRendererProvider interface {
@@ -123,7 +124,6 @@ type HeadingContext interface {
 type HeadingRenderer interface {
 	// RenderHeading writes the rendered content to w using the data in w.
 	RenderHeading(cctx context.Context, w io.Writer, ctx HeadingContext) error
-	identity.Provider
 }
 
 // ElementPositionResolver provides a way to resolve the start Position

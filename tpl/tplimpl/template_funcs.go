@@ -17,8 +17,12 @@ package tplimpl
 
 import (
 	"context"
+	"fmt"
 	"reflect"
 	"strings"
+
+	"github.com/gohugoio/hugo/identity"
+	"github.com/gohugoio/hugo/resources/page"
 
 	"github.com/gohugoio/hugo/common/hreflect"
 	"github.com/gohugoio/hugo/common/maps"
@@ -65,9 +69,13 @@ import (
 )
 
 var (
-	_                texttemplate.ExecHelper = (*templateExecHelper)(nil)
-	zero             reflect.Value
-	contextInterface = reflect.TypeOf((*context.Context)(nil)).Elem()
+	_                                  texttemplate.ExecHelper = (*templateExecHelper)(nil)
+	zero                               reflect.Value
+	identityInterface                  = reflect.TypeOf((*identity.Identity)(nil)).Elem()
+	identityProviderInterface          = reflect.TypeOf((*identity.IdentityProvider)(nil)).Elem()
+	identityLookupProviderInterface    = reflect.TypeOf((*identity.IdentityLookupProvider)(nil)).Elem()
+	dependencyManagerProviderInterface = reflect.TypeOf((*identity.DependencyManagerProvider)(nil)).Elem()
+	contextInterface                   = reflect.TypeOf((*context.Context)(nil)).Elem()
 )
 
 type templateExecHelper struct {
@@ -82,7 +90,7 @@ func (t *templateExecHelper) GetFunc(ctx context.Context, tmpl texttemplate.Prep
 		if fn.Type().NumIn() > 0 {
 			first := fn.Type().In(0)
 			if first.Implements(contextInterface) {
-				// TODO(bep) check if we can void this conversion every time -- and if that matters.
+				// TODO1 check if we can void this conversion every time -- and if that matters.
 				// The first argument may be context.Context. This is never provided by the end user, but it's used to pass down
 				// contextual information, e.g. the top level data context (e.g. Page).
 				return fn, reflect.ValueOf(ctx), true
@@ -95,6 +103,9 @@ func (t *templateExecHelper) GetFunc(ctx context.Context, tmpl texttemplate.Prep
 }
 
 func (t *templateExecHelper) Init(ctx context.Context, tmpl texttemplate.Preparer) {
+	if t.running {
+		t.trackDeps(ctx, tmpl, "", reflect.Value{})
+	}
 }
 
 func (t *templateExecHelper) GetMapValue(ctx context.Context, tmpl texttemplate.Preparer, receiver, key reflect.Value) (reflect.Value, bool) {
@@ -113,18 +124,15 @@ func (t *templateExecHelper) GetMapValue(ctx context.Context, tmpl texttemplate.
 	return v, v.IsValid()
 }
 
+<<<<<<< HEAD
 var typeParams = reflect.TypeOf(maps.Params{})
 
+=======
+// bookmark
+>>>>>>> 9a9ea8ca9 (Improve content map, memory cache and dependency resolution)
 func (t *templateExecHelper) GetMethod(ctx context.Context, tmpl texttemplate.Preparer, receiver reflect.Value, name string) (method reflect.Value, firstArg reflect.Value) {
 	if t.running {
-		switch name {
-		case "GetPage", "Render":
-			if info, ok := tmpl.(tpl.Info); ok {
-				if m := receiver.MethodByName(name + "WithTemplateInfo"); m.IsValid() {
-					return m, reflect.ValueOf(info)
-				}
-			}
-		}
+		t.trackDeps(ctx, tmpl, name, receiver)
 	}
 
 	if strings.EqualFold(name, "mainsections") && receiver.Type() == typeParams && receiver.Pointer() == t.siteParams.Pointer() {
@@ -149,6 +157,71 @@ func (t *templateExecHelper) GetMethod(ctx context.Context, tmpl texttemplate.Pr
 	}
 
 	return fn, zero
+}
+
+func (t *templateExecHelper) trackDeps(ctx context.Context, tmpl texttemplate.Preparer, name string, receiver reflect.Value) {
+
+	if tmpl == nil {
+		panic("must provide a template")
+	}
+
+	dot := ctx.Value(texttemplate.DataContextKey)
+
+	if dot == nil {
+		return
+	}
+
+	switch dot.(type) {
+	case map[string]any:
+		return
+
+	}
+
+	// TODO1 remove all but DependencyManagerProvider
+	// idm, ok := dot.(identity.Manager)
+
+	dp, ok := dot.(identity.DependencyManagerProvider)
+
+	if !ok {
+		// Check for .Page, as in shortcodes.
+		// TODO1 remove this interface from .Page
+		var pp page.PageProvider
+		if pp, ok = dot.(page.PageProvider); ok {
+			dp, ok = pp.Page().(identity.DependencyManagerProvider)
+		}
+	}
+
+	if !ok {
+		panic(fmt.Sprintf("must provide a dependency manager in %T", dot))
+	}
+
+	// TODO1
+
+	idm := dp.GetDependencyManager()
+	if idm == nil {
+		return
+	}
+
+	if info, ok := tmpl.(identity.Identity); ok {
+		idm.AddIdentity(info)
+	} else {
+		// TODO1 fix this re shortcodes¨
+		idm.AddIdentity(identity.StringIdentity(tmpl.(tpl.Template).Name()))
+	}
+
+	identity.WalkIdentitiesValue(receiver, func(id identity.Identity) bool {
+		idm.AddIdentity(id)
+		return false
+	})
+
+	if receiver.IsValid() {
+		if receiver.Type().Implements(identityLookupProviderInterface) {
+
+			if id, found := receiver.Interface().(identity.IdentityLookupProvider).LookupIdentity(name); found {
+				idm.AddIdentity(id)
+			}
+		}
+	}
 }
 
 func newTemplateExecuter(d *deps.Deps) (texttemplate.Executer, map[string]reflect.Value) {

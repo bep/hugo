@@ -15,27 +15,24 @@ package resources
 
 import (
 	"errors"
-	"fmt"
 	"mime"
-	"os"
 	"path"
-	"path/filepath"
-	"strings"
 	"sync"
 
 	"github.com/BurntSushi/locker"
 	"github.com/gohugoio/hugo/config"
 	"github.com/gohugoio/hugo/config/allconfig"
 	"github.com/gohugoio/hugo/output"
+	"github.com/gohugoio/hugo/cache/memcache"
 	"github.com/gohugoio/hugo/resources/jsconfig"
 
 	"github.com/gohugoio/hugo/common/herrors"
 	"github.com/gohugoio/hugo/common/hexec"
+	"github.com/gohugoio/hugo/common/paths"
 
 	"github.com/gohugoio/hugo/identity"
 
 	"github.com/gohugoio/hugo/helpers"
-	"github.com/gohugoio/hugo/hugofs"
 	"github.com/gohugoio/hugo/resources/postpub"
 
 	"github.com/gohugoio/hugo/cache/filecache"
@@ -44,12 +41,11 @@ import (
 	"github.com/gohugoio/hugo/resources/images"
 	"github.com/gohugoio/hugo/resources/page"
 	"github.com/gohugoio/hugo/resources/resource"
-	"github.com/gohugoio/hugo/tpl"
-	"github.com/spf13/afero"
 )
 
 func NewSpec(
 	s *helpers.PathSpec,
+<<<<<<< HEAD
 	common *SpecCommon, // may be nil
 	imageCache *ImageCache, // may be nil
 	incr identity.Incrementer,
@@ -58,6 +54,18 @@ func NewSpec(
 	execHelper *hexec.Exec) (*Spec, error) {
 
 	fileCaches, err := filecache.NewCaches(s)
+=======
+	fileCaches filecache.Caches,
+	memCache *memcache.Cache,
+	incr identity.Incrementer,
+	logger loggers.Logger,
+	errorHandler herrors.ErrorSender,
+	execHelper *hexec.Exec,
+	outputFormats output.Formats,
+	mimeTypes media.Types) (*Spec, error) {
+
+	imgConfig, err := images.DecodeConfig(s.Cfg.GetStringMap("imaging"))
+>>>>>>> 9a9ea8ca9 (Improve content map, memory cache and dependency resolution)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create file caches from configuration: %w", err)
 	}
@@ -83,6 +91,7 @@ func NewSpec(
 		return nil, err
 	}
 
+<<<<<<< HEAD
 	if common == nil {
 		common = &SpecCommon{
 			incr:       incr,
@@ -121,6 +130,32 @@ func NewSpec(
 
 		SpecCommon: common,
 	}
+=======
+	rs := &Spec{
+		PathSpec:      s,
+		Logger:        logger,
+		ErrorSender:   errorHandler,
+		imaging:       imaging,
+		ExecHelper:    execHelper,
+		incr:          incr,
+		MediaTypes:    mimeTypes,
+		OutputFormats: outputFormats,
+		Permalinks:    permalinks,
+		BuildConfig:   config.DecodeBuild(s.Cfg),
+		FileCaches:    fileCaches,
+		PostBuildAssets: &PostBuildAssets{
+			PostProcessResources: make(map[string]postpub.PostPublishedResource),
+			JSConfigBuilder:      jsconfig.NewBuilder(),
+		},
+		imageCache: newImageCache(
+			fileCaches.ImageCache(),
+			memCache,
+			s,
+		),
+	}
+
+	rs.ResourceCache = newResourceCache(rs, memCache)
+>>>>>>> 9a9ea8ca9 (Improve content map, memory cache and dependency resolution)
 
 	return rs, nil
 }
@@ -131,11 +166,16 @@ type Spec struct {
 	Logger      loggers.Logger
 	ErrorSender herrors.ErrorSender
 
+<<<<<<< HEAD
 	TextTemplates tpl.TemplateParseFinder
 
 	Permalinks page.PermalinkExpander
 
 	ImageCache *ImageCache
+=======
+	Permalinks  page.PermalinkExpander
+	BuildConfig config.Build
+>>>>>>> 9a9ea8ca9 (Improve content map, memory cache and dependency resolution)
 
 	// Holds default filter settings etc.
 	imaging *images.ImageProcessor
@@ -163,6 +203,7 @@ type PostBuildAssets struct {
 }
 
 func (r *Spec) New(fd ResourceSourceDescriptor) (resource.Resource, error) {
+<<<<<<< HEAD
 	return r.newResourceFor(fd)
 }
 
@@ -242,34 +283,31 @@ func (r *Spec) newGenericResourceWithBase(
 ) *genericResource {
 	if osFileInfo != nil && osFileInfo.IsDir() {
 		panic(fmt.Sprintf("dirs not supported resource types: %v", osFileInfo))
+=======
+	if len(fd.TargetBasePaths) == 0 {
+		// If not set, we publish the same resource to all hosts.
+		// TODO1
+		fd.TargetBasePaths = r.MultihostTargetBasePaths
 	}
 
-	// This value is used both to construct URLs and file paths, but start
-	// with a Unix-styled path.
-	baseFilename = helpers.ToSlashTrimLeading(baseFilename)
-	fpath, fname := path.Split(baseFilename)
-
-	resourceType := mediaType.MainType
-
-	pathDescriptor := &resourcePathDescriptor{
-		baseTargetPathDirs: helpers.UniqueStringsReuse(targetPathBaseDirs),
-		targetPathBuilder:  targetPathBuilder,
-		relTargetDirFile:   dirFile{dir: fpath, file: fname},
+	if fd.OpenReadSeekCloser == nil {
+		return nil, errors.New("OpenReadSeekCloser is nil")
+>>>>>>> 9a9ea8ca9 (Improve content map, memory cache and dependency resolution)
 	}
 
-	var fim hugofs.FileMetaInfo
-	if osFileInfo != nil {
-		fim = osFileInfo.(hugofs.FileMetaInfo)
+	if fd.TargetPath == "" {
+		return nil, errors.New("TargetPath is empty")
 	}
 
-	gfi := &resourceFileInfo{
-		fi:                   fim,
-		openReadSeekerCloser: openReadSeekerCloser,
-		sourceFs:             sourceFs,
-		sourceFilename:       sourceFilename,
-		h:                    &resourceHash{},
+	if fd.Path == nil {
+		fd.Path = paths.Parse(fd.TargetPath)
 	}
 
+	if fd.RelPermalink == "" {
+		fd.RelPermalink = fd.Path.Path()
+	}
+
+<<<<<<< HEAD
 	g := &genericResource{
 		resourceFileInfo:       gfi,
 		resourcePathDescriptor: pathDescriptor,
@@ -312,28 +350,46 @@ func (r *Spec) newResource(sourceFs afero.Fs, fd ResourceSourceDescriptor) (reso
 	mimeType := fd.MediaType
 	if mimeType.IsZero() {
 		ext := strings.ToLower(filepath.Ext(fd.RelTargetFilename))
+=======
+	if fd.Name == "" {
+		fd.Name = fd.TargetPath
+	}
+
+	mediaType := fd.MediaType
+	if mediaType.IsZero() {
+		ext := fd.Path.Ext()
+>>>>>>> 9a9ea8ca9 (Improve content map, memory cache and dependency resolution)
 		var (
 			found      bool
 			suffixInfo media.SuffixInfo
 		)
+<<<<<<< HEAD
 		mimeType, suffixInfo, found = r.MediaTypes().GetFirstBySuffix(strings.TrimPrefix(ext, "."))
 		// TODO(bep) we need to handle these ambiguous types better, but in this context
 		// we most likely want the application/xml type.
 		if suffixInfo.Suffix == "xml" && mimeType.SubType == "rss" {
 			mimeType, found = r.MediaTypes().GetByType("application/xml")
+=======
+		mediaType, suffixInfo, found = r.MediaTypes.GetFirstBySuffix(ext)
+		// TODO(bep) we need to handle these ambiguous types better, but in this context
+		// we most likely want the application/xml type.
+		if suffixInfo.Suffix == "xml" && mediaType.SubType == "rss" {
+			mediaType, found = r.MediaTypes.GetByType("application/xml")
+>>>>>>> 9a9ea8ca9 (Improve content map, memory cache and dependency resolution)
 		}
 
 		if !found {
 			// A fallback. Note that mime.TypeByExtension is slow by Hugo standards,
 			// so we should configure media types to avoid this lookup for most
 			// situations.
-			mimeStr := mime.TypeByExtension(ext)
+			mimeStr := mime.TypeByExtension("." + ext)
 			if mimeStr != "" {
-				mimeType, _ = media.FromStringAndExt(mimeStr, ext)
+				mediaType, _ = media.FromStringAndExt(mimeStr, ext)
 			}
 		}
 	}
 
+<<<<<<< HEAD
 	gr := r.newGenericResourceWithBase(
 		sourceFs,
 		fd.OpenReadSeekCloser,
@@ -344,9 +400,33 @@ func (r *Spec) newResource(sourceFs afero.Fs, fd ResourceSourceDescriptor) (reso
 		fd.RelTargetFilename,
 		mimeType,
 		fd.Data)
+=======
+	if fd.DependencyManager == nil {
+		fd.DependencyManager = identity.NopManager
+	}
+>>>>>>> 9a9ea8ca9 (Improve content map, memory cache and dependency resolution)
 
-	if mimeType.MainType == "image" {
-		imgFormat, ok := images.ImageFormatFromMediaSubType(mimeType.SubType)
+	fpath, fname := path.Split(fd.TargetPath)
+	lpath, lname := path.Split(fd.RelPermalink)
+
+	gr := &genericResource{
+		groupIdentity:     fd.GroupIdentity,
+		dependencyManager: fd.DependencyManager,
+		mediaType:         mediaType,
+		resourceType:      mediaType.MainType,
+		openSource:        fd.OpenReadSeekCloser,
+		targetPath:        dirFile{dir: fpath, file: fname},
+		relPermalink:      dirFile{dir: lpath, file: lname},
+		h:                 &resourceHash{},
+		spec:              r,
+		params:            make(map[string]any),
+		name:              fd.Name,
+		title:             fd.Name,
+		resourceContent:   &resourceContent{},
+	}
+
+	if mediaType.MainType == "image" {
+		imgFormat, ok := images.ImageFormatFromMediaSubType(mediaType.SubType)
 		if ok {
 			ir := &imageResource{
 				Image:        images.NewImage(imgFormat, r.imaging, nil, gr),
@@ -357,26 +437,22 @@ func (r *Spec) newResource(sourceFs afero.Fs, fd ResourceSourceDescriptor) (reso
 		}
 	}
 
+	/*gr := r.newGenericResourceWithBase(
+		fd.GroupIdentity,
+		fd.DependencyManager,
+		sourceFs,
+		fd.OpenReadSeekCloser,
+		fd.TargetBasePaths,
+		fd.TargetPathsRemoveMe,
+		fi,
+		sourceFilename,
+		fd.RelTargetFilename,
+		mimeType,
+	)*/
+
 	return newResourceAdapter(gr.spec, fd.LazyPublish, gr), nil
 }
 
-func (r *Spec) newResourceFor(fd ResourceSourceDescriptor) (resource.Resource, error) {
-	if fd.OpenReadSeekCloser == nil {
-		if fd.SourceFile != nil && fd.SourceFilename != "" {
-			return nil, errors.New("both SourceFile and AbsSourceFilename provided")
-		} else if fd.SourceFile == nil && fd.SourceFilename == "" {
-			return nil, errors.New("either SourceFile or AbsSourceFilename must be provided")
-		}
-	}
-
-	if fd.RelTargetFilename == "" {
-		fd.RelTargetFilename = fd.Filename()
-	}
-
-	if len(fd.TargetBasePaths) == 0 {
-		// If not set, we publish the same resource to all hosts.
-		fd.TargetBasePaths = r.MultihostTargetBasePaths
-	}
-
-	return r.newResource(fd.Fs, fd)
+func (s *Spec) String() string {
+	return "spec"
 }

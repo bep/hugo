@@ -141,11 +141,11 @@ func GetExecEnviron(workDir string, cfg config.AllProvider, fs afero.Fs) []strin
 	config.SetEnvVars(&env, "HUGO_PUBLISHDIR", filepath.Join(workDir, cfg.BaseConfig().PublishDir))
 
 	if fs != nil {
-		fis, err := afero.ReadDir(fs, files.FolderJSConfig)
+		fis, err := hugofs.ReadDir(fs, files.FolderJSConfig)
 		if err == nil {
 			for _, fi := range fis {
 				key := fmt.Sprintf("HUGO_FILE_%s", strings.ReplaceAll(strings.ToUpper(fi.Name()), ".", "_"))
-				value := fi.(hugofs.FileMetaInfo).Meta().Filename
+				value := fi.(hugofs.FileMetaDirEntry).Meta().Filename
 				config.SetEnvVars(&env, key, value)
 			}
 		}

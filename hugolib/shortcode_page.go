@@ -17,6 +17,7 @@ import (
 	"context"
 	"html/template"
 
+	"github.com/gohugoio/hugo/identity"
 	"github.com/gohugoio/hugo/resources/page"
 )
 
@@ -65,6 +66,7 @@ type pageForShortcode struct {
 	page.PageWithoutContent
 	page.TableOfContentsProvider
 	page.ContentProvider
+	identity.DependencyManagerProvider
 
 	// We need to replace it after we have rendered it, so provide a
 	// temporary placeholder.
@@ -75,15 +77,23 @@ type pageForShortcode struct {
 
 func newPageForShortcode(p *pageState) page.Page {
 	return &pageForShortcode{
+<<<<<<< HEAD
 		PageWithoutContent:      p,
 		TableOfContentsProvider: p,
 		ContentProvider:         page.NopPage,
 		toc:                     template.HTML(tocShortcodePlaceholder),
 		p:                       p,
+=======
+		PageWithoutContent:        p,
+		ContentProvider:           page.NopPage,
+		DependencyManagerProvider: p.pageOutput,
+		toc:                       template.HTML(tocShortcodePlaceholder),
+		p:                         p,
+>>>>>>> 9a9ea8ca9 (Improve content map, memory cache and dependency resolution)
 	}
 }
 
-func (p *pageForShortcode) page() page.Page {
+func (p *pageForShortcode) Page() page.Page {
 	return p.PageWithoutContent.(page.Page)
 }
 
@@ -101,16 +111,24 @@ type pageForRenderHooks struct {
 	page.PageWithoutContent
 	page.TableOfContentsProvider
 	page.ContentProvider
+	identity.DependencyManagerProvider
 }
 
 func newPageForRenderHook(p *pageState) page.Page {
 	return &pageForRenderHooks{
+<<<<<<< HEAD
 		PageWithoutContent:      p,
 		ContentProvider:         page.NopPage,
 		TableOfContentsProvider: p,
+=======
+		PageWithoutContent:        p,
+		ContentProvider:           page.NopPage,
+		TableOfContentsProvider:   page.NopPage,
+		DependencyManagerProvider: p.pageOutput,
+>>>>>>> 9a9ea8ca9 (Improve content map, memory cache and dependency resolution)
 	}
 }
 
-func (p *pageForRenderHooks) page() page.Page {
+func (p *pageForRenderHooks) Page() page.Page {
 	return p.PageWithoutContent.(page.Page)
 }

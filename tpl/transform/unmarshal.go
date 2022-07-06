@@ -14,10 +14,12 @@
 package transform
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"strings"
 
+	"github.com/gohugoio/hugo/resources"
 	"github.com/gohugoio/hugo/resources/resource"
 
 	"github.com/gohugoio/hugo/common/types"
@@ -71,8 +73,13 @@ func (ns *Namespace) Unmarshal(args ...any) (any, error) {
 			key += decoder.OptionsKey()
 		}
 
+<<<<<<< HEAD
 		return ns.cache.GetOrCreate(key, func() (any, error) {
 			f := metadecoders.FormatFromStrings(r.MediaType().Suffixes()...)
+=======
+		v, err := ns.cache.GetOrCreate(context.TODO(), key, func(string) (*resources.StaleValue[any], error) {
+			f := metadecoders.FormatFromMediaType(r.MediaType())
+>>>>>>> 9a9ea8ca9 (Improve content map, memory cache and dependency resolution)
 			if f == "" {
 				return nil, fmt.Errorf("MIME %q not supported", r.MediaType())
 			}
@@ -88,8 +95,25 @@ func (ns *Namespace) Unmarshal(args ...any) (any, error) {
 				return nil, err
 			}
 
-			return decoder.Unmarshal(b, f)
+			v, err := decoder.Unmarshal(b, f)
+			if err != nil {
+				return nil, err
+			}
+
+			return &resources.StaleValue[any]{
+				Value: v,
+				IsStaleFunc: func() bool {
+					return resource.IsStaleAny(r)
+				},
+			}, nil
+
 		})
+
+		if err != nil {
+			return nil, err
+		}
+
+		return v.Value, nil
 	}
 
 	dataStr, err := types.ToStringE(data)
@@ -103,14 +127,30 @@ func (ns *Namespace) Unmarshal(args ...any) (any, error) {
 
 	key := helpers.MD5String(dataStr)
 
-	return ns.cache.GetOrCreate(key, func() (any, error) {
+	v, err := ns.cache.GetOrCreate(context.TODO(), key, func(string) (*resources.StaleValue[any], error) {
 		f := decoder.FormatFromContentString(dataStr)
 		if f == "" {
 			return nil, errors.New("unknown format")
 		}
 
-		return decoder.Unmarshal([]byte(dataStr), f)
+		v, err := decoder.Unmarshal([]byte(dataStr), f)
+		if err != nil {
+			return nil, err
+		}
+
+		return &resources.StaleValue[any]{
+			Value: v,
+			IsStaleFunc: func() bool {
+				return false
+			},
+		}, nil
 	})
+
+	if err != nil {
+		return nil, err
+	}
+
+	return v.Value, err
 }
 
 func decodeDecoder(m map[string]any) (metadecoders.Decoder, error) {

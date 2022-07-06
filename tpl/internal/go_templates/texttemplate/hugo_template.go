@@ -63,6 +63,7 @@ type (
 	pageContextKeyType    string
 	hasLockContextKeyType string
 	stackContextKeyType   string
+	questionKeyType       string
 )
 
 const (
@@ -70,6 +71,8 @@ const (
 	PageContextKey = pageContextKeyType("page")
 	// Used in partialCached to signal to nested templates that a lock is already taken.
 	HasLockContextKey = hasLockContextKeyType("hasLock")
+	// Used to pass artibrary questions down to templates etc.
+	QuestionsContextKey = questionKeyType("questions")
 )
 
 // Note: The context is currently not fully implemented in Hugo. This is a work in progress.

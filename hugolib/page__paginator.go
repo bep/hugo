@@ -17,6 +17,8 @@ import (
 	"sync"
 
 	"github.com/gohugoio/hugo/common/herrors"
+	"github.com/gohugoio/hugo/resources/page/pagekinds"
+
 	"github.com/gohugoio/hugo/resources/page"
 )
 
@@ -70,7 +72,10 @@ func (p *pagePaginator) Paginate(seq any, options ...any) (*page.Pager, error) {
 }
 
 func (p *pagePaginator) Paginator(options ...any) (*page.Pager, error) {
+<<<<<<< HEAD
 	defer herrors.Recover()
+=======
+>>>>>>> 9a9ea8ca9 (Improve content map, memory cache and dependency resolution)
 
 	var initErr error
 	p.init.Do(func() {
@@ -86,12 +91,12 @@ func (p *pagePaginator) Paginator(options ...any) (*page.Pager, error) {
 		var pages page.Pages
 
 		switch p.source.Kind() {
-		case page.KindHome:
+		case pagekinds.Home:
 			// From Hugo 0.57 we made home.Pages() work like any other
 			// section. To avoid the default paginators for the home page
 			// changing in the wild, we make this a special case.
 			pages = p.source.s.RegularPages()
-		case page.KindTerm, page.KindTaxonomy:
+		case pagekinds.Term, pagekinds.Taxonomy:
 			pages = p.source.Pages()
 		default:
 			pages = p.source.RegularPages()

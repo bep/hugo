@@ -79,7 +79,11 @@ func IsIndexContentFile(filename string) bool {
 }
 
 func IsHTMLFile(filename string) bool {
-	return htmlFileExtensionsSet[strings.TrimPrefix(filepath.Ext(filename), ".")]
+	return IsHTML(strings.TrimPrefix(filepath.Ext(filename), "."))
+}
+
+func IsHTML(ext string) bool {
+	return htmlFileExtensionsSet[ext]
 }
 
 func IsContentExt(ext string) bool {
@@ -89,6 +93,7 @@ func IsContentExt(ext string) bool {
 type ContentClass string
 
 const (
+	// TODO1 remove this.
 	ContentClassLeaf    ContentClass = "leaf"
 	ContentClassBranch  ContentClass = "branch"
 	ContentClassFile    ContentClass = "zfile" // Sort below

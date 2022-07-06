@@ -163,8 +163,8 @@ a;b;c`, mime: media.Builtin.CSVType}, map[string]any{"DElimiter": ";", "Comment"
 			b.Assert(err, qt.Not(qt.IsNil))
 		} else if fn, ok := test.expect.(func(m map[string]any)); ok {
 			b.Assert(err, qt.IsNil)
-			m, ok := result.(map[string]any)
-			b.Assert(ok, qt.Equals, true)
+			m := result.(map[string]any)
+			b.Assert(m, qt.IsNotNil)
 			fn(m)
 		} else if fn, ok := test.expect.(func(r [][]string)); ok {
 			b.Assert(err, qt.IsNil)

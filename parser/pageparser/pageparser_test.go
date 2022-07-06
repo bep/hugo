@@ -22,6 +22,14 @@ import (
 	"github.com/gohugoio/hugo/parser/metadecoders"
 )
 
+func TestParselainHTMLDocumentsNotSupported(t *testing.T) {
+	t.Parallel()
+	c := qt.New(t)
+	cfg := Config{EnableEmoji: false}
+	_, err := parseBytes([]byte(`<html>`), cfg, lexIntroSection)
+	c.Assert(err, qt.ErrorIs, ErrPlainHTMLDocumentsNotSupported)
+}
+
 func BenchmarkParse(b *testing.B) {
 	start := `
 	
@@ -94,7 +102,8 @@ func TestIsProbablyItemsSource(t *testing.T) {
 	c := qt.New(t)
 
 	input := ` {{< foo >}} `
-	items := collectStringMain(input)
+	items, err := collectStringMain(input)
+	c.Assert(err, qt.IsNil)
 
 	c.Assert(IsProbablySourceOfItems([]byte(input), items), qt.IsTrue)
 	c.Assert(IsProbablySourceOfItems(bytes.Repeat([]byte(" "), len(input)), items), qt.IsFalse)

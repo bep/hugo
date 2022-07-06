@@ -16,6 +16,8 @@ package resources_test
 import (
 	"testing"
 
+	"testing"
+
 	"github.com/gohugoio/hugo/resources"
 
 	"github.com/gohugoio/hugo/media"
