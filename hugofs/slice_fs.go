@@ -15,6 +15,7 @@ package hugofs
 
 import (
 	"fmt"
+	"io/fs"
 	"os"
 	"syscall"
 	"time"
@@ -31,7 +32,7 @@ var (
 	_ afero.File           = (*sliceDir)(nil)
 )
 
-func NewSliceFs(dirs ...FileMetaInfo) (afero.Fs, error) {
+func NewSliceFs(dirs ...FileMetaDirEntry) (afero.Fs, error) {
 	if len(dirs) == 0 {
 		return NoOpFs, nil
 	}
@@ -51,7 +52,7 @@ func NewSliceFs(dirs ...FileMetaInfo) (afero.Fs, error) {
 
 // SliceFs is an ordered composite filesystem.
 type SliceFs struct {
-	dirs []FileMetaInfo
+	dirs []FileMetaDirEntry
 }
 
 func (fs *SliceFs) UnwrapFilesystems() []afero.Fs {
@@ -171,8 +172,8 @@ func (fs *SliceFs) pickFirst(name string) (os.FileInfo, int, error) {
 	return nil, -1, os.ErrNotExist
 }
 
-func (fs *SliceFs) readDirs(name string, startIdx, count int) ([]os.FileInfo, error) {
-	collect := func(lfs *FileMeta) ([]os.FileInfo, error) {
+func (sfs *SliceFs) readDirs(name string, startIdx, count int) ([]fs.DirEntry, error) {
+	collect := func(lfs *FileMeta) ([]fs.DirEntry, error) {
 		d, err := lfs.Fs.Open(name)
 		if err != nil {
 			if !os.IsNotExist(err) {
@@ -181,7 +182,7 @@ func (fs *SliceFs) readDirs(name string, startIdx, count int) ([]os.FileInfo, er
 			return nil, nil
 		} else {
 			defer d.Close()
-			dirs, err := d.Readdir(-1)
+			dirs, err := d.(fs.ReadDirFile).ReadDir(-1)
 			if err != nil {
 				return nil, err
 			}
@@ -189,10 +190,10 @@ func (fs *SliceFs) readDirs(name string, startIdx, count int) ([]os.FileInfo, er
 		}
 	}
 
-	var dirs []os.FileInfo
+	var dirs []fs.DirEntry
 
-	for i := startIdx; i < len(fs.dirs); i++ {
-		mfs := fs.dirs[i]
+	for i := startIdx; i < len(sfs.dirs); i++ {
+		mfs := sfs.dirs[i]
 
 		fis, err := collect(mfs.Meta())
 		if err != nil {
@@ -214,7 +215,7 @@ func (fs *SliceFs) readDirs(name string, startIdx, count int) ([]os.FileInfo, er
 			duplicates = append(duplicates, i)
 		} else {
 			// Make sure it's opened by this filesystem.
-			dirs[i] = decorateFileInfo(fi, fs, fs.getOpener(fi.(FileMetaInfo).Meta().Filename), "", "", nil)
+			dirs[i] = decorateFileInfo(fi, sfs, sfs.getOpener(fi.(FileMetaDirEntry).Meta().Filename), "", "", nil).(fs.DirEntry)
 			seen[fi.Name()] = true
 		}
 	}
@@ -233,6 +234,8 @@ func (fs *SliceFs) readDirs(name string, startIdx, count int) ([]os.FileInfo, er
 
 	return dirs, nil
 }
+
+var _ fs.ReadDirFile = (*sliceDir)(nil)
 
 type sliceDir struct {
 	lfs     *SliceFs
@@ -256,8 +259,12 @@ func (f *sliceDir) ReadAt(p []byte, off int64) (n int, err error) {
 	panic("not implemented")
 }
 
-func (f *sliceDir) Readdir(count int) ([]os.FileInfo, error) {
+func (f *sliceDir) ReadDir(count int) ([]fs.DirEntry, error) {
 	return f.lfs.readDirs(f.dirname, f.idx, count)
+}
+
+func (f *sliceDir) Readdir(count int) ([]os.FileInfo, error) {
+	panic("not supported: Use ReadDir")
 }
 
 func (f *sliceDir) Readdirnames(count int) ([]string, error) {

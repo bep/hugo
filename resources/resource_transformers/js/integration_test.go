@@ -75,7 +75,7 @@ JS Content:{{ $js.Content }}:End:
 }
 
 func TestBuildWithModAndNpm(t *testing.T) {
-	if !htesting.IsCI() {
+	if !htesting.IsCIOrCILocal() {
 		t.Skip("skip (relative) long running modules test when running locally")
 	}
 
@@ -130,7 +130,7 @@ module.exports = window.ReactDOM;
 }
 
 func TestBuildWithNpm(t *testing.T) {
-	if !htesting.IsCI() {
+	if !htesting.IsCIOrCILocal() {
 		t.Skip("skip (relative) long running modules test when running locally")
 	}
 

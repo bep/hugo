@@ -15,6 +15,7 @@ package hugofs
 
 import (
 	"errors"
+	iofs "io/fs"
 	"os"
 	"path/filepath"
 
@@ -47,12 +48,21 @@ type noSymlinkFile struct {
 }
 
 func (f *noSymlinkFile) Readdir(count int) ([]os.FileInfo, error) {
-	fis, err := f.File.Readdir(count)
+	panic("not supported: Use ReadDir")
+}
+
+// TODO1 consider this.
+func (f *noSymlinkFile) ReadDir(count int) ([]iofs.DirEntry, error) {
+	fis, err := f.File.(iofs.ReadDirFile).ReadDir(count)
 
 	filtered := fis[:0]
 	for _, x := range fis {
 		filename := filepath.Join(f.Name(), x.Name())
-		if _, err := f.fs.checkSymlinkStatus(filename, x); err != nil {
+		info, err := x.Info()
+		if err != nil {
+			return nil, err
+		}
+		if _, err := f.fs.checkSymlinkStatus(filename, info); err != nil {
 			// Log a warning and drop the file from the list
 			logUnsupportedSymlink(filename, f.fs.logger)
 		} else {
@@ -64,11 +74,11 @@ func (f *noSymlinkFile) Readdir(count int) ([]os.FileInfo, error) {
 }
 
 func (f *noSymlinkFile) Readdirnames(count int) ([]string, error) {
-	dirs, err := f.Readdir(count)
+	dirs, err := f.ReadDir(count)
 	if err != nil {
 		return nil, err
 	}
-	return fileInfosToNames(dirs), nil
+	return dirEntriesToNames(dirs), nil
 }
 
 func (fs *noSymlinkFs) UnwrapFilesystem() afero.Fs {
@@ -109,7 +119,7 @@ func (fs *noSymlinkFs) stat(name string) (os.FileInfo, bool, error) {
 func (fs *noSymlinkFs) checkSymlinkStatus(name string, fi os.FileInfo) (os.FileInfo, error) {
 	var metaIsSymlink bool
 
-	if fim, ok := fi.(FileMetaInfo); ok {
+	if fim, ok := fi.(FileMetaDirEntry); ok {
 		meta := fim.Meta()
 		metaIsSymlink = meta.IsSymlink
 	}

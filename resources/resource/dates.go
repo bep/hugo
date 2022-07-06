@@ -43,15 +43,31 @@ type Dates struct {
 	FLastmod     time.Time
 	FPublishDate time.Time
 	FExpiryDate  time.Time
+
+	dateOverridden    bool
+	lastmodOverridden bool
+}
+
+func (d *Dates) IsDateOrLastModAfter(in Dated) bool {
+	return d.Date().After(in.Date()) || d.Lastmod().After(in.Lastmod())
 }
 
 func (d *Dates) UpdateDateAndLastmodIfAfter(in Dated) {
-	if in.Date().After(d.Date()) {
-		d.FDate = in.Date()
+
+	if d.dateOverridden || d.Date().IsZero() {
+		if in.Date().After(d.Date()) {
+			d.FDate = in.Date()
+			d.dateOverridden = true
+		}
 	}
-	if in.Lastmod().After(d.Lastmod()) {
-		d.FLastmod = in.Lastmod()
+
+	if d.lastmodOverridden || d.Lastmod().IsZero() {
+		if in.Lastmod().After(d.Lastmod()) {
+			d.FLastmod = in.Lastmod()
+			d.lastmodOverridden = true
+		}
 	}
+
 }
 
 // IsFuture returns whether the argument represents the future.

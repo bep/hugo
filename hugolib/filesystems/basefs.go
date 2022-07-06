@@ -25,6 +25,7 @@ import (
 	"sync"
 
 	"github.com/bep/overlayfs"
+
 	"github.com/gohugoio/hugo/htesting"
 	"github.com/gohugoio/hugo/hugofs/glob"
 
@@ -37,9 +38,10 @@ import (
 
 	"github.com/gohugoio/hugo/modules"
 
-	hpaths "github.com/gohugoio/hugo/common/paths"
 	"github.com/gohugoio/hugo/hugofs"
-	"github.com/gohugoio/hugo/hugolib/paths"
+	hpaths "github.com/gohugoio/hugo/hugolib/paths"
+
+	"github.com/gohugoio/hugo/common/paths"
 	"github.com/spf13/afero"
 )
 
@@ -99,8 +101,8 @@ func (fs *BaseFs) LockBuild() (unlock func(), err error) {
 
 // TODO(bep) we can get regular files in here and that is fine, but
 // we need to clean up the naming.
-func (fs *BaseFs) WatchDirs() []hugofs.FileMetaInfo {
-	var dirs []hugofs.FileMetaInfo
+func (fs *BaseFs) WatchDirs() []hugofs.FileMetaDirEntry {
+	var dirs []hugofs.FileMetaDirEntry
 	for _, dir := range fs.AllDirs() {
 		if dir.Meta().Watch {
 			dirs = append(dirs, dir)
@@ -109,9 +111,9 @@ func (fs *BaseFs) WatchDirs() []hugofs.FileMetaInfo {
 	return dirs
 }
 
-func (fs *BaseFs) AllDirs() []hugofs.FileMetaInfo {
-	var dirs []hugofs.FileMetaInfo
-	for _, dirSet := range [][]hugofs.FileMetaInfo{
+func (fs *BaseFs) AllDirs() []hugofs.FileMetaDirEntry {
+	var dirs []hugofs.FileMetaDirEntry
+	for _, dirSet := range [][]hugofs.FileMetaDirEntry{
 		fs.Archetypes.Dirs,
 		fs.I18n.Dirs,
 		fs.Data.Dirs,
@@ -189,12 +191,12 @@ func (fs *BaseFs) ResolveJSConfigFile(name string) string {
 	// First look in assets/_jsconfig
 	fi, err := fs.Assets.Fs.Stat(filepath.Join(files.FolderJSConfig, name))
 	if err == nil {
-		return fi.(hugofs.FileMetaInfo).Meta().Filename
+		return fi.(hugofs.FileMetaDirEntry).Meta().Filename
 	}
 	// Fall back to the work dir.
 	fi, err = fs.Work.Stat(name)
 	if err == nil {
-		return fi.(hugofs.FileMetaInfo).Meta().Filename
+		return fi.(hugofs.FileMetaDirEntry).Meta().Filename
 	}
 
 	return ""
@@ -225,7 +227,7 @@ type SourceFilesystems struct {
 	Static map[string]*SourceFilesystem
 
 	// All the /static dirs (including themes/modules).
-	StaticDirs []hugofs.FileMetaInfo
+	StaticDirs []hugofs.FileMetaDirEntry
 }
 
 // FileSystems returns the FileSystems relevant for the change detection
@@ -254,7 +256,7 @@ type SourceFilesystem struct {
 
 	// This filesystem as separate root directories, starting from project and down
 	// to the themes/modules.
-	Dirs []hugofs.FileMetaInfo
+	Dirs []hugofs.FileMetaDirEntry
 
 	// When syncing a source folder to the target (e.g. /public), this may
 	// be set to publish into a subfolder. This is used for static syncing
@@ -342,6 +344,25 @@ func (s SourceFilesystems) IsAsset(filename string) bool {
 	return s.Assets.Contains(filename)
 }
 
+// CollectPaths collects paths relative to their component root.
+func (s SourceFilesystems) CollectPaths(filename string) []*paths.PathInfo {
+	var identities []*paths.PathInfo
+
+	for _, fs := range []*SourceFilesystem{s.Assets, s.Content, s.Data, s.I18n, s.Layouts} {
+		fs.withEachRelativePath(filename, func(rel string, fim hugofs.FileMetaDirEntry) {
+			meta := fim.Meta()
+			pth := paths.Parse(filepath.ToSlash(rel), paths.ForComponent(fs.Name))
+			filename = meta.Filename
+			if fim.IsDir() {
+				filename = filepath.Join(filename, rel)
+			}
+			identities = append(identities, paths.WithInfo(pth, filename))
+		})
+	}
+
+	return identities
+}
+
 // IsI18n returns true if the given filename is a member of the i18n filesystem.
 func (s SourceFilesystems) IsI18n(filename string) bool {
 	return s.I18n.Contains(filename)
@@ -361,19 +382,68 @@ func (s SourceFilesystems) MakeStaticPathRelative(filename string) string {
 
 // MakePathRelative creates a relative path from the given filename.
 func (d *SourceFilesystem) MakePathRelative(filename string) (string, bool) {
-	for _, dir := range d.Dirs {
-		meta := dir.(hugofs.FileMetaInfo).Meta()
-		currentPath := meta.Filename
+	paths := d.collectRelativePaths(filename)
+	if paths == nil {
+		return "", false
+	}
+	return paths[0], true
+}
 
-		if strings.HasPrefix(filename, currentPath) {
-			rel := strings.TrimPrefix(filename, currentPath)
-			if mp := meta.Path; mp != "" {
-				rel = filepath.Join(mp, rel)
+func (d *SourceFilesystem) collectRelativePaths(filename string) []string {
+	var paths []string
+	d.withEachRelativePath(filename, func(rel string, meta hugofs.FileMetaDirEntry) {
+		paths = append(paths, rel)
+	})
+
+	return paths
+}
+
+func (d *SourceFilesystem) withEachRelativePath(filename string, cb func(rel string, meta hugofs.FileMetaDirEntry)) {
+	relFromFim := func(fim hugofs.FileMetaDirEntry) string {
+		meta := fim.Meta()
+		if !fim.IsDir() {
+			if filename == meta.Filename {
+				return filepath.Base(filename)
 			}
-			return strings.TrimPrefix(rel, filePathSeparator), true
+		} else if rel := relFilename(meta, filename); rel != "" {
+			return rel
+		}
+		return ""
+	}
+
+	for _, dir := range d.Dirs {
+		fim := dir.(hugofs.FileMetaDirEntry)
+		if rel := relFromFim(fim); rel != "" {
+			cb(rel, fim)
 		}
 	}
-	return "", false
+
+	if rev, ok := d.Fs.(hugofs.ReverseLookupProvider); ok {
+		for _, dir := range d.Dirs {
+			fim := dir.(hugofs.FileMetaDirEntry)
+			if rel := relFromFim(fim); rel != "" {
+				relReverse, _ := rev.ReverseLookup(rel)
+				if relReverse != "" {
+					cb(relReverse, fim)
+				}
+			}
+		}
+	}
+}
+
+func relFilename(meta *hugofs.FileMeta, filename string) string {
+	dirname := meta.Filename
+	if !strings.HasSuffix(dirname, filePathSeparator) {
+		dirname += filePathSeparator
+	}
+	if !strings.HasPrefix(filename, dirname) {
+		return ""
+	}
+	rel := strings.TrimPrefix(filename, dirname)
+	if mp := meta.Path; mp != "" {
+		rel = filepath.Join(mp, rel)
+	}
+	return strings.TrimPrefix(rel, filePathSeparator)
 }
 
 func (d *SourceFilesystem) RealFilename(rel string) string {
@@ -381,7 +451,7 @@ func (d *SourceFilesystem) RealFilename(rel string) string {
 	if err != nil {
 		return rel
 	}
-	if realfi, ok := fi.(hugofs.FileMetaInfo); ok {
+	if realfi, ok := fi.(hugofs.FileMetaDirEntry); ok {
 		return realfi.Meta().Filename
 	}
 
@@ -441,7 +511,7 @@ func WithBaseFs(b *BaseFs) func(*BaseFs) error {
 }
 
 // NewBase builds the filesystems used by Hugo given the paths and options provided.NewBase
-func NewBase(p *paths.Paths, logger loggers.Logger, options ...func(*BaseFs) error) (*BaseFs, error) {
+func NewBase(p *hpaths.Paths, logger loggers.Logger, options ...func(*BaseFs) error) (*BaseFs, error) {
 	fs := p.Fs
 	if logger == nil {
 		logger = loggers.NewWarningLogger()
@@ -490,18 +560,18 @@ func NewBase(p *paths.Paths, logger loggers.Logger, options ...func(*BaseFs) err
 
 type sourceFilesystemsBuilder struct {
 	logger   loggers.Logger
-	p        *paths.Paths
+	p        *hpaths.Paths
 	sourceFs afero.Fs
 	result   *SourceFilesystems
 	theBigFs *filesystemsCollector
 }
 
-func newSourceFilesystemsBuilder(p *paths.Paths, logger loggers.Logger, b *BaseFs) *sourceFilesystemsBuilder {
+func newSourceFilesystemsBuilder(p *hpaths.Paths, logger loggers.Logger, b *BaseFs) *sourceFilesystemsBuilder {
 	sourceFs := hugofs.NewBaseFileDecorator(p.Fs.Source)
 	return &sourceFilesystemsBuilder{p: p, logger: logger, sourceFs: sourceFs, theBigFs: b.theBigFs, result: &SourceFilesystems{}}
 }
 
-func (b *sourceFilesystemsBuilder) newSourceFilesystem(name string, fs afero.Fs, dirs []hugofs.FileMetaInfo) *SourceFilesystem {
+func (b *sourceFilesystemsBuilder) newSourceFilesystem(name string, fs afero.Fs, dirs []hugofs.FileMetaDirEntry) *SourceFilesystem {
 	return &SourceFilesystem{
 		Name: name,
 		Fs:   fs,
@@ -551,12 +621,20 @@ func (b *sourceFilesystemsBuilder) Build() (*SourceFilesystems, error) {
 	b.result.I18n = b.newSourceFilesystem(files.ComponentFolderI18n, i18nFs, i18nDirs)
 
 	contentDirs := b.theBigFs.overlayDirs[files.ComponentFolderContent]
-	contentBfs := afero.NewBasePathFs(b.theBigFs.overlayMountsContent, files.ComponentFolderContent)
+	contentFs, err := hugofs.NewSliceFs(contentDirs...)
+	if err != nil {
+		return nil, err
+	}
 
-	contentFs, err := hugofs.NewLanguageFs(b.p.LanguagesDefaultFirst.AsOrdinalSet(), contentBfs)
+	/*contentBfs := hugofs.NewExtendedFs(
+		afero.NewBasePathFs(b.theBigFs.overlayMountsContent, files.ComponentFolderContent),
+		nil, // TODO1  //b.theBigFs.overlayMountsContent,
+	)*/
+
+	/*contentFs, err := hugofs.NewLanguageFs(b.p.LanguagesDefaultFirst.AsOrdinalSet(), contentBfs)
 	if err != nil {
 		return nil, fmt.Errorf("create content filesystem: %w", err)
-	}
+	}*/
 
 	b.result.Content = b.newSourceFilesystem(files.ComponentFolderContent, contentFs, contentDirs)
 
@@ -582,7 +660,7 @@ func (b *sourceFilesystemsBuilder) Build() (*SourceFilesystems, error) {
 	return b.result, nil
 }
 
-func (b *sourceFilesystemsBuilder) createMainOverlayFs(p *paths.Paths) (*filesystemsCollector, error) {
+func (b *sourceFilesystemsBuilder) createMainOverlayFs(p *hpaths.Paths) (*filesystemsCollector, error) {
 	var staticFsMap map[string]*overlayfs.OverlayFs
 	if b.p.Cfg.GetBool("multihost") {
 		staticFsMap = make(map[string]*overlayfs.OverlayFs)
@@ -594,7 +672,7 @@ func (b *sourceFilesystemsBuilder) createMainOverlayFs(p *paths.Paths) (*filesys
 	collector := &filesystemsCollector{
 		sourceProject:     b.sourceFs,
 		sourceModules:     hugofs.NewNoSymlinkFs(b.sourceFs, b.logger, false),
-		overlayDirs:       make(map[string][]hugofs.FileMetaInfo),
+		overlayDirs:       make(map[string][]hugofs.FileMetaDirEntry),
 		staticPerLanguage: staticFsMap,
 
 		overlayMounts:        overlayfs.New(overlayfs.Options{}),
@@ -656,6 +734,7 @@ func (b *sourceFilesystemsBuilder) createOverlayFs(
 	}
 
 	for _, md := range mounts {
+
 		var (
 			fromTo        []hugofs.RootMapping
 			fromToContent []hugofs.RootMapping
@@ -666,11 +745,10 @@ func (b *sourceFilesystemsBuilder) createOverlayFs(
 			if filepath.IsAbs(path) {
 				return "", path
 			}
-			return md.dir, hpaths.AbsPathify(md.dir, path)
+			return md.dir, paths.AbsPathify(md.dir, path)
 		}
 
 		for i, mount := range md.Mounts() {
-
 			// Add more weight to early mounts.
 			// When two mounts contain the same filename,
 			// the first entry wins.
@@ -697,6 +775,7 @@ func (b *sourceFilesystemsBuilder) createOverlayFs(
 					Weight:          mountWeight,
 					Classifier:      files.ContentClassContent,
 					InclusionFilter: inclusionFilter,
+					Lang:            mount.Lang,
 				},
 			}
 
@@ -728,6 +807,7 @@ func (b *sourceFilesystemsBuilder) createOverlayFs(
 		if err != nil {
 			return err
 		}
+
 		rmfsContent, err := hugofs.NewRootMappingFs(modBase, fromToContent...)
 		if err != nil {
 			return err
@@ -789,7 +869,7 @@ func printFs(fs afero.Fs, path string, w io.Writer) {
 			return nil
 		}
 		var filename string
-		if fim, ok := info.(hugofs.FileMetaInfo); ok {
+		if fim, ok := info.(hugofs.FileMetaDirEntry); ok {
 			filename = fim.Meta().Filename
 		}
 		fmt.Fprintf(w, "    %q %q\n", path, filename)
@@ -809,7 +889,7 @@ type filesystemsCollector struct {
 
 	// Maps component type (layouts, static, content etc.) an ordered list of
 	// directories representing the overlay filesystems above.
-	overlayDirs map[string][]hugofs.FileMetaInfo
+	overlayDirs map[string][]hugofs.FileMetaDirEntry
 
 	// Set if in multihost mode
 	staticPerLanguage map[string]*overlayfs.OverlayFs
@@ -831,7 +911,7 @@ func (c *filesystemsCollector) addDir(rfs *hugofs.RootMappingFs, componentFolder
 	}
 }
 
-func (c *filesystemsCollector) reverseFis(fis []hugofs.FileMetaInfo) {
+func (c *filesystemsCollector) reverseFis(fis []hugofs.FileMetaDirEntry) {
 	for i := len(fis)/2 - 1; i >= 0; i-- {
 		opp := len(fis) - 1 - i
 		fis[i], fis[opp] = fis[opp], fis[i]

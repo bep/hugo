@@ -18,8 +18,6 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/gohugoio/hugo/common/herrors"
-
 	"errors"
 
 	"github.com/gohugoio/hugo/common/maps"
@@ -221,7 +219,6 @@ func (ns *Namespace) ByType(typ any) resource.Resources {
 //
 // See Match for a more complete explanation about the rules used.
 func (ns *Namespace) Match(pattern any) resource.Resources {
-	defer herrors.Recover()
 	patternStr, err := cast.ToStringE(pattern)
 	if err != nil {
 		panic(err)

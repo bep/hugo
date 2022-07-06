@@ -125,7 +125,7 @@ FAILED REMOTE ERROR DETAILS CONTENT: |failed to fetch remote resource: Internal 
 `, helpers.HashString(ts.URL+"/sunset.jpg", map[string]any{})))
 
 		b.AssertFileContent("public/styles.min.a1df58687c3c9cc38bf26532f7b4b2f2c2b0315dcde212376959995c04f11fef.css", "body{background-color:#add8e6}")
-		b.AssertFileContent("public//styles2.min.1cfc52986836405d37f9998a63fd6dd8608e8c410e5e3db1daaa30f78bc273ba.css", "body{background-color:orange}")
+		b.AssertFileContent("public/styles2.min.1cfc52986836405d37f9998a63fd6dd8608e8c410e5e3db1daaa30f78bc273ba.css", "body{background-color:orange}")
 
 		b.EditFiles("page1.md", `
 ---
@@ -136,10 +136,6 @@ summary: "Edited summary"
 Edited content.
 
 `)
-
-		b.Assert(b.Fs.WorkingDirWritable.Remove("public"), qt.IsNil)
-		b.H.ResourceSpec.ClearCaches()
-
 	}
 }
 
@@ -285,7 +281,6 @@ func TestResourceChains(t *testing.T) {
 			return
 
 		case "/authenticated/":
-			w.Header().Set("Content-Type", "text/plain")
 			if r.Header.Get("Authorization") == "Bearer abcd" {
 				w.Write([]byte(`Welcome`))
 				return
@@ -294,7 +289,6 @@ func TestResourceChains(t *testing.T) {
 			return
 
 		case "/post":
-			w.Header().Set("Content-Type", "text/plain")
 			if r.Method == http.MethodPost {
 				body, err := ioutil.ReadAll(r.Body)
 				if err != nil {
@@ -309,7 +303,6 @@ func TestResourceChains(t *testing.T) {
 		}
 
 		http.Error(w, "Not found", http.StatusNotFound)
-		return
 	}))
 	t.Cleanup(func() {
 		ts.Close()
@@ -719,38 +712,5 @@ JSON: {{ $json.RelPermalink }}: {{ $json.Content }}
 
 	b.AssertFileContent("public/index.html",
 		"JSON: /jsons/data1.json: json1 content",
-		"jsonsMatch: 2",
-		"imagesByType: 2",
-		"applicationByType: 3",
-		"/jsons/data1.json: json1 content")
-}
-
-func TestResourceMinifyDisabled(t *testing.T) {
-	t.Parallel()
-
-	b := newTestSitesBuilder(t).WithConfigFile("toml", `
-baseURL = "https://example.org"
-
-[minify]
-disableXML=true
-
-
-`)
-
-	b.WithContent("page.md", "")
-
-	b.WithSourceFile(
-		"assets/xml/data.xml", "<root>   <foo> asdfasdf </foo> </root>",
-	)
-
-	b.WithTemplates("index.html", `
-{{ $xml := resources.Get "xml/data.xml" | minify | fingerprint }}
-XML: {{ $xml.Content | safeHTML }}|{{ $xml.RelPermalink }}
-`)
-
-	b.Build(BuildCfg{})
-
-	b.AssertFileContent("public/index.html", `
-XML: <root>   <foo> asdfasdf </foo> </root>|/xml/data.min.3be4fddd19aaebb18c48dd6645215b822df74701957d6d36e59f203f9c30fd9f.xml
-`)
+		"JSONS: 2", "/jsons/data1.json: json1 content")
 }

@@ -21,148 +21,83 @@ import (
 	"github.com/gohugoio/hugo/config"
 	"github.com/gohugoio/hugo/source"
 
-	"github.com/gohugoio/hugo/hugofs/files"
 	"golang.org/x/sync/errgroup"
 
-	"github.com/gohugoio/hugo/common/herrors"
 	"github.com/gohugoio/hugo/hugofs"
 )
 
 func newPagesProcessor(h *HugoSites, sp *source.SourceSpec) *pagesProcessor {
-	procs := make(map[string]pagesCollectorProcessorProvider)
-	for _, s := range h.Sites {
-		procs[s.Lang()] = &sitePagesProcessor{
-			m:                  s.pageMap,
-			errorSender:        s.h,
-			itemChan:           make(chan interface{}, config.GetNumWorkerMultiplier()*2),
-			renderStaticToDisk: h.Cfg.GetBool("renderStaticToDisk"),
-		}
-	}
+	s := h.Sites[0]
 	return &pagesProcessor{
-		procs: procs,
-	}
-}
+		m: s.pageMap,
 
-type pagesCollectorProcessorProvider interface {
-	Process(item any) error
-	Start(ctx context.Context) context.Context
-	Wait() error
+		chanFile:   make(chan hugofs.FileMetaDirEntry, 10),
+		chanLeaf:   make(chan hugofs.FileMetaDirEntry, 10),
+		chanBranch: make(chan hugofs.FileMetaDirEntry, 10),
+
+		renderStaticToDisk: h.Cfg.GetBool("renderStaticToDisk"),
+	}
 }
 
 type pagesProcessor struct {
-	// Per language/Site
-	procs map[string]pagesCollectorProcessorProvider
-}
+	m *pageMap
 
-func (proc *pagesProcessor) Process(item any) error {
-	switch v := item.(type) {
-	// Page bundles mapped to their language.
-	case pageBundles:
-		for _, vv := range v {
-			proc.getProcFromFi(vv.header).Process(vv)
-		}
-	case hugofs.FileMetaInfo:
-		proc.getProcFromFi(v).Process(v)
-	default:
-		panic(fmt.Sprintf("unrecognized item type in Process: %T", item))
+	ctx context.Context
 
-	}
+	chanFile   chan hugofs.FileMetaDirEntry
+	chanBranch chan hugofs.FileMetaDirEntry
+	chanLeaf   chan hugofs.FileMetaDirEntry
 
-	return nil
-}
-
-func (proc *pagesProcessor) Start(ctx context.Context) context.Context {
-	for _, p := range proc.procs {
-		ctx = p.Start(ctx)
-	}
-	return ctx
-}
-
-func (proc *pagesProcessor) Wait() error {
-	var err error
-	for _, p := range proc.procs {
-		if e := p.Wait(); e != nil {
-			err = e
-		}
-	}
-	return err
-}
-
-func (proc *pagesProcessor) getProcFromFi(fi hugofs.FileMetaInfo) pagesCollectorProcessorProvider {
-	if p, found := proc.procs[fi.Meta().Lang]; found {
-		return p
-	}
-	return defaultPageProcessor
-}
-
-type nopPageProcessor int
-
-func (nopPageProcessor) Process(item any) error {
-	return nil
-}
-
-func (nopPageProcessor) Start(ctx context.Context) context.Context {
-	return context.Background()
-}
-
-func (nopPageProcessor) Wait() error {
-	return nil
-}
-
-var defaultPageProcessor = new(nopPageProcessor)
-
-type sitePagesProcessor struct {
-	m           *pageMap
-	errorSender herrors.ErrorSender
-
-	ctx       context.Context
-	itemChan  chan any
 	itemGroup *errgroup.Group
 
 	renderStaticToDisk bool
 }
 
-func (p *sitePagesProcessor) Process(item any) error {
+type pageProcessFiType int
+
+const (
+	pageProcessFiTypeStaticFile pageProcessFiType = iota
+	pageProcessFiTypeLeaf
+	pageProcessFiTypeBranch
+)
+
+func (p *pagesProcessor) Process(fi hugofs.FileMetaDirEntry, tp pageProcessFiType) error {
+	if fi.IsDir() {
+		return nil
+	}
+
+	var ch chan hugofs.FileMetaDirEntry
+	switch tp {
+	case pageProcessFiTypeLeaf:
+		ch = p.chanLeaf
+	case pageProcessFiTypeBranch:
+		ch = p.chanBranch
+	case pageProcessFiTypeStaticFile:
+		ch = p.chanFile
+	}
+
 	select {
 	case <-p.ctx.Done():
 		return nil
-	default:
-		p.itemChan <- item
+	case ch <- fi:
+
 	}
+
 	return nil
+
 }
 
-func (p *sitePagesProcessor) Start(ctx context.Context) context.Context {
-	p.itemGroup, ctx = errgroup.WithContext(ctx)
-	p.ctx = ctx
-	p.itemGroup.Go(func() error {
-		for item := range p.itemChan {
-			if err := p.doProcess(item); err != nil {
-				return err
-			}
-		}
-		return nil
-	})
-	return ctx
-}
-
-func (p *sitePagesProcessor) Wait() error {
-	close(p.itemChan)
-	return p.itemGroup.Wait()
-}
-
-func (p *sitePagesProcessor) copyFile(fim hugofs.FileMetaInfo) error {
+func (p *pagesProcessor) copyFile(fim hugofs.FileMetaDirEntry) error {
 	meta := fim.Meta()
 	f, err := meta.Open()
 	if err != nil {
 		return fmt.Errorf("copyFile: failed to open: %w", err)
 	}
+	defer f.Close()
 
 	s := p.m.s
 
-	target := filepath.Join(s.PathSpec.GetTargetLanguageBasePath(), meta.Path)
-
-	defer f.Close()
+	target := filepath.Join(s.PathSpec.GetTargetLanguageBasePath(), filepath.FromSlash(meta.PathInfo.Path()))
 
 	fs := s.PublishFs
 	if p.renderStaticToDisk {
@@ -172,39 +107,72 @@ func (p *sitePagesProcessor) copyFile(fim hugofs.FileMetaInfo) error {
 	return s.publish(&s.PathSpec.ProcessingStats.Files, target, f, fs)
 }
 
-func (p *sitePagesProcessor) doProcess(item any) error {
-	m := p.m
-	switch v := item.(type) {
-	case *fileinfoBundle:
-		if err := m.AddFilesBundle(v.header, v.resources...); err != nil {
-			return err
-		}
-	case hugofs.FileMetaInfo:
-		if p.shouldSkip(v) {
-			return nil
-		}
-		meta := v.Meta()
-
-		classifier := meta.Classifier
-		switch classifier {
-		case files.ContentClassContent:
-			if err := m.AddFilesBundle(v); err != nil {
-				return err
-			}
-		case files.ContentClassFile:
-			if err := p.copyFile(v); err != nil {
-				return err
-			}
-		default:
-			panic(fmt.Sprintf("invalid classifier: %q", classifier))
-		}
-	default:
-		panic(fmt.Sprintf("unrecognized item type in Process: %T", item))
+func (p *pagesProcessor) Start(ctx context.Context) context.Context {
+	p.itemGroup, ctx = errgroup.WithContext(ctx)
+	p.ctx = ctx
+	numWorkers := config.GetNumWorkerMultiplier()
+	if numWorkers > 1 {
+		numWorkers = numWorkers / 2
 	}
-	return nil
+
+	for i := 0; i < numWorkers; i++ {
+		p.itemGroup.Go(func() error {
+			for {
+				select {
+				case <-ctx.Done():
+					return nil
+				case fi, ok := <-p.chanLeaf:
+					if !ok {
+						return nil
+					}
+					if err := p.m.AddFi(fi, false); err != nil {
+						return err
+					}
+				}
+			}
+		})
+
+		p.itemGroup.Go(func() error {
+			for {
+				select {
+				case <-ctx.Done():
+					return nil
+				case fi, ok := <-p.chanBranch:
+					if !ok {
+						return nil
+					}
+					if err := p.m.AddFi(fi, true); err != nil {
+						return err
+					}
+				}
+			}
+		})
+
+	}
+
+	p.itemGroup.Go(func() error {
+		for {
+			select {
+			case <-ctx.Done():
+				return nil
+			case fi, ok := <-p.chanFile:
+				if !ok {
+					return nil
+				}
+				if err := p.copyFile(fi); err != nil {
+					return err
+				}
+			}
+		}
+
+	})
+
+	return ctx
 }
 
-func (p *sitePagesProcessor) shouldSkip(fim hugofs.FileMetaInfo) bool {
-	// TODO(ep) unify
-	return p.m.s.SourceSpec.DisabledLanguages[fim.Meta().Lang]
+func (p *pagesProcessor) Wait() error {
+	close(p.chanLeaf)
+	close(p.chanBranch)
+	close(p.chanFile)
+	return p.itemGroup.Wait()
 }

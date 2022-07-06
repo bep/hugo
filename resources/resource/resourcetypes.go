@@ -14,6 +14,8 @@
 package resource
 
 import (
+	"github.com/gohugoio/hugo/common/types"
+
 	"github.com/gohugoio/hugo/common/maps"
 	"github.com/gohugoio/hugo/langs"
 	"github.com/gohugoio/hugo/media"
@@ -191,7 +193,37 @@ type TranslationKeyProvider interface {
 // UnmarshableResource represents a Resource that can be unmarshaled to some other format.
 type UnmarshableResource interface {
 	ReadSeekCloserResource
-	Identifier
+	types.Identifier
+}
+
+// Staler controls stale state of a Resource. A stale resource should be discarded.
+type Staler interface {
+	MarkStale()
+	StaleInfo
+}
+
+// StaleInfo tells if a resource is marked as stale.
+type StaleInfo interface {
+	IsStale() bool
+}
+
+// IsStaleAny reports whether any of the os is marked as stale.
+func IsStaleAny(os ...any) bool {
+	for _, o := range os {
+		if s, ok := o.(StaleInfo); ok && s.IsStale() {
+			return true
+		}
+	}
+	return false
+}
+
+// MarkStale will mark any of the oses as stale, if possible.
+func MarkStale(os ...any) {
+	for _, o := range os {
+		if s, ok := o.(Staler); ok {
+			s.MarkStale()
+		}
+	}
 }
 
 type resourceTypesHolder struct {

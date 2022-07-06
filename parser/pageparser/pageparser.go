@@ -38,6 +38,25 @@ func Parse(r io.Reader, cfg Config) (Result, error) {
 	return parseSection(r, cfg, lexIntroSection)
 }
 
+// ParseBytes parses the page in b according to the given Config.
+// TODO1 remove Parse and rename this.
+func ParseBytes(b []byte, cfg Config) (Items, error) {
+	l, err := parseBytes(b, cfg, lexIntroSection)
+	if err != nil {
+		return nil, err
+	}
+	return l.items, nil
+}
+
+// ParseBytesIntroOnly stops parsing after the intro section.
+func ParseBytesIntroOnly(b []byte, cfg Config) (Items, error) {
+	l, err := parseBytes(b, cfg, lexIntroSectionAndStop)
+	if err != nil {
+		return nil, err
+	}
+	return l.items, nil
+}
+
 type ContentFrontMatter struct {
 	Content           []byte
 	FrontMatter       map[string]any
@@ -105,10 +124,10 @@ func parseSection(r io.Reader, cfg Config, start stateFunc) (Result, error) {
 	return parseBytes(b, cfg, start)
 }
 
-func parseBytes(b []byte, cfg Config, start stateFunc) (Result, error) {
+func parseBytes(b []byte, cfg Config, start stateFunc) (*pageLexer, error) {
 	lexer := newPageLexer(b, start, cfg)
 	lexer.run()
-	return lexer, nil
+	return lexer, lexer.err
 }
 
 // NewIterator creates a new Iterator.

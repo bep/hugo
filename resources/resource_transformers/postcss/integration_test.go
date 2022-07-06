@@ -98,7 +98,7 @@ module.exports = {
 `
 
 func TestTransformPostCSS(t *testing.T) {
-	if !htesting.IsCI() {
+	if !htesting.IsCIOrCILocal() {
 		t.Skip("Skip long running test when running locally")
 	}
 
@@ -117,8 +117,6 @@ func TestTransformPostCSS(t *testing.T) {
 		)
 
 		files := repl.Replace(postCSSIntegrationTestFiles)
-
-		fmt.Println("===>", s, files)
 
 		b := hugolib.NewIntegrationTestBuilder(
 			hugolib.IntegrationTestConfig{
@@ -141,7 +139,7 @@ Styles Content: Len: 770917|
 
 // 9880
 func TestTransformPostCSSError(t *testing.T) {
-	if !htesting.IsCI() {
+	if !htesting.IsCIOrCILocal() {
 		t.Skip("Skip long running test when running locally")
 	}
 
@@ -162,7 +160,7 @@ func TestTransformPostCSSError(t *testing.T) {
 
 // #9895
 func TestTransformPostCSSImportError(t *testing.T) {
-	if !htesting.IsCI() {
+	if !htesting.IsCIOrCILocal() {
 		t.Skip("Skip long running test when running locally")
 	}
 
@@ -184,7 +182,7 @@ func TestTransformPostCSSImportError(t *testing.T) {
 }
 
 func TestTransformPostCSSImporSkipInlineImportsNotFound(t *testing.T) {
-	if !htesting.IsCI() {
+	if !htesting.IsCIOrCILocal() {
 		t.Skip("Skip long running test when running locally")
 	}
 
@@ -208,7 +206,7 @@ func TestTransformPostCSSImporSkipInlineImportsNotFound(t *testing.T) {
 
 // Issue 9787
 func TestTransformPostCSSResourceCacheWithPathInBaseURL(t *testing.T) {
-	if !htesting.IsCI() {
+	if !htesting.IsCIOrCILocal() {
 		t.Skip("Skip long running test when running locally")
 	}
 

@@ -428,7 +428,12 @@ func (c *commandeer) initMemTicker() func() {
 	printMem := func() {
 		var m runtime.MemStats
 		runtime.ReadMemStats(&m)
-		fmt.Printf("\n\nAlloc = %v\nTotalAlloc = %v\nSys = %v\nNumGC = %v\n\n", formatByteCount(m.Alloc), formatByteCount(m.TotalAlloc), formatByteCount(m.Sys), m.NumGC)
+		fmt.Printf(
+			"\n\nAlloc = %v\nTotalAlloc = %v\nSys = %v\nNumGC = %v\n\n",
+			helpers.FormatByteCount(m.Alloc),
+			helpers.FormatByteCount(m.TotalAlloc),
+			helpers.FormatByteCount(m.Sys), m.NumGC,
+		)
 	}
 
 	go func() {
@@ -697,7 +702,7 @@ func (c *commandeer) timeTrack(start time.Time, name string) {
 func (c *commandeer) getDirList() ([]string, error) {
 	var filenames []string
 
-	walkFn := func(path string, fi hugofs.FileMetaInfo, err error) error {
+	walkFn := func(path string, fi hugofs.FileMetaDirEntry, err error) error {
 		if err != nil {
 			c.logger.Errorln("walker: ", err)
 			return nil
@@ -751,6 +756,7 @@ func (c *commandeer) rebuildSites(events []fsnotify.Event) error {
 	}
 	c.buildErr = nil
 	visited := c.visitedURLs.PeekAllSet()
+
 	if c.fastRenderMode {
 		// Make sure we always render the home pages
 		for _, l := range c.languages {
@@ -762,7 +768,15 @@ func (c *commandeer) rebuildSites(events []fsnotify.Event) error {
 			visited[home] = true
 		}
 	}
-	return c.hugo().Build(hugolib.BuildCfg{NoBuildLock: true, RecentlyVisited: visited, ErrRecovery: c.wasError}, events...)
+
+	return c.hugo().Build(
+		hugolib.BuildCfg{
+			NoBuildLock:     true,
+			RecentlyVisited: visited,
+			ErrRecovery:     c.wasError,
+		},
+		events...,
+	)
 }
 
 func (c *commandeer) partialReRender(urls ...string) error {
@@ -1078,7 +1092,7 @@ func (c *commandeer) handleEvents(watcher *watcher.Batcher,
 			continue
 		}
 
-		walkAdder := func(path string, f hugofs.FileMetaInfo, err error) error {
+		walkAdder := func(path string, f hugofs.FileMetaDirEntry, err error) error {
 			if f.IsDir() {
 				c.logger.Println("adding created directory to watchlist", path)
 				if err := watcher.Add(path); err != nil {
@@ -1236,18 +1250,4 @@ func pickOneWriteOrCreatePath(events []fsnotify.Event) string {
 	}
 
 	return name
-}
-
-func formatByteCount(b uint64) string {
-	const unit = 1000
-	if b < unit {
-		return fmt.Sprintf("%d B", b)
-	}
-	div, exp := int64(unit), 0
-	for n := b / unit; n >= unit; n /= unit {
-		div *= unit
-		exp++
-	}
-	return fmt.Sprintf("%.1f %cB",
-		float64(b)/float64(div), "kMGTPE"[exp])
 }

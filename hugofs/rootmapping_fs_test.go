@@ -15,6 +15,7 @@ package hugofs
 
 import (
 	"fmt"
+	iofs "io/fs"
 	"io/ioutil"
 	"path/filepath"
 	"sort"
@@ -92,9 +93,9 @@ func TestLanguageRootMapping(t *testing.T) {
 
 	blog, err := rfs.Open(filepath.FromSlash("content/blog"))
 	c.Assert(err, qt.IsNil)
-	fis, err := blog.Readdir(-1)
+	fis, err := blog.(iofs.ReadDirFile).ReadDir(-1)
 	for _, fi := range fis {
-		f, err := fi.(FileMetaInfo).Meta().Open()
+		f, err := fi.(FileMetaDirEntry).Meta().Open()
 		c.Assert(err, qt.IsNil)
 		f.Close()
 	}
@@ -106,13 +107,12 @@ func TestLanguageRootMapping(t *testing.T) {
 		f, err := rfs.Open(filename)
 		c.Assert(err, qt.IsNil)
 		names, err := f.Readdirnames(-1)
-
-		f.Close()
 		c.Assert(err, qt.IsNil)
+		c.Assert(f.Close(), qt.IsNil)
 
 		info, err := rfs.Stat(filename)
 		c.Assert(err, qt.IsNil)
-		f2, err := info.(FileMetaInfo).Meta().Open()
+		f2, err := info.(FileMetaDirEntry).Meta().Open()
 		c.Assert(err, qt.IsNil)
 		names2, err := f2.Readdirnames(-1)
 		c.Assert(err, qt.IsNil)
@@ -157,7 +157,7 @@ func TestRootMappingFsDirnames(t *testing.T) {
 	fif, err := rfs.Stat(filepath.Join("static/cf2", testfile))
 	c.Assert(err, qt.IsNil)
 	c.Assert(fif.Name(), qt.Equals, "myfile.txt")
-	fifm := fif.(FileMetaInfo).Meta()
+	fifm := fif.(FileMetaDirEntry).Meta()
 	c.Assert(fifm.Filename, qt.Equals, filepath.FromSlash("f2t/myfile.txt"))
 
 	root, err := rfs.Open("static")
@@ -185,7 +185,7 @@ func TestRootMappingFsFilename(t *testing.T) {
 
 	fi, err := rfs.Stat(filepath.FromSlash("static/f1/foo/file.txt"))
 	c.Assert(err, qt.IsNil)
-	fim := fi.(FileMetaInfo)
+	fim := fi.(FileMetaDirEntry)
 	c.Assert(fim.Meta().Filename, qt.Equals, testfilename)
 	_, err = rfs.Stat(filepath.FromSlash("static/f1"))
 	c.Assert(err, qt.IsNil)
@@ -243,7 +243,7 @@ func TestRootMappingFsMount(t *testing.T) {
 	blog, err := rfs.Stat(filepath.FromSlash("content/blog"))
 	c.Assert(err, qt.IsNil)
 	c.Assert(blog.IsDir(), qt.Equals, true)
-	blogm := blog.(FileMetaInfo).Meta()
+	blogm := blog.(FileMetaDirEntry).Meta()
 	c.Assert(blogm.Lang, qt.Equals, "no") // First match
 
 	f, err := blogm.Open()
@@ -261,7 +261,7 @@ func TestRootMappingFsMount(t *testing.T) {
 	testfilefi := files[1]
 	c.Assert(testfilefi.Name(), qt.Equals, testfile)
 
-	testfilem := testfilefi.(FileMetaInfo).Meta()
+	testfilem := testfilefi.(FileMetaDirEntry).Meta()
 	c.Assert(testfilem.Filename, qt.Equals, filepath.FromSlash("themes/a/mynoblogcontent/test.txt"))
 
 	tf, err := testfilem.Open()
@@ -282,11 +282,14 @@ func TestRootMappingFsMount(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 	c.Assert(singles, qt.HasLen, 2)
 	for i, lang := range []string{"no", "sv"} {
-		fi := singles[i].(FileMetaInfo)
+		fi := singles[i].(FileMetaDirEntry)
 		c.Assert(fi.Meta().PathFile(), qt.Equals, filepath.FromSlash("themes/a/singlefiles/"+lang+".txt"))
 		c.Assert(fi.Meta().Lang, qt.Equals, lang)
 		c.Assert(fi.Name(), qt.Equals, "p1.md")
 	}
+
+	//s, _ := rfs.ReverseLookup("singlefiles/sv.txt")
+	//TODO1 fixme	c.Assert(s, qt.Equals, filepath.FromSlash("singles/p1.md"))
 }
 
 func TestRootMappingFsMountOverlap(t *testing.T) {
@@ -431,7 +434,7 @@ func TestRootMappingFsOs(t *testing.T) {
 			continue
 		}
 		i++
-		meta := fi.(FileMetaInfo).Meta()
+		meta := fi.(FileMetaDirEntry).Meta()
 		c.Assert(meta.Filename, qt.Equals, filepath.Join(d, fmt.Sprintf("/d1/d2/d3/f-%d.txt", i)))
 		c.Assert(meta.PathFile(), qt.Equals, filepath.FromSlash(fmt.Sprintf("d1/d2/d3/f-%d.txt", i)))
 	}

@@ -423,7 +423,7 @@ func countFilesAndGetFilenames(fs afero.Fs, dirname string) (int, []string, erro
 	counter := 0
 	var filenames []string
 
-	wf := func(path string, info hugofs.FileMetaInfo, err error) error {
+	wf := func(path string, info hugofs.FileMetaDirEntry, err error) error {
 		if err != nil {
 			return err
 		}

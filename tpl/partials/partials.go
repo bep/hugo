@@ -37,6 +37,7 @@ import (
 	"github.com/gohugoio/hugo/deps"
 )
 
+// TODO1 merge.
 // TestTemplateProvider is global deps.ResourceProvider.
 // NOTE: It's currently unused.
 var TestTemplateProvider deps.ResourceProvider

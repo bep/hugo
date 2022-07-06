@@ -1,4 +1,4 @@
-// Copyright 2019 The Hugo Authors. All rights reserved.
+// Copyright 2021 The Hugo Authors. All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package page
+package pagekinds
 
 import (
 	"testing"
@@ -23,15 +23,15 @@ func TestKind(t *testing.T) {
 	t.Parallel()
 	c := qt.New(t)
 	// Add tests for these constants to make sure they don't change
-	c.Assert(KindPage, qt.Equals, "page")
-	c.Assert(KindHome, qt.Equals, "home")
-	c.Assert(KindSection, qt.Equals, "section")
-	c.Assert(KindTaxonomy, qt.Equals, "taxonomy")
-	c.Assert(KindTerm, qt.Equals, "term")
+	c.Assert(Page, qt.Equals, "page")
+	c.Assert(Home, qt.Equals, "home")
+	c.Assert(Section, qt.Equals, "section")
+	c.Assert(Taxonomy, qt.Equals, "taxonomy")
+	c.Assert(Term, qt.Equals, "term")
 
-	c.Assert(GetKind("TAXONOMYTERM"), qt.Equals, KindTaxonomy)
-	c.Assert(GetKind("Taxonomy"), qt.Equals, KindTaxonomy)
-	c.Assert(GetKind("Page"), qt.Equals, KindPage)
-	c.Assert(GetKind("Home"), qt.Equals, KindHome)
-	c.Assert(GetKind("SEction"), qt.Equals, KindSection)
+	c.Assert(Get("TAXONOMYTERM"), qt.Equals, Taxonomy)
+	c.Assert(Get("Taxonomy"), qt.Equals, Taxonomy)
+	c.Assert(Get("Page"), qt.Equals, Page)
+	c.Assert(Get("Home"), qt.Equals, Home)
+	c.Assert(Get("SEction"), qt.Equals, Section)
 }

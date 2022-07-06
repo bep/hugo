@@ -14,13 +14,17 @@
 package htesting
 
 import (
+	"fmt"
 	"math/rand"
 	"os"
 	"regexp"
 	"runtime"
 	"strconv"
 	"strings"
+	"testing"
 	"time"
+
+	qt "github.com/frankban/quicktest"
 
 	"github.com/spf13/afero"
 )
@@ -102,9 +106,19 @@ func DiffStrings(s1, s2 string) []string {
 	return DiffStringSlices(strings.Fields(s1), strings.Fields(s2))
 }
 
-// IsCI reports whether we're running in a CI server.
+// IsCI reports whether we're running on CI.
 func IsCI() bool {
-	return (os.Getenv("CI") != "" || os.Getenv("CI_LOCAL") != "") && os.Getenv("CIRCLE_BRANCH") == ""
+	return os.Getenv("CI") != ""
+}
+
+// IsCIOrCILocal reports whether either CI or CI_LOCAL env is set.
+func IsCIOrCILocal() bool {
+	return (os.Getenv("CI") != "" || os.Getenv("CI_LOCAL") != "")
+}
+
+// IsWindows reports whether this runs on Windows.
+func IsWindows() bool {
+	return runtime.GOOS == "windows"
 }
 
 // IsGitHubAction reports whether we're running in a GitHub Action.
@@ -140,5 +154,47 @@ func extractMinorVersionFromGoTag(tag string) int {
 
 	// a commit hash, not useful.
 	return -1
+}
 
+// Println should only be used for temporary debugging.
+func Println(a ...any) {
+	if !IsTest {
+		panic("tprintln left in production code")
+	}
+	fmt.Println(a...)
+}
+
+// Printf should only be used for temporary debugging.
+func Printf(format string, a ...any) {
+	if !IsTest {
+		// panic("tprintf left in production code")
+	}
+	fmt.Printf(format, a...)
+}
+
+func NewPinnedRunner(t testing.TB, pinnedTestRe string) *PinnedRunner {
+	if pinnedTestRe == "" {
+		pinnedTestRe = ".*"
+	}
+	pinnedTestRe = strings.ReplaceAll(pinnedTestRe, "_", " ")
+	re := regexp.MustCompile("(?i)" + pinnedTestRe)
+	return &PinnedRunner{
+		c:  qt.New(t),
+		re: re,
+	}
+}
+
+type PinnedRunner struct {
+	c  *qt.C
+	re *regexp.Regexp
+}
+
+func (r *PinnedRunner) Run(name string, f func(c *qt.C)) bool {
+	if !r.re.MatchString(name) {
+		if IsCI() {
+			r.c.Fatal("found pinned test when running in CI")
+		}
+		return true
+	}
+	return r.c.Run(name, f)
 }

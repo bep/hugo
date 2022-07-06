@@ -23,6 +23,7 @@ import (
 	qt "github.com/frankban/quicktest"
 	"github.com/gohugoio/hugo/config"
 	"github.com/gohugoio/hugo/deps"
+	"github.com/gohugoio/hugo/identity"
 	"github.com/gohugoio/hugo/langs"
 	"github.com/gohugoio/hugo/output"
 	"github.com/gohugoio/hugo/tpl"
@@ -64,6 +65,10 @@ func (templateFinder) GetFunc(name string) (reflect.Value, bool) {
 	}
 
 	return reflect.ValueOf(fmt.Sprint), true
+}
+
+func (templateFinder) GetIdentity(name string) (identity.Identity, bool) {
+	return identity.StringIdentity(name), true
 }
 
 func TestApply(t *testing.T) {

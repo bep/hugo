@@ -126,11 +126,6 @@ func (s *IntegrationTestBuilder) AssertBuildCountLayouts(count int) {
 	s.Assert(s.H.init.layouts.InitCount(), qt.Equals, count)
 }
 
-func (s *IntegrationTestBuilder) AssertBuildCountTranslations(count int) {
-	s.Helper()
-	s.Assert(s.H.init.translations.InitCount(), qt.Equals, count)
-}
-
 func (s *IntegrationTestBuilder) AssertFileContent(filename string, matches ...string) {
 	s.Helper()
 	content := strings.TrimSpace(s.FileContent(filename))
@@ -141,7 +136,7 @@ func (s *IntegrationTestBuilder) AssertFileContent(filename string, matches ...s
 			if match == "" || strings.HasPrefix(match, "#") {
 				continue
 			}
-			s.Assert(content, qt.Contains, match, qt.Commentf(m))
+			s.Assert(content, qt.Contains, match, qt.Commentf(content))
 		}
 	}
 }

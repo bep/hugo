@@ -16,10 +16,12 @@ package paths
 import (
 	"errors"
 	"fmt"
+	"net/url"
 	"path"
 	"path/filepath"
 	"regexp"
 	"strings"
+	"unicode"
 )
 
 // FilePathSeparator as defined by os.Separator.
@@ -28,10 +30,7 @@ const FilePathSeparator = string(filepath.Separator)
 // filepathPathBridge is a bridge for common functionality in filepath vs path
 type filepathPathBridge interface {
 	Base(in string) string
-	Clean(in string) string
-	Dir(in string) string
 	Ext(in string) string
-	Join(elem ...string) string
 	Separator() string
 }
 
@@ -41,20 +40,8 @@ func (filepathBridge) Base(in string) string {
 	return filepath.Base(in)
 }
 
-func (filepathBridge) Clean(in string) string {
-	return filepath.Clean(in)
-}
-
-func (filepathBridge) Dir(in string) string {
-	return filepath.Dir(in)
-}
-
 func (filepathBridge) Ext(in string) string {
 	return filepath.Ext(in)
-}
-
-func (filepathBridge) Join(elem ...string) string {
-	return filepath.Join(elem...)
 }
 
 func (filepathBridge) Separator() string {
@@ -63,72 +50,29 @@ func (filepathBridge) Separator() string {
 
 var fpb filepathBridge
 
-// AbsPathify creates an absolute path if given a working dir and a relative path.
-// If already absolute, the path is just cleaned.
-func AbsPathify(workingDir, inPath string) string {
-	if filepath.IsAbs(inPath) {
-		return filepath.Clean(inPath)
-	}
-	return filepath.Join(workingDir, inPath)
-}
-
-// MakeTitle converts the path given to a suitable title, trimming whitespace
-// and replacing hyphens with whitespace.
-func MakeTitle(inpath string) string {
-	return strings.Replace(strings.TrimSpace(inpath), "-", " ", -1)
-}
-
-// ReplaceExtension takes a path and an extension, strips the old extension
-// and returns the path with the new extension.
-func ReplaceExtension(path string, newExt string) string {
-	f, _ := fileAndExt(path, fpb)
-	return f + "." + newExt
-}
-
-func makePathRelative(inPath string, possibleDirectories ...string) (string, error) {
-	for _, currentPath := range possibleDirectories {
-		if strings.HasPrefix(inPath, currentPath) {
-			return strings.TrimPrefix(inPath, currentPath), nil
-		}
-	}
-	return inPath, errors.New("can't extract relative path, unknown prefix")
-}
-
 // Should be good enough for Hugo.
 var isFileRe = regexp.MustCompile(`.*\..{1,6}$`)
 
-// GetDottedRelativePath expects a relative path starting after the content directory.
-// It returns a relative path with dots ("..") navigating up the path structure.
-func GetDottedRelativePath(inPath string) string {
-	inPath = filepath.Clean(filepath.FromSlash(inPath))
-
-	if inPath == "." {
-		return "./"
+// Dir behaves like path.Dir without the path.Clean step.
+//  The returned path ends in a slash only if it is the root "/".
+func Dir(s string) string {
+	dir, _ := path.Split(s)
+	if len(dir) > 1 && dir[len(dir)-1] == '/' {
+		return dir[:len(dir)-1]
 	}
+	return dir
+}
 
-	if !isFileRe.MatchString(inPath) && !strings.HasSuffix(inPath, FilePathSeparator) {
-		inPath += FilePathSeparator
+// AddTrailingSlash adds a trailing '/' if not already there.
+func AddTrailingSlash(s string) string {
+	if s == "" || s[len(s)-1] != '/' {
+		return s + "/"
 	}
+	return s
+}
 
-	if !strings.HasPrefix(inPath, FilePathSeparator) {
-		inPath = FilePathSeparator + inPath
-	}
-
-	dir, _ := filepath.Split(inPath)
-
-	sectionCount := strings.Count(dir, FilePathSeparator)
-
-	if sectionCount == 0 || dir == FilePathSeparator {
-		return "./"
-	}
-
-	var dottedPath string
-
-	for i := 1; i < sectionCount; i++ {
-		dottedPath += "../"
-	}
-
-	return dottedPath
+func IsOnSameLevel(path1, path2 string) bool {
+	return strings.Count(path1, "/") == strings.Count(path2, "/")
 }
 
 // ExtNoDelimiter takes a path and returns the extension, excluding the delimiter, i.e. "md".
@@ -165,12 +109,6 @@ func FileAndExtNoDelimiter(in string) (string, string) {
 func Filename(in string) (name string) {
 	name, _ = fileAndExt(in, fpb)
 	return
-}
-
-// PathNoExt takes a path, strips out the extension,
-// and returns the name of the file.
-func PathNoExt(in string) string {
-	return strings.TrimSuffix(in, path.Ext(in))
 }
 
 // FileAndExt returns the filename and any extension of a file path as
@@ -216,6 +154,15 @@ func extractFilename(in, ext, base, pathSeparator string) (name string) {
 	return
 }
 
+// AbsPathify creates an absolute path if given a working dir and a relative path.
+// If already absolute, the path is just cleaned.
+func AbsPathify(workingDir, inPath string) string {
+	if filepath.IsAbs(inPath) {
+		return filepath.Clean(inPath)
+	}
+	return filepath.Join(workingDir, inPath)
+}
+
 // GetRelativePath returns the relative path of a given path.
 func GetRelativePath(path, base string) (final string, err error) {
 	if filepath.IsAbs(path) && base == "" {
@@ -235,21 +182,15 @@ func GetRelativePath(path, base string) (final string, err error) {
 	return name, nil
 }
 
-func prettifyPath(in string, b filepathPathBridge) string {
-	if filepath.Ext(in) == "" {
-		// /section/name/  -> /section/name/index.html
-		if len(in) < 2 {
-			return b.Separator()
-		}
-		return b.Join(in, "index.html")
-	}
-	name, ext := fileAndExt(in, b)
-	if name == "index" {
-		// /section/name/index.html -> /section/name/index.html
-		return b.Clean(in)
-	}
-	// /section/name.html -> /section/name/index.html
-	return b.Join(b.Dir(in), name, "index"+ext)
+var slashFunc = func(r rune) bool {
+	return r == '/'
+}
+
+// FieldsSlash cuts s into fields separated with '/'.
+// TODO1 add some tests, consider leading/trailing slashes.
+func FieldsSlash(s string) []string {
+	f := strings.FieldsFunc(s, slashFunc)
+	return f
 }
 
 type NamedSlice struct {
@@ -262,4 +203,99 @@ func (n NamedSlice) String() string {
 		return n.Name
 	}
 	return fmt.Sprintf("%s%s{%s}", n.Name, FilePathSeparator, strings.Join(n.Slice, ","))
+}
+
+// PathEscape escapes unicode letters in pth.
+// Use URLEscape to escape full URLs including scheme, query etc.
+// This is slightly faster for the common case.
+// Note, there is a url.PathEscape function, but that also
+// escapes /.
+func PathEscape(pth string) string {
+	u, err := url.Parse(pth)
+	if err != nil {
+		panic(err)
+	}
+	return u.EscapedPath()
+}
+
+// Sanitize sanitizes string to be used in Hugo's file paths and URLs, allowing only
+// a predefined set of special Unicode characters.
+//
+// Spaces will be replaced with a single hyphen, and sequential hyphens will be reduced to one.
+//
+// This function is the core function used to normalize paths in Hugo.
+//
+// This function is used for key creation in Hugo's content map, which needs to be very fast.
+// This key is also used as a base for URL/file path creation, so  this should always be truthful:
+//
+//     helpers.PathSpec.MakePathSanitized(anyPath) == helpers.PathSpec.MakePathSanitized(Sanitize(anyPath))
+//
+// Even if the user has stricter rules defined for the final paths (e.g. removePathAccents=true).
+func Sanitize(s string) string {
+	var willChange bool
+	for i, r := range s {
+		willChange = !isAllowedPathCharacter(s, i, r)
+		if willChange {
+			break
+		}
+	}
+
+	if !willChange {
+		// Prevent allocation when nothing changes.
+		return s
+	}
+
+	target := make([]rune, 0, len(s))
+	var (
+		prependHyphen bool
+		wasHyphen     bool
+	)
+
+	for i, r := range s {
+		isAllowed := isAllowedPathCharacter(s, i, r)
+
+		if isAllowed {
+			// track explicit hyphen in input; no need to add a new hyphen if
+			// we just saw one.
+			wasHyphen = r == '-'
+
+			if prependHyphen {
+				// if currently have a hyphen, don't prepend an extra one
+				if !wasHyphen {
+					target = append(target, '-')
+				}
+				prependHyphen = false
+			}
+			target = append(target, r)
+		} else if len(target) > 0 && !wasHyphen && unicode.IsSpace(r) {
+			prependHyphen = true
+		}
+	}
+
+	return string(target)
+}
+
+func isAllowedPathCharacter(s string, i int, r rune) bool {
+	if r == ' ' {
+		return false
+	}
+	// Check for the most likely first (faster).
+	isAllowed := unicode.IsLetter(r) || unicode.IsDigit(r)
+	isAllowed = isAllowed || r == '.' || r == '/' || r == '\\' || r == '_' || r == '#' || r == '+' || r == '~' || r == '-'
+	isAllowed = isAllowed || unicode.IsMark(r)
+	isAllowed = isAllowed || (r == '%' && i+2 < len(s) && ishex(s[i+1]) && ishex(s[i+2]))
+	return isAllowed
+}
+
+// From https://golang.org/src/net/url/url.go
+func ishex(c byte) bool {
+	switch {
+	case '0' <= c && c <= '9':
+		return true
+	case 'a' <= c && c <= 'f':
+		return true
+	case 'A' <= c && c <= 'F':
+		return true
+	}
+	return false
 }

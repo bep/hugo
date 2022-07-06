@@ -14,6 +14,7 @@
 package hugofs
 
 import (
+	"io/fs"
 	"os"
 	"strings"
 	"syscall"
@@ -99,10 +100,26 @@ func (fs *filenameFilterFs) getOpener(name string) func() (afero.File, error) {
 	}
 }
 
+var _ fs.ReadDirFile = (*filenameFilterDir)(nil)
+
 type filenameFilterDir struct {
 	afero.File
 	base   string
 	filter *glob.FilenameFilter
+}
+
+func (f *filenameFilterDir) ReadDir(n int) ([]fs.DirEntry, error) {
+	fis, err := f.File.(fs.ReadDirFile).ReadDir(-1)
+	if err != nil {
+		return nil, err
+	}
+	var result []fs.DirEntry
+	for _, fi := range fis {
+		if f.predicate(fi.(FileMetaDirEntry)) {
+			result = append(result, fi)
+		}
+	}
+	return result, nil
 }
 
 func (f *filenameFilterDir) Readdir(count int) ([]os.FileInfo, error) {
@@ -110,16 +127,17 @@ func (f *filenameFilterDir) Readdir(count int) ([]os.FileInfo, error) {
 	if err != nil {
 		return nil, err
 	}
-
 	var result []os.FileInfo
 	for _, fi := range fis {
-		fim := fi.(FileMetaInfo)
-		if f.filter.Match(strings.TrimPrefix(fim.Meta().Filename, f.base), fim.IsDir()) {
+		if f.predicate(fi.(FileMetaDirEntry)) {
 			result = append(result, fi)
 		}
 	}
-
 	return result, nil
+}
+
+func (f *filenameFilterDir) predicate(fim FileMetaDirEntry) bool {
+	return f.filter.Match(strings.TrimPrefix(fim.Meta().Filename, f.base), fim.IsDir())
 }
 
 func (f *filenameFilterDir) Readdirnames(count int) ([]string, error) {
