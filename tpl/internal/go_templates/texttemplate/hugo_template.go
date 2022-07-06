@@ -62,6 +62,7 @@ func NewExecuter(helper ExecHelper) Executer {
 type (
 	dataContextKeyType    string
 	hasLockContextKeyType string
+	questionKeyType       string
 )
 
 const (
@@ -69,6 +70,8 @@ const (
 	DataContextKey = dataContextKeyType("data")
 	// Used in partialCached to signal to nested templates that a lock is already taken.
 	HasLockContextKey = hasLockContextKeyType("hasLock")
+	// Used to pass artibrary questions down to templates etc.
+	QuestionsContextKey = questionKeyType("questions")
 )
 
 // Note: The context is currently not fully implemeted in Hugo. This is a work in progress.

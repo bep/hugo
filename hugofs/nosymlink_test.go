@@ -14,6 +14,7 @@
 package hugofs
 
 import (
+	iofs "io/fs"
 	"os"
 	"path/filepath"
 	"testing"
@@ -136,7 +137,7 @@ func TestNoSymlinkFs(t *testing.T) {
 			f, err = fs.Open(workDir)
 			c.Assert(err, qt.IsNil)
 			// There is at least one unsupported symlink inside workDir
-			_, err = f.Readdir(-1)
+			_, err = f.(iofs.ReadDirFile).ReadDir(-1)
 			c.Assert(err, qt.IsNil)
 			f.Close()
 			c.Assert(logger.LogCounters().WarnCounter.Count(), qt.Equals, uint64(1))

@@ -14,6 +14,7 @@
 package hugofs
 
 import (
+	"io/fs"
 	"os"
 	"strings"
 	"syscall"
@@ -99,31 +100,38 @@ func (fs *filenameFilterFs) getOpener(name string) func() (afero.File, error) {
 	}
 }
 
+var _ fs.ReadDirFile = (*filenameFilterDir)(nil)
+
 type filenameFilterDir struct {
 	afero.File
 	base   string
 	filter *glob.FilenameFilter
 }
 
-func (f *filenameFilterDir) Readdir(count int) ([]os.FileInfo, error) {
-	fis, err := f.File.Readdir(-1)
+func (f *filenameFilterDir) ReadDir(n int) ([]fs.DirEntry, error) {
+	fis, err := f.File.(fs.ReadDirFile).ReadDir(-1)
 	if err != nil {
 		return nil, err
 	}
-
-	var result []os.FileInfo
+	var result []fs.DirEntry
 	for _, fi := range fis {
-		fim := fi.(FileMetaInfo)
-		if f.filter.Match(strings.TrimPrefix(fim.Meta().Filename, f.base), fim.IsDir()) {
+		if f.predicate(fi.(FileMetaDirEntry)) {
 			result = append(result, fi)
 		}
 	}
-
 	return result, nil
 }
 
+func (f *filenameFilterDir) Readdir(count int) ([]os.FileInfo, error) {
+	panic("not supported: Use ReadDir")
+}
+
+func (f *filenameFilterDir) predicate(fim FileMetaDirEntry) bool {
+	return f.filter.Match(strings.TrimPrefix(fim.Meta().Filename, f.base), fim.IsDir())
+}
+
 func (f *filenameFilterDir) Readdirnames(count int) ([]string, error) {
-	dirsi, err := f.Readdir(count)
+	dirsi, err := f.ReadDir(count)
 	if err != nil {
 		return nil, err
 	}
@@ -145,10 +153,6 @@ func (fs *filenameFilterFs) Chtimes(n string, a, m time.Time) error {
 
 func (fs *filenameFilterFs) Chown(n string, uid, gid int) error {
 	return syscall.EPERM
-}
-
-func (fs *filenameFilterFs) ReadDir(name string) ([]os.FileInfo, error) {
-	panic("not implemented")
 }
 
 func (fs *filenameFilterFs) Remove(n string) error {

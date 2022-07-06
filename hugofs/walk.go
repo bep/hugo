@@ -15,33 +15,35 @@ package hugofs
 
 import (
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
 
 	"github.com/gohugoio/hugo/common/loggers"
-
-	"errors"
+	"github.com/gohugoio/hugo/common/paths"
+	"github.com/gohugoio/hugo/hugofs/files"
 
 	"github.com/spf13/afero"
 )
 
 type (
-	WalkFunc func(path string, info FileMetaInfo, err error) error
-	WalkHook func(dir FileMetaInfo, path string, readdir []FileMetaInfo) ([]FileMetaInfo, error)
+	WalkFunc func(path string, info FileMetaDirEntry, err error) error
+	WalkHook func(dir FileMetaDirEntry, path string, readdir []FileMetaDirEntry) ([]FileMetaDirEntry, error)
 )
 
 type Walkway struct {
-	fs       afero.Fs
-	root     string
-	basePath string
+	fs        afero.Fs
+	root      string
+	basePath  string
+	component string
 
 	logger loggers.Logger
 
 	// May be pre-set
-	fi         FileMetaInfo
-	dirEntries []FileMetaInfo
+	fi         FileMetaDirEntry
+	dirEntries []FileMetaDirEntry
 
 	walkFn WalkFunc
 	walked bool
@@ -55,15 +57,21 @@ type Walkway struct {
 }
 
 type WalkwayConfig struct {
-	Fs       afero.Fs
-	Root     string
+	Fs   afero.Fs
+	Root string
+
+	// TODO1 check if we can remove.
 	BasePath string
 
 	Logger loggers.Logger
 
 	// One or both of these may be pre-set.
-	Info       FileMetaInfo
-	DirEntries []FileMetaInfo
+	Info       FileMetaDirEntry
+	DirEntries []FileMetaDirEntry
+
+	// E.g. layouts, content etc.
+	// Will be extraced from the above if not set.
+	Component string
 
 	WalkFn   WalkFunc
 	HookPre  WalkHook
@@ -71,16 +79,27 @@ type WalkwayConfig struct {
 }
 
 func NewWalkway(cfg WalkwayConfig) *Walkway {
-	var fs afero.Fs
-	if cfg.Info != nil {
-		fs = cfg.Info.Meta().Fs
-	} else {
-		fs = cfg.Fs
+	if cfg.Fs == nil {
+		panic("Fs must be set")
 	}
 
 	basePath := cfg.BasePath
 	if basePath != "" && !strings.HasSuffix(basePath, filepathSeparator) {
 		basePath += filepathSeparator
+	}
+
+	component := cfg.Component
+	if component == "" {
+		if cfg.Info != nil {
+			component = cfg.Info.Meta().Component
+		}
+		if component == "" && len(cfg.DirEntries) > 0 {
+			component = cfg.DirEntries[0].Meta().Component
+		}
+
+		if component == "" {
+			component = files.ComponentFolderAssets
+		}
 	}
 
 	logger := cfg.Logger
@@ -89,9 +108,10 @@ func NewWalkway(cfg WalkwayConfig) *Walkway {
 	}
 
 	return &Walkway{
-		fs:         fs,
+		fs:         cfg.Fs,
 		root:       cfg.Root,
 		basePath:   basePath,
+		component:  component,
 		fi:         cfg.Info,
 		dirEntries: cfg.DirEntries,
 		walkFn:     cfg.WalkFn,
@@ -112,9 +132,12 @@ func (w *Walkway) Walk() error {
 		return nil
 	}
 
-	var fi FileMetaInfo
+	var fi FileMetaDirEntry
 	if w.fi != nil {
 		fi = w.fi
+		if fi.Meta().Component == "" {
+			//return w.walkFn(w.root, nil, fmt.Errorf("FileMetaDirEntry: missing metadata for %q", fi.Name()))
+		}
 	} else {
 		info, _, err := lstatIfPossible(w.fs, w.root)
 		if err != nil {
@@ -127,11 +150,11 @@ func (w *Walkway) Walk() error {
 			}
 			return w.walkFn(w.root, nil, fmt.Errorf("walk: %q: %w", w.root, err))
 		}
-		fi = info.(FileMetaInfo)
+		fi = info.(FileMetaDirEntry)
 	}
 
 	if !fi.IsDir() {
-		return w.walkFn(w.root, nil, errors.New("file to walk must be a directory"))
+		panic(fmt.Sprintf("%q is not a directory", fi.Name()))
 	}
 
 	return w.walk(w.root, fi, w.dirEntries, w.walkFn)
@@ -155,6 +178,10 @@ func (w *Walkway) checkErr(filename string, err error) bool {
 	}
 
 	if os.IsNotExist(err) {
+		// TODO1
+		if true {
+			return false
+		}
 		// The file may be removed in process.
 		// This may be a ERROR situation, but it is not possible
 		// to determine as a general case.
@@ -171,7 +198,7 @@ func logUnsupportedSymlink(filename string, logger loggers.Logger) {
 
 // walk recursively descends path, calling walkFn.
 // It follow symlinks if supported by the filesystem, but only the same path once.
-func (w *Walkway) walk(path string, info FileMetaInfo, dirEntries []FileMetaInfo, walkFn WalkFunc) error {
+func (w *Walkway) walk(path string, info FileMetaDirEntry, dirEntries []FileMetaDirEntry, walkFn WalkFunc) error {
 	err := walkFn(path, info, nil)
 	if err != nil {
 		if info.IsDir() && err == filepath.SkipDir {
@@ -188,6 +215,7 @@ func (w *Walkway) walk(path string, info FileMetaInfo, dirEntries []FileMetaInfo
 
 	if dirEntries == nil {
 		f, err := w.fs.Open(path)
+
 		if err != nil {
 			if w.checkErr(path, err) {
 				return nil
@@ -195,7 +223,8 @@ func (w *Walkway) walk(path string, info FileMetaInfo, dirEntries []FileMetaInfo
 			return walkFn(path, info, fmt.Errorf("walk: open %q (%q): %w", path, w.root, err))
 		}
 
-		fis, err := f.Readdir(-1)
+		fis, err := f.(fs.ReadDirFile).ReadDir(-1)
+
 		f.Close()
 		if err != nil {
 			if w.checkErr(filename, err) {
@@ -204,7 +233,7 @@ func (w *Walkway) walk(path string, info FileMetaInfo, dirEntries []FileMetaInfo
 			return walkFn(path, info, fmt.Errorf("walk: Readdir: %w", err))
 		}
 
-		dirEntries = fileInfosToFileMetaInfos(fis)
+		dirEntries = DirEntriesToFileMetaDirEntries(fis)
 
 		if !meta.IsOrdered {
 			sort.Slice(dirEntries, func(i, j int) bool {
@@ -242,7 +271,7 @@ func (w *Walkway) walk(path string, info FileMetaInfo, dirEntries []FileMetaInfo
 
 	// First add some metadata to the dir entries
 	for _, fi := range dirEntries {
-		fim := fi.(FileMetaInfo)
+		fim := fi.(FileMetaDirEntry)
 
 		meta := fim.Meta()
 
@@ -255,20 +284,35 @@ func (w *Walkway) walk(path string, info FileMetaInfo, dirEntries []FileMetaInfo
 		if name == "" {
 			panic(fmt.Sprintf("[%s] no name set in %v", path, meta))
 		}
+
 		pathn := filepath.Join(path, name)
 
-		pathMeta := pathn
-		if w.basePath != "" {
-			pathMeta = strings.TrimPrefix(pathn, w.basePath)
+		pathMeta := meta.Path
+		if pathMeta == "" {
+			pathMeta = pathn
+			if w.basePath != "" {
+				pathMeta = strings.TrimPrefix(pathn, w.basePath)
+			}
+			pathMeta = normalizeFilename(pathMeta)
+			meta.Path = pathMeta
 		}
 
-		meta.Path = normalizeFilename(pathMeta)
+		if meta.Component == "" {
+			meta.Component = w.component
+		}
+
+		meta.PathInfo = paths.Parse(pathMeta, paths.ForComponent(meta.Component))
 		meta.PathWalk = pathn
 
-		if fim.IsDir() && meta.IsSymlink && w.isSeen(meta.Filename) {
+		if meta.PathInfo.Lang() != "" {
+			meta.Lang = meta.PathInfo.Lang()
+		}
+
+		if fim.IsDir() && w.isSeen(meta.Filename) {
+			// TODO1
 			// Prevent infinite recursion
 			// Possible cyclic reference
-			meta.SkipDir = true
+			//meta.SkipDir = true
 		}
 	}
 
@@ -283,7 +327,7 @@ func (w *Walkway) walk(path string, info FileMetaInfo, dirEntries []FileMetaInfo
 	}
 
 	for _, fi := range dirEntries {
-		fim := fi.(FileMetaInfo)
+		fim := fi.(FileMetaDirEntry)
 		meta := fim.Meta()
 
 		if meta.SkipDir {

@@ -22,6 +22,7 @@ import (
 	"github.com/alecthomas/chroma/v2/lexers"
 	"github.com/gohugoio/hugo/common/herrors"
 	htext "github.com/gohugoio/hugo/common/text"
+	"github.com/gohugoio/hugo/identity"
 	"github.com/gohugoio/hugo/markup/converter/hooks"
 	"github.com/gohugoio/hugo/markup/goldmark/internal/render"
 	"github.com/gohugoio/hugo/markup/internal/attributes"
@@ -103,6 +104,8 @@ func (r *htmlRenderer) renderCodeBlock(w util.BufWriter, src []byte, node ast.No
 	// IsDefaultCodeBlockRendererProvider
 	attrs := getAttributes(n.b, info)
 	cbctx := &codeBlockContext{
+		DependencyManagerProvider: ctx.RenderContext().DependencyManagerProvider,
+
 		page:             ctx.DocumentContext().Document,
 		lang:             lang,
 		code:             s,
@@ -128,8 +131,6 @@ func (r *htmlRenderer) renderCodeBlock(w util.BufWriter, src []byte, node ast.No
 		cbctx,
 	)
 
-	ctx.AddIdentity(cr)
-
 	if err != nil {
 		return ast.WalkContinue, herrors.NewFileErrorFromPos(err, cbctx.createPos())
 	}
@@ -138,6 +139,7 @@ func (r *htmlRenderer) renderCodeBlock(w util.BufWriter, src []byte, node ast.No
 }
 
 type codeBlockContext struct {
+	identity.DependencyManagerProvider
 	page    any
 	lang    string
 	code    string

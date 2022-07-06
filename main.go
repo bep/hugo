@@ -20,6 +20,7 @@ import (
 )
 
 func main() {
+
 	resp := commands.Execute(os.Args[1:])
 
 	if resp.Err != nil {

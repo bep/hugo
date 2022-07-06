@@ -10,7 +10,11 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/gohugoio/hugo/common/hugio"
 	"github.com/gohugoio/hugo/config"
+
+	"github.com/gohugoio/hugo/cache/memcache"
+
 	"github.com/gohugoio/hugo/langs"
 	"github.com/gohugoio/hugo/modules"
 
@@ -88,7 +92,9 @@ func newTestResourceSpec(desc specDescriptor) *Spec {
 	filecaches, err := filecache.NewCaches(s)
 	c.Assert(err, qt.IsNil)
 
-	spec, err := NewSpec(s, filecaches, nil, nil, nil, nil, output.DefaultFormats, media.DefaultTypes)
+	mc := memcache.New(memcache.Config{})
+
+	spec, err := NewSpec(s, filecaches, mc, nil, nil, nil, nil, output.DefaultFormats, media.DefaultTypes)
 	c.Assert(err, qt.IsNil)
 	return spec
 }
@@ -126,7 +132,7 @@ func newTestResourceOsFs(c *qt.C) (*Spec, string) {
 	filecaches, err := filecache.NewCaches(s)
 	c.Assert(err, qt.IsNil)
 
-	spec, err := NewSpec(s, filecaches, nil, nil, nil, nil, output.DefaultFormats, media.DefaultTypes)
+	spec, err := NewSpec(s, filecaches, memcache.New(memcache.Config{}), nil, nil, nil, nil, output.DefaultFormats, media.DefaultTypes)
 	c.Assert(err, qt.IsNil)
 
 	return spec, workDir
@@ -168,9 +174,13 @@ func fetchResourceForSpec(spec *Spec, c *qt.C, name string, targetPathAddends ..
 	src.Close()
 	c.Assert(err, qt.IsNil)
 
-	factory := newTargetPaths("/a")
-
-	r, err := spec.New(ResourceSourceDescriptor{Fs: spec.Fs.Source, TargetPaths: factory, LazyPublish: true, RelTargetFilename: name, SourceFilename: targetFilename})
+	r, err := spec.New(
+		ResourceSourceDescriptor{
+			OpenReadSeekCloser: func() (hugio.ReadSeekCloser, error) {
+				return spec.Fs.Source.Open(targetFilename)
+			},
+			LazyPublish: true, TargetPath: name,
+		})
 	c.Assert(err, qt.IsNil)
 	c.Assert(r, qt.Not(qt.IsNil))
 
@@ -202,4 +212,21 @@ func writeToFs(t testing.TB, fs afero.Fs, filename, content string) {
 	if err := afero.WriteFile(fs, filepath.FromSlash(filename), []byte(content), 0755); err != nil {
 		t.Fatalf("Failed to write file: %s", err)
 	}
+}
+
+func newResource(spec *Spec, targetPath, name string, mediaType media.Type) resource.Resource {
+	r, err := spec.New(
+		ResourceSourceDescriptor{
+			TargetPath: targetPath,
+			Name:       name,
+			MediaType:  mediaType,
+			OpenReadSeekCloser: func() (hugio.ReadSeekCloser, error) {
+				return hugio.NewReadSeekerNoOpCloserFromString("some content"), nil
+			},
+		},
+	)
+	if err != nil {
+		panic(err)
+	}
+	return r
 }

@@ -14,6 +14,7 @@
 package page
 
 import (
+	"context"
 	"fmt"
 	"html/template"
 	"path"
@@ -22,7 +23,7 @@ import (
 
 	"github.com/gohugoio/hugo/hugofs/files"
 	"github.com/gohugoio/hugo/identity"
-	"github.com/gohugoio/hugo/tpl"
+	"github.com/spf13/afero"
 
 	"github.com/gohugoio/hugo/modules"
 
@@ -56,7 +57,10 @@ func newTestPage() *testPage {
 
 func newTestPageWithFile(filename string) *testPage {
 	filename = filepath.FromSlash(filename)
-	file := source.NewTestFile(filename)
+	file, err := source.NewFileInfoFrom(filename, filename)
+	if err != nil {
+		panic(err)
+	}
 	return &testPage{
 		params: make(map[string]any),
 		data:   make(map[string]any),
@@ -88,6 +92,16 @@ func newTestPathSpecFor(cfg config.Provider) *helpers.PathSpec {
 	return s
 }
 
+func newTestSourceSpec() *source.SourceSpec {
+	v := config.New()
+	fs := hugofs.NewFrom(hugofs.NewBaseFileDecorator(afero.NewMemMapFs()), v)
+	ps, err := helpers.NewPathSpec(fs, v, nil)
+	if err != nil {
+		panic(err)
+	}
+	return source.NewSourceSpec(ps, nil, fs.Source)
+}
+
 type testPage struct {
 	kind        string
 	description string
@@ -116,7 +130,7 @@ type testPage struct {
 	params map[string]any
 	data   map[string]any
 
-	file source.File
+	file *source.File
 
 	currentSection *testPage
 	sectionEntries []string
@@ -210,11 +224,11 @@ func (p *testPage) Extension() string {
 	panic("not implemented")
 }
 
-func (p *testPage) File() source.File {
+func (p *testPage) File() *source.File {
 	return p.file
 }
 
-func (p *testPage) FileInfo() hugofs.FileMetaInfo {
+func (p *testPage) FileInfo() hugofs.FileMetaDirEntry {
 	panic("not implemented")
 }
 
@@ -231,10 +245,6 @@ func (p *testPage) FuzzyWordCount() int {
 }
 
 func (p *testPage) GetPage(ref string) (Page, error) {
-	panic("not implemented")
-}
-
-func (p *testPage) GetPageWithTemplateInfo(info tpl.Info, ref string) (Page, error) {
 	panic("not implemented")
 }
 
@@ -270,15 +280,15 @@ func (p *testPage) Hugo() hugo.Info {
 	panic("not implemented")
 }
 
-func (p *testPage) InSection(other any) (bool, error) {
+func (p *testPage) InSection(other any) bool {
 	panic("not implemented")
 }
 
-func (p *testPage) IsAncestor(other any) (bool, error) {
+func (p *testPage) IsAncestor(other any) bool {
 	panic("not implemented")
 }
 
-func (p *testPage) IsDescendant(other any) (bool, error) {
+func (p *testPage) IsDescendant(other any) bool {
 	panic("not implemented")
 }
 
@@ -420,10 +430,6 @@ func (p *testPage) Path() string {
 	return p.path
 }
 
-func (p *testPage) Pathc() string {
-	return p.path
-}
-
 func (p *testPage) Permalink() string {
 	panic("not implemented")
 }
@@ -484,7 +490,7 @@ func (p *testPage) RelRefFrom(argsm map[string]any, source any) (string, error) 
 	return "", nil
 }
 
-func (p *testPage) Render(layout ...string) (template.HTML, error) {
+func (p *testPage) Render(ctx context.Context, layout ...string) (template.HTML, error) {
 	panic("not implemented")
 }
 
@@ -597,8 +603,12 @@ func (p *testPage) WordCount() int {
 	panic("not implemented")
 }
 
-func (p *testPage) GetIdentity() identity.Identity {
-	panic("not implemented")
+func (p *testPage) IdentifierBase() any {
+	return p.path
+}
+
+func (p *testPage) GetDependencyManager() identity.Manager {
+	return identity.NopManager
 }
 
 func createTestPages(num int) Pages {

@@ -23,37 +23,38 @@ import (
 )
 
 func TestDateFormatMultilingual(t *testing.T) {
-	b := newTestSitesBuilder(t)
-	b.WithConfigFile("toml", `
-baseURL = "https://example.org"
 
+	files := `
+-- config.toml --
+baseURL = "https://example.org"
 defaultContentLanguage = "en"
 defaultContentLanguageInSubDir = true
-
 [languages]
 [languages.en]
 weight=10
 [languages.nn]
 weight=20
-	
-`)
-
-	pageWithDate := `---
+-- layouts/index.html --
+Date: {{ .Date | time.Format ":date_long" }}
+-- content/_index.en.md --
+---
 title: Page
 date: 2021-07-18
----	
+---
+-- content/_index.nn.md --
+---
+title: Page
+date: 2021-07-18
+---
+
 `
 
-	b.WithContent(
-		"_index.en.md", pageWithDate,
-		"_index.nn.md", pageWithDate,
-	)
-
-	b.WithTemplatesAdded("index.html", `
-Date: {{ .Date | time.Format ":date_long" }}
-	`)
-
-	b.Build(BuildCfg{})
+	b := NewIntegrationTestBuilder(
+		IntegrationTestConfig{
+			T:           t,
+			TxtarString: files,
+		},
+	).Build()
 
 	b.AssertFileContent("public/en/index.html", `Date: July 18, 2021`)
 	b.AssertFileContent("public/nn/index.html", `Date: 18. juli 2021`)

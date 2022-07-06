@@ -68,7 +68,10 @@ func TestDefaultTypes(t *testing.T) {
 	c.Assert(RSSFormat.NoUgly, qt.Equals, true)
 	c.Assert(CalendarFormat.IsHTML, qt.Equals, false)
 
-	c.Assert(len(DefaultFormats), qt.Equals, 11)
+	c.Assert(SitemapFormat.IsHTML, qt.Equals, false)
+	c.Assert(SitemapFormat.IsPlainText, qt.Equals, true)
+
+	c.Assert(len(DefaultFormats), qt.Equals, 12)
 
 }
 
@@ -81,6 +84,12 @@ func TestGetFormatByName(t *testing.T) {
 	c.Assert(found, qt.Equals, false)
 	_, found = formats.GetByName("FOO")
 	c.Assert(found, qt.Equals, false)
+}
+
+func TestIsZero(t *testing.T) {
+	c := qt.New(t)
+	c.Assert(HTMLFormat.IsZero(), qt.IsFalse)
+	c.Assert(Format{}.IsZero(), qt.IsTrue)
 }
 
 func TestGetFormatByExt(t *testing.T) {

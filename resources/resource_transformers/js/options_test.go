@@ -63,7 +63,6 @@ func TestToBuildOptions(t *testing.T) {
 		Format:    "cjs",
 		Minify:    true,
 		mediaType: media.JavascriptType,
-		AvoidTDZ:  true,
 	})
 	c.Assert(err, qt.IsNil)
 	c.Assert(opts, qt.DeepEquals, api.BuildOptions{
@@ -179,6 +178,5 @@ func TestResolveComponentInAssets(t *testing.T) {
 
 			c.Assert(gotPath, qt.Equals, test.expect)
 		})
-
 	}
 }

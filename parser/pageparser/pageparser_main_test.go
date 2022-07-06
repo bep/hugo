@@ -24,15 +24,16 @@ func TestMain(t *testing.T) {
 	c := qt.New(t)
 
 	mainTests := []lexerTest{
-		{"emoji #1", "Some text with :emoji:", []typeText{nti(tText, "Some text with "), nti(TypeEmoji, ":emoji:"), tstEOF}},
-		{"emoji #2", "Some text with :emoji: and some text.", []typeText{nti(tText, "Some text with "), nti(TypeEmoji, ":emoji:"), nti(tText, " and some text."), tstEOF}},
-		{"looks like an emoji #1", "Some text and then :emoji", []typeText{nti(tText, "Some text and then "), nti(tText, ":"), nti(tText, "emoji"), tstEOF}},
-		{"looks like an emoji #2", "Some text and then ::", []typeText{nti(tText, "Some text and then "), nti(tText, ":"), nti(tText, ":"), tstEOF}},
-		{"looks like an emoji #3", ":Some :text", []typeText{nti(tText, ":"), nti(tText, "Some "), nti(tText, ":"), nti(tText, "text"), tstEOF}},
+		{"emoji #1", "Some text with :emoji:", []typeText{nti(tText, "Some text with "), nti(TypeEmoji, ":emoji:"), tstEOF}, nil},
+		{"emoji #2", "Some text with :emoji: and some text.", []typeText{nti(tText, "Some text with "), nti(TypeEmoji, ":emoji:"), nti(tText, " and some text."), tstEOF}, nil},
+		{"looks like an emoji #1", "Some text and then :emoji", []typeText{nti(tText, "Some text and then "), nti(tText, ":"), nti(tText, "emoji"), tstEOF}, nil},
+		{"looks like an emoji #2", "Some text and then ::", []typeText{nti(tText, "Some text and then "), nti(tText, ":"), nti(tText, ":"), tstEOF}, nil},
+		{"looks like an emoji #3", ":Some :text", []typeText{nti(tText, ":"), nti(tText, "Some "), nti(tText, ":"), nti(tText, "text"), tstEOF}, nil},
 	}
 
 	for i, test := range mainTests {
-		items := collectWithConfig([]byte(test.input), false, lexMainSection, Config{EnableEmoji: true})
+		items, err := collectWithConfig([]byte(test.input), false, lexMainSection, Config{EnableEmoji: true})
+		c.Assert(err, qt.IsNil)
 		if !equal(test.input, items, test.items) {
 			got := itemsToString(items, []byte(test.input))
 			expected := testItemsToString(test.items)

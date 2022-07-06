@@ -18,17 +18,15 @@ import (
 	"context"
 	"fmt"
 	"html/template"
-	"runtime/debug"
 	"strings"
 	"sync"
-	"unicode/utf8"
 
 	"errors"
 
 	"github.com/gohugoio/hugo/common/text"
 	"github.com/gohugoio/hugo/common/types/hstring"
 	"github.com/gohugoio/hugo/identity"
-	"github.com/gohugoio/hugo/parser/pageparser"
+	"github.com/gohugoio/hugo/output"
 	"github.com/mitchellh/mapstructure"
 	"github.com/spf13/cast"
 
@@ -37,13 +35,10 @@ import (
 	"github.com/gohugoio/hugo/markup/converter"
 
 	"github.com/alecthomas/chroma/v2/lexers"
-	"github.com/gohugoio/hugo/lazy"
 
 	bp "github.com/gohugoio/hugo/bufferpool"
 	"github.com/gohugoio/hugo/tpl"
 
-	"github.com/gohugoio/hugo/helpers"
-	"github.com/gohugoio/hugo/output"
 	"github.com/gohugoio/hugo/resources/page"
 	"github.com/gohugoio/hugo/resources/resource"
 )
@@ -70,149 +65,12 @@ var (
 	}
 )
 
-var pageContentOutputDependenciesID = identity.KeyValueIdentity{Key: "pageOutput", Value: "dependencies"}
-
-func newPageContentOutput(p *pageState, po *pageOutput) (*pageContentOutput, error) {
-	parent := p.init
-
-	var dependencyTracker identity.Manager
-	if p.s.running() {
-		dependencyTracker = identity.NewManager(pageContentOutputDependenciesID)
-	}
-
+func newPageContentOutput(po *pageOutput) (*pageContentOutput, error) {
 	cp := &pageContentOutput{
-		dependencyTracker: dependencyTracker,
-		p:                 p,
-		f:                 po.f,
-		renderHooks:       &renderHooks{},
+		key:         po.f.Name,
+		po:          po,
+		renderHooks: &renderHooks{},
 	}
-
-	initContent := func() (err error) {
-		p.s.h.IncrContentRender()
-
-		if p.cmap == nil {
-			// Nothing to do.
-			return nil
-		}
-		defer func() {
-			// See https://github.com/gohugoio/hugo/issues/6210
-			if r := recover(); r != nil {
-				err = fmt.Errorf("%s", r)
-				p.s.Log.Errorf("[BUG] Got panic:\n%s\n%s", r, string(debug.Stack()))
-			}
-		}()
-
-		if err := po.cp.initRenderHooks(); err != nil {
-			return err
-		}
-
-		var hasShortcodeVariants bool
-
-		f := po.f
-		cp.contentPlaceholders, hasShortcodeVariants, err = p.shortcodeState.renderShortcodesForPage(p, f)
-		if err != nil {
-			return err
-		}
-
-		if hasShortcodeVariants {
-			p.pageOutputTemplateVariationsState.Store(2)
-		}
-
-		cp.workContent = p.contentToRender(p.source.parsed, p.cmap, cp.contentPlaceholders)
-
-		isHTML := cp.p.m.markup == "html"
-
-		if !isHTML {
-			r, err := cp.renderContent(cp.workContent, true)
-			if err != nil {
-				return err
-			}
-
-			cp.workContent = r.Bytes()
-
-			if tocProvider, ok := r.(converter.TableOfContentsProvider); ok {
-				cfg := p.s.ContentSpec.Converters.GetMarkupConfig()
-				cp.tableOfContents = template.HTML(
-					tocProvider.TableOfContents().ToHTML(
-						cfg.TableOfContents.StartLevel,
-						cfg.TableOfContents.EndLevel,
-						cfg.TableOfContents.Ordered,
-					),
-				)
-			} else {
-				tmpContent, tmpTableOfContents := helpers.ExtractTOC(cp.workContent)
-				cp.tableOfContents = helpers.BytesToHTML(tmpTableOfContents)
-				cp.workContent = tmpContent
-			}
-		}
-
-		if cp.placeholdersEnabled {
-			// ToC was accessed via .Page.TableOfContents in the shortcode,
-			// at a time when the ToC wasn't ready.
-			cp.contentPlaceholders[tocShortcodePlaceholder] = string(cp.tableOfContents)
-		}
-
-		if p.cmap.hasNonMarkdownShortcode || cp.placeholdersEnabled {
-			// There are one or more replacement tokens to be replaced.
-			cp.workContent, err = replaceShortcodeTokens(cp.workContent, cp.contentPlaceholders)
-			if err != nil {
-				return err
-			}
-		}
-
-		if cp.p.source.hasSummaryDivider {
-			if isHTML {
-				src := p.source.parsed.Input()
-
-				// Use the summary sections as they are provided by the user.
-				if p.source.posSummaryEnd != -1 {
-					cp.summary = helpers.BytesToHTML(src[p.source.posMainContent:p.source.posSummaryEnd])
-				}
-
-				if cp.p.source.posBodyStart != -1 {
-					cp.workContent = src[cp.p.source.posBodyStart:]
-				}
-
-			} else {
-				summary, content, err := splitUserDefinedSummaryAndContent(cp.p.m.markup, cp.workContent)
-				if err != nil {
-					cp.p.s.Log.Errorf("Failed to set user defined summary for page %q: %s", cp.p.pathOrTitle(), err)
-				} else {
-					cp.workContent = content
-					cp.summary = helpers.BytesToHTML(summary)
-				}
-			}
-		} else if cp.p.m.summary != "" {
-			b, err := cp.renderContent([]byte(cp.p.m.summary), false)
-			if err != nil {
-				return err
-			}
-			html := cp.p.s.ContentSpec.TrimShortHTML(b.Bytes())
-			cp.summary = helpers.BytesToHTML(html)
-		}
-
-		cp.content = helpers.BytesToHTML(cp.workContent)
-
-		return nil
-	}
-
-	// There may be recursive loops in shortcodes and render hooks.
-	cp.initMain = parent.BranchWithTimeout(p.s.siteCfg.timeout, func(ctx context.Context) (any, error) {
-		return nil, initContent()
-	})
-
-	cp.initPlain = cp.initMain.Branch(func() (any, error) {
-		cp.plain = tpl.StripHTML(string(cp.content))
-		cp.plainWords = strings.Fields(cp.plain)
-		cp.setWordCounts(p.m.isCJKLanguage)
-
-		if err := cp.setAutoSummary(); err != nil {
-			return err, nil
-		}
-
-		return nil, nil
-	})
-
 	return cp, nil
 }
 
@@ -223,113 +81,85 @@ type renderHooks struct {
 
 // pageContentOutput represents the Page content for a given output format.
 type pageContentOutput struct {
-	f output.Format
-
-	p *pageState
-
-	// Lazy load dependencies
-	initMain  *lazy.Init
-	initPlain *lazy.Init
+	po      *pageOutput // TODO1 make this a ps
+	key     string
+	version int
 
 	placeholdersEnabled     bool
 	placeholdersEnabledInit sync.Once
 
 	// Renders Markdown hooks.
 	renderHooks *renderHooks
-
-	workContent       []byte
-	dependencyTracker identity.Manager // Set in server mode.
-
-	// Temporary storage of placeholders mapped to their content.
-	// These are shortcodes etc. Some of these will need to be replaced
-	// after any markup is rendered, so they share a common prefix.
-	contentPlaceholders map[string]string
-
-	// Content sections
-	content         template.HTML
-	summary         template.HTML
-	tableOfContents template.HTML
-
-	truncated bool
-
-	plainWords     []string
-	plain          string
-	fuzzyWordCount int
-	wordCount      int
-	readingTime    int
 }
 
-func (p *pageContentOutput) trackDependency(id identity.Provider) {
-	if p.dependencyTracker != nil {
-		p.dependencyTracker.Add(id)
-	}
+func (p *pageContentOutput) trackDependency(id identity.Identity) {
+	p.po.dependencyManagerOutput.AddIdentity(id)
 }
 
 func (p *pageContentOutput) Reset() {
-	if p.dependencyTracker != nil {
-		p.dependencyTracker.Reset()
-	}
-	p.initMain.Reset()
-	p.initPlain.Reset()
+	p.version++
 	p.renderHooks = &renderHooks{}
 }
 
 func (p *pageContentOutput) Content() (any, error) {
-	if p.p.s.initInit(p.initMain, p.p) {
-		return p.content, nil
-	}
-	return nil, nil
-}
-
-func (p *pageContentOutput) FuzzyWordCount() int {
-	p.p.s.initInit(p.initPlain, p.p)
-	return p.fuzzyWordCount
-}
-
-func (p *pageContentOutput) Len() int {
-	p.p.s.initInit(p.initMain, p.p)
-	return len(p.content)
-}
-
-func (p *pageContentOutput) Plain() string {
-	p.p.s.initInit(p.initPlain, p.p)
-	return p.plain
-}
-
-func (p *pageContentOutput) PlainWords() []string {
-	p.p.s.initInit(p.initPlain, p.p)
-	return p.plainWords
-}
-
-func (p *pageContentOutput) ReadingTime() int {
-	p.p.s.initInit(p.initPlain, p.p)
-	return p.readingTime
-}
-
-func (p *pageContentOutput) Summary() template.HTML {
-	p.p.s.initInit(p.initMain, p.p)
-	if !p.p.source.hasSummaryDivider {
-		p.p.s.initInit(p.initPlain, p.p)
-	}
-	return p.summary
+	r, err := p.po.ps.content.contentRendered(p)
+	return r.content, err
 }
 
 func (p *pageContentOutput) TableOfContents() template.HTML {
-	p.p.s.initInit(p.initMain, p.p)
-	return p.tableOfContents
+	r, err := p.po.ps.content.contentRendered(p)
+	if err != nil {
+		panic(err)
+	}
+	return r.tableOfContents
 }
 
-func (p *pageContentOutput) Truncated() bool {
-	if p.p.truncated {
-		return true
+func (p *pageContentOutput) Len() int {
+	return len(p.mustContentRendered().content)
+}
+
+func (p *pageContentOutput) mustContentRendered() contentTableOfContents {
+	r, err := p.po.ps.content.contentRendered(p)
+	if err != nil {
+		panic(err)
 	}
-	p.p.s.initInit(p.initPlain, p.p)
-	return p.truncated
+	return r
+}
+
+func (p *pageContentOutput) mustContentPlain() plainPlainWords {
+	r, err := p.po.ps.content.contentPlain(p)
+	if err != nil {
+		panic(err)
+	}
+	return r
+}
+
+func (p *pageContentOutput) Plain() string {
+	return p.mustContentPlain().plain
+}
+
+func (p *pageContentOutput) PlainWords() []string {
+	return p.mustContentPlain().plainWords
+}
+
+func (p *pageContentOutput) ReadingTime() int {
+	return p.mustContentPlain().readingTime
 }
 
 func (p *pageContentOutput) WordCount() int {
-	p.p.s.initInit(p.initPlain, p.p)
-	return p.wordCount
+	return p.mustContentPlain().wordCount
+}
+
+func (p *pageContentOutput) FuzzyWordCount() int {
+	return p.mustContentPlain().fuzzyWordCount
+}
+
+func (p *pageContentOutput) Summary() template.HTML {
+	return p.mustContentPlain().summary
+}
+
+func (p *pageContentOutput) Truncated() bool {
+	return p.mustContentPlain().summaryTruncated
 }
 
 func (p *pageContentOutput) RenderString(args ...any) (template.HTML, error) {
@@ -372,64 +202,52 @@ func (p *pageContentOutput) RenderString(args ...any) (template.HTML, error) {
 		return "", err
 	}
 
-	conv := p.p.getContentConverter()
-	if opts.Markup != "" && opts.Markup != p.p.m.markup {
+	conv := p.po.ps.getContentConverter()
+	if opts.Markup != "" && opts.Markup != p.po.ps.m.markup {
 		var err error
 		// TODO(bep) consider cache
-		conv, err = p.p.m.newContentConverter(p.p, opts.Markup)
+		conv, err = p.po.ps.m.newContentConverter(p.po.ps, opts.Markup)
 		if err != nil {
-			return "", p.p.wrapError(err)
+			return "", p.po.ps.wrapError(err)
 		}
 	}
 
 	var rendered []byte
 
 	if strings.Contains(contentToRender, "{{") {
-		// Probably a shortcode.
-		parsed, err := pageparser.ParseMain(strings.NewReader(contentToRender), pageparser.Config{})
-		if err != nil {
-			return "", err
-		}
-		pm := &pageContentMap{
-			items: make([]any, 0, 20),
-		}
-		s := newShortcodeHandler(p.p, p.p.s)
+		source := []byte(contentToRender)
 
-		if err := p.p.mapContentForResult(
-			parsed,
-			s,
-			pm,
-			opts.Markup,
-			nil,
-		); err != nil {
+		c := &cachedContent{
+			shortcodeState: newShortcodeHandler("<string>.md", p.po.ps.s),
+			pageContentMap: &pageContentMap{},
+		}
+
+		if err := c.parseContentRenderString(source); err != nil {
 			return "", err
 		}
 
-		placeholders, hasShortcodeVariants, err := s.renderShortcodesForPage(p.p, p.f)
+		placeholders, hasShortcodeVariants, err := c.shortcodeState.renderShortcodesForPage(p.po.ps, p.po.f)
 		if err != nil {
 			return "", err
 		}
 
 		if hasShortcodeVariants {
-			p.p.pageOutputTemplateVariationsState.Store(2)
+			p.po.ps.pageOutputTemplateVariationsState.Store(2)
 		}
 
-		b, err := p.renderContentWithConverter(conv, p.p.contentToRender(parsed, pm, placeholders), false)
+		b, err := p.renderContentWithConverter(conv, c.pageContentMap.contentToRender(source, placeholders), false)
 		if err != nil {
-			return "", p.p.wrapError(err)
+			return "", p.po.ps.wrapError(err)
 		}
 		rendered = b.Bytes()
 
 		if p.placeholdersEnabled {
 			// ToC was accessed via .Page.TableOfContents in the shortcode,
 			// at a time when the ToC wasn't ready.
-			if _, err := p.p.Content(); err != nil {
-				return "", err
-			}
-			placeholders[tocShortcodePlaceholder] = string(p.tableOfContents)
+			placeholders[tocShortcodePlaceholder] = string(p.po.ps.TableOfContents())
 		}
 
-		if pm.hasNonMarkdownShortcode || p.placeholdersEnabled {
+		if len(placeholders) > 0 {
 			rendered, err = replaceShortcodeTokens(rendered, placeholders)
 			if err != nil {
 				return "", err
@@ -437,12 +255,12 @@ func (p *pageContentOutput) RenderString(args ...any) (template.HTML, error) {
 		}
 
 		// We need a consolidated view in $page.HasShortcode
-		p.p.shortcodeState.transferNames(s)
+		p.po.ps.content.shortcodeState.transferNames(c.shortcodeState)
 
 	} else {
 		c, err := p.renderContentWithConverter(conv, []byte(contentToRender), false)
 		if err != nil {
-			return "", p.p.wrapError(err)
+			return "", p.po.ps.wrapError(err)
 		}
 
 		rendered = c.Bytes()
@@ -451,33 +269,28 @@ func (p *pageContentOutput) RenderString(args ...any) (template.HTML, error) {
 	if opts.Display == "inline" {
 		// We may have to rethink this in the future when we get other
 		// renderers.
-		rendered = p.p.s.ContentSpec.TrimShortHTML(rendered)
+		rendered = p.po.ps.s.ContentSpec.TrimShortHTML(rendered)
 	}
 
 	return template.HTML(string(rendered)), nil
 }
 
-func (p *pageContentOutput) RenderWithTemplateInfo(info tpl.Info, layout ...string) (template.HTML, error) {
-	p.p.addDependency(info)
-	return p.Render(layout...)
-}
-
-func (p *pageContentOutput) Render(layout ...string) (template.HTML, error) {
-	templ, found, err := p.p.resolveTemplate(layout...)
+func (p *pageContentOutput) Render(ctx context.Context, layout ...string) (template.HTML, error) {
+	templ, found, err := p.po.ps.resolveTemplate(layout...)
 	if err != nil {
-		return "", p.p.wrapError(err)
+		return "", p.po.ps.wrapError(err)
 	}
 
 	if !found {
 		return "", nil
 	}
 
-	p.p.addDependency(templ.(tpl.Info))
+	p.po.ps.addDependency(templ.(tpl.Info))
 
 	// Make sure to send the *pageState and not the *pageContentOutput to the template.
-	res, err := executeToString(p.p.s.Tmpl(), templ, p.p)
+	res, err := executeToString(ctx, p.po.ps.s.Tmpl(), templ, p.po.ps)
 	if err != nil {
-		return "", p.p.wrapError(fmt.Errorf("failed to execute template %s: %w", templ.Name(), err))
+		return "", p.po.ps.wrapError(fmt.Errorf("failed to execute template %s: %w", templ.Name(), err))
 	}
 	return template.HTML(res), nil
 }
@@ -488,8 +301,8 @@ func (p *pageContentOutput) initRenderHooks() error {
 	}
 
 	p.renderHooks.init.Do(func() {
-		if p.p.pageOutputTemplateVariationsState.Load() == 0 {
-			p.p.pageOutputTemplateVariationsState.Store(1)
+		if p.po.ps.pageOutputTemplateVariationsState.Load() == 0 {
+			p.po.ps.pageOutputTemplateVariationsState.Store(1)
 		}
 
 		type cacheKey struct {
@@ -506,10 +319,10 @@ func (p *pageContentOutput) initRenderHooks() error {
 
 			switch v := ctx.(type) {
 			case hooks.CodeblockContext:
-				offset = bytes.Index(p.p.source.parsed.Input(), []byte(v.Inner()))
+				offset = bytes.Index(p.po.ps.content.mustSource(), []byte(v.Inner()))
 			}
 
-			pos := p.p.posFromInput(p.p.source.parsed.Input(), offset)
+			pos := posFromInput(p.po.ps.pathOrTitle(), p.po.ps.content.mustSource(), offset)
 
 			if pos.LineNumber > 0 {
 				// Move up to the code fence delimiter.
@@ -524,12 +337,12 @@ func (p *pageContentOutput) initRenderHooks() error {
 			renderCacheMu.Lock()
 			defer renderCacheMu.Unlock()
 
-			key := cacheKey{tp: tp, id: id, f: p.f}
+			key := cacheKey{tp: tp, id: id, f: p.po.f}
 			if r, ok := renderCache[key]; ok {
 				return r
 			}
 
-			layoutDescriptor := p.p.getLayoutDescriptor()
+			layoutDescriptor := p.po.ps.getLayoutDescriptor()
 			layoutDescriptor.RenderingHook = true
 			layoutDescriptor.LayoutOverride = false
 			layoutDescriptor.Layout = ""
@@ -555,19 +368,24 @@ func (p *pageContentOutput) initRenderHooks() error {
 			}
 
 			getHookTemplate := func(f output.Format) (tpl.Template, bool) {
-				templ, found, err := p.p.s.Tmpl().LookupLayout(layoutDescriptor, f)
+				templ, found, err := p.po.ps.s.Tmpl().LookupLayout(layoutDescriptor, f)
 				if err != nil {
 					panic(err)
+				}
+				if !found && p.po.ps.s.running() {
+					// TODO1 more specific.
+					p.po.dependencyManagerOutput.AddIdentity(identity.NewGlobIdentity("**/_markup/*"))
+
 				}
 				return templ, found
 			}
 
-			templ, found1 := getHookTemplate(p.f)
+			templ, found1 := getHookTemplate(p.po.f)
 
-			if p.p.reusePageOutputContent() {
+			if p.po.ps.reusePageOutputContent() {
 				// Check if some of the other output formats would give a different template.
-				for _, f := range p.p.s.renderFormats {
-					if f.Name == p.f.Name {
+				for _, f := range p.po.ps.s.renderFormats {
+					if f.Name == p.po.f.Name {
 						continue
 					}
 					templ2, found2 := getHookTemplate(f)
@@ -579,7 +397,7 @@ func (p *pageContentOutput) initRenderHooks() error {
 						}
 
 						if templ != templ2 {
-							p.p.pageOutputTemplateVariationsState.Store(2)
+							p.po.ps.pageOutputTemplateVariationsState.Store(2)
 							break
 						}
 					}
@@ -588,7 +406,7 @@ func (p *pageContentOutput) initRenderHooks() error {
 			if !found1 {
 				if tp == hooks.CodeBlockRendererType {
 					// No user provided tempplate for code blocks, so we use the native Go code version -- which is also faster.
-					r := p.p.s.ContentSpec.Converters.GetHighlighter()
+					r := p.po.ps.s.ContentSpec.Converters.GetHighlighter()
 					renderCache[key] = r
 					return r
 				}
@@ -596,8 +414,7 @@ func (p *pageContentOutput) initRenderHooks() error {
 			}
 
 			r := hookRendererTemplate{
-				templateHandler: p.p.s.Tmpl(),
-				SearchProvider:  templ.(identity.SearchProvider),
+				templateHandler: p.po.ps.s.Tmpl(),
 				templ:           templ,
 				resolvePosition: resolvePosition,
 			}
@@ -610,77 +427,53 @@ func (p *pageContentOutput) initRenderHooks() error {
 }
 
 func (p *pageContentOutput) setAutoSummary() error {
-	if p.p.source.hasSummaryDivider || p.p.m.summary != "" {
-		return nil
-	}
-
-	var summary string
-	var truncated bool
-
-	if p.p.m.isCJKLanguage {
-		summary, truncated = p.p.s.ContentSpec.TruncateWordsByRune(p.plainWords)
-	} else {
-		summary, truncated = p.p.s.ContentSpec.TruncateWordsToWholeSentence(p.plain)
-	}
-	p.summary = template.HTML(summary)
-
-	p.truncated = truncated
-
+	// TODO1
 	return nil
+	/*
+		if p.po.ps.source.hasSummaryDivider || p.po.ps.m.summary != "" {
+			return nil
+		}
+
+		var summary string
+		var truncated bool
+
+		if p.po.ps.m.isCJKLanguage {
+			summary, truncated = p.po.ps.s.ContentSpec.TruncateWordsByRune(p.plainWords)
+		} else {
+			summary, truncated = p.po.ps.s.ContentSpec.TruncateWordsToWholeSentence(p.plain)
+		}
+		p.summary = template.HTML(summary)
+
+		p.truncated = truncated
+
+		return nil
+	*/
 }
 
 func (cp *pageContentOutput) renderContent(content []byte, renderTOC bool) (converter.Result, error) {
 	if err := cp.initRenderHooks(); err != nil {
 		return nil, err
 	}
-	c := cp.p.getContentConverter()
+	c := cp.po.ps.getContentConverter()
 	return cp.renderContentWithConverter(c, content, renderTOC)
 }
 
 func (cp *pageContentOutput) renderContentWithConverter(c converter.Converter, content []byte, renderTOC bool) (converter.Result, error) {
 	r, err := c.Convert(
 		converter.RenderContext{
-			Src:         content,
-			RenderTOC:   renderTOC,
-			GetRenderer: cp.renderHooks.getRenderer,
+			Src:                       content,
+			RenderTOC:                 renderTOC,
+			DependencyManagerProvider: cp.po,
+			GetRenderer:               cp.renderHooks.getRenderer,
 		})
 
 	if err == nil {
-		if ids, ok := r.(identity.IdentitiesProvider); ok {
-			for _, v := range ids.GetIdentities() {
-				cp.trackDependency(v)
-			}
+		if id, ok := r.(identity.Identity); ok {
+			cp.trackDependency(id)
 		}
 	}
 
 	return r, err
-}
-
-func (p *pageContentOutput) setWordCounts(isCJKLanguage bool) {
-	if isCJKLanguage {
-		p.wordCount = 0
-		for _, word := range p.plainWords {
-			runeCount := utf8.RuneCountInString(word)
-			if len(word) == runeCount {
-				p.wordCount++
-			} else {
-				p.wordCount += runeCount
-			}
-		}
-	} else {
-		p.wordCount = helpers.TotalWords(p.plain)
-	}
-
-	// TODO(bep) is set in a test. Fix that.
-	if p.fuzzyWordCount == 0 {
-		p.fuzzyWordCount = (p.wordCount + 100) / 100 * 100
-	}
-
-	if isCJKLanguage {
-		p.readingTime = (p.wordCount + 500) / 501
-	} else {
-		p.readingTime = (p.wordCount + 212) / 213
-	}
 }
 
 // A callback to signal that we have inserted a placeholder into the rendered
@@ -711,10 +504,10 @@ func (t targetPathsHolder) targetPaths() page.TargetPaths {
 	return t.paths
 }
 
-func executeToString(h tpl.TemplateHandler, templ tpl.Template, data any) (string, error) {
+func executeToString(ctx context.Context, h tpl.TemplateHandler, templ tpl.Template, data any) (string, error) {
 	b := bp.GetBuffer()
 	defer bp.PutBuffer(b)
-	if err := h.Execute(templ, b, data); err != nil {
+	if err := h.ExecuteWithContext(ctx, templ, b, data); err != nil {
 		return "", err
 	}
 	return b.String(), nil

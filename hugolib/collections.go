@@ -16,11 +16,13 @@ package hugolib
 import (
 	"github.com/gohugoio/hugo/common/collections"
 	"github.com/gohugoio/hugo/resources/page"
+	"github.com/gohugoio/hugo/resources/resource"
 )
 
 var (
 	_ collections.Grouper = (*pageState)(nil)
 	_ collections.Slicer  = (*pageState)(nil)
+	_ resource.Staler     = (*pageState)(nil)
 )
 
 // collections.Slicer implementations below. We keep these bridge implementations

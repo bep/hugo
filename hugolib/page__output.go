@@ -14,6 +14,7 @@
 package hugolib
 
 import (
+	"github.com/gohugoio/hugo/identity"
 	"github.com/gohugoio/hugo/output"
 	"github.com/gohugoio/hugo/resources/page"
 	"github.com/gohugoio/hugo/resources/resource"
@@ -24,6 +25,7 @@ func newPageOutput(
 	pp pagePaths,
 	f output.Format,
 	render bool) *pageOutput {
+
 	var targetPathsProvider targetPathsHolder
 	var linksProvider resource.ResourceLinksProvider
 
@@ -53,14 +55,21 @@ func newPageOutput(
 		targetPathsProvider,
 	}
 
+	var dependencyManager identity.Manager = identity.NopManager
+	if ps.s.running() {
+		dependencyManager = identity.NewManager(identity.Anonymous)
+	}
+
 	po := &pageOutput{
 		f:                       f,
+		dependencyManagerOutput: dependencyManager,
 		pagePerOutputProviders:  providers,
 		ContentProvider:         page.NopPage,
 		TableOfContentsProvider: page.NopPage,
 		PageRenderProvider:      page.NopPage,
 		render:                  render,
 		paginator:               pag,
+		ps:                      ps,
 	}
 
 	return po
@@ -69,7 +78,7 @@ func newPageOutput(
 // We create a pageOutput for every output format combination, even if this
 // particular page isn't configured to be rendered to that format.
 type pageOutput struct {
-	// Set if this page isn't configured to be rendered to this format.
+	// Enabled if this page is configured to be rendered to this format.
 	render bool
 
 	f output.Format
@@ -86,11 +95,28 @@ type pageOutput struct {
 	page.TableOfContentsProvider
 	page.PageRenderProvider
 
+	// We have one per output so we can do a fine grained page resets.
+	dependencyManagerOutput identity.Manager
+
+	ps *pageState
+
 	// May be nil.
 	cp *pageContentOutput
+
+	renderState int
 }
 
-func (p *pageOutput) initContentProvider(cp *pageContentOutput) {
+func (po *pageOutput) Reset() {
+	po.cp.Reset()
+	po.dependencyManagerOutput.Reset()
+	po.renderState = 0
+}
+
+func (o *pageOutput) GetDependencyManager() identity.Manager {
+	return o.dependencyManagerOutput
+}
+
+func (p *pageOutput) setContentProvider(cp *pageContentOutput) {
 	if cp == nil {
 		return
 	}

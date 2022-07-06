@@ -48,18 +48,23 @@ func TestMakePath(t *testing.T) {
 		{"Foo.Bar/foo_Bar-Foo", "Foo.Bar/foo_Bar-Foo", true},
 		{"fOO,bar:foobAR", "fOObarfoobAR", true},
 		{"FOo/BaR.html", "FOo/BaR.html", true},
+		{"FOo/Ba       R.html", "FOo/Ba-R.html", true},
 		{"трям/трям", "трям/трям", true},
 		{"은행", "은행", true},
 		{"Банковский кассир", "Банковскии-кассир", true},
-		// Issue #1488
-		{"संस्कृत", "संस्कृत", false},
-		{"a%C3%B1ame", "a%C3%B1ame", false},         // Issue #1292
-		{"this+is+a+test", "this+is+a+test", false}, // Issue #1290
-		{"~foo", "~foo", false},                     // Issue #2177
-		{"foo--bar", "foo--bar", true},              // Issue #7288
+		{"संस्कृत", "संस्कृत", false},                // Issue #1488
+		{"a%C3%B1ame", "a%C3%B1ame", false},          // Issue #1292
+		{"this+is+a+test", "this+is+a+test", false},  // Issue #1290
+		{"~foo", "~foo", false},                      // Issue #2177
+		{"foo--bar", "foo--bar", true},               // Issue #7288
+		{"FOo/Ba---R.html", "FOo/Ba---R.html", true}, // Issue #10104
+
 	}
 
 	for _, test := range tests {
+		if test.input != "FOo/Ba---R.html" {
+			continue
+		}
 		v := newTestCfg()
 		v.Set("removePathAccents", test.removeAccents)
 

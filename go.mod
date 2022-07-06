@@ -2,7 +2,6 @@ module github.com/gohugoio/hugo
 
 require (
 	github.com/BurntSushi/locker v0.0.0-20171006230638-a6e239ea1c69
-	github.com/PuerkitoBio/purell v1.1.1
 	github.com/alecthomas/chroma/v2 v2.3.0
 	github.com/armon/go-radix v1.0.0
 	github.com/aws/aws-sdk-go v1.43.5
@@ -13,14 +12,13 @@ require (
 	github.com/bep/godartsass v0.14.0
 	github.com/bep/golibsass v1.1.0
 	github.com/bep/gowebp v0.1.0
-	github.com/bep/overlayfs v0.6.0
+	github.com/bep/overlayfs v0.8.0
 	github.com/bep/tmc v0.5.1
 	github.com/clbanning/mxj/v2 v2.5.6
 	github.com/cli/safeexec v1.0.0
 	github.com/disintegration/gift v1.2.1
 	github.com/dustin/go-humanize v1.0.0
 	github.com/evanw/esbuild v0.15.9
-	github.com/fortytw2/leaktest v1.3.0
 	github.com/frankban/quicktest v1.14.3
 	github.com/fsnotify/fsnotify v1.5.4
 	github.com/getkin/kin-openapi v0.103.0
@@ -35,6 +33,7 @@ require (
 	github.com/gorilla/websocket v1.5.0
 	github.com/hairyhenderson/go-codeowners v0.2.3-0.20201026200250-cdc7c0759690
 	github.com/jdkato/prose v1.2.1
+	github.com/karlseguin/ccache/v2 v2.0.8
 	github.com/kylelemons/godebug v1.1.0
 	github.com/kyokomi/emoji/v2 v2.2.10
 	github.com/magefile/mage v1.13.0
@@ -45,18 +44,21 @@ require (
 	github.com/muesli/smartcrop v0.3.0
 	github.com/niklasfasching/go-org v1.6.5
 	github.com/olekukonko/tablewriter v0.0.5
+	github.com/pbnjay/memory v0.0.0-20210728143218-7b4eea64cf58
 	github.com/pelletier/go-toml/v2 v2.0.4
+	github.com/pkg/errors v0.9.1
 	github.com/rogpeppe/go-internal v1.9.0
 	github.com/rwcarlsen/goexif v0.0.0-20190401172101-9e8deecbddbd
 	github.com/sanity-io/litter v1.5.5
 	github.com/spf13/afero v1.9.2
 	github.com/spf13/cast v1.5.0
 	github.com/spf13/cobra v1.5.0
-	github.com/spf13/fsync v0.9.0
+	github.com/spf13/fsync v0.10.0
 	github.com/spf13/jwalterweatherman v1.1.0
 	github.com/spf13/pflag v1.0.5
 	github.com/tdewolff/minify/v2 v2.12.1
 	github.com/tdewolff/parse/v2 v2.6.3
+	github.com/vburenin/nsync v0.0.0-20160822015540-9a75d1c80410
 	github.com/yuin/goldmark v1.4.15
 	go.uber.org/atomic v1.10.0
 	gocloud.dev v0.24.0
@@ -82,7 +84,6 @@ require (
 	github.com/Azure/go-autorest/autorest/date v0.3.0 // indirect
 	github.com/Azure/go-autorest/logger v0.2.1 // indirect
 	github.com/Azure/go-autorest/tracing v0.6.0 // indirect
-	github.com/PuerkitoBio/urlesc v0.0.0-20170810143723-de5bf2ad4578 // indirect
 	github.com/aws/aws-sdk-go-v2 v1.9.0 // indirect
 	github.com/aws/aws-sdk-go-v2/config v1.7.0 // indirect
 	github.com/aws/aws-sdk-go-v2/credentials v1.4.0 // indirect

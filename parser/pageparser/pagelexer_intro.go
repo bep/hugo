@@ -13,6 +13,34 @@
 
 package pageparser
 
+import (
+	"errors"
+)
+
+var ErrPlainHTMLDocumentsNotSupported = errors.New("plain HTML documents not supported")
+
+func lexIntroSectionAndStop(l *pageLexer) stateFunc {
+	lexIntroSection(l)
+
+	if l.isEOF() {
+		return lexDone
+	}
+
+	if l.isInHTMLComment {
+		if fn := lexEndFrontMatterHTMLCommenAndStop(l); fn != nil {
+			// Error.
+			return fn
+		}
+	}
+
+	if l.err == nil && (len(l.items) == 0 || !l.items[len(l.items)-1].IsDone()) {
+		l.pos = len(l.input)
+		l.start = l.pos
+		l.append(Item{Type: tEOF, low: l.start, high: l.pos})
+	}
+	return nil
+}
+
 func lexIntroSection(l *pageLexer) stateFunc {
 	l.summaryDivider = summaryDivider
 
@@ -45,7 +73,7 @@ LOOP:
 					l.emit(TypeIgnore)
 					continue LOOP
 				} else {
-					return l.errorf("plain HTML documents not supported")
+					return l.documentError(ErrPlainHTMLDocumentsNotSupported)
 				}
 			}
 			break LOOP
@@ -57,6 +85,15 @@ LOOP:
 }
 
 func lexEndFrontMatterHTMLComment(l *pageLexer) stateFunc {
+	if fn := lexEndFrontMatterHTMLCommenAndStop(l); fn != nil {
+		return fn
+	}
+
+	// Now move on to the shortcodes.
+	return lexMainSection
+}
+
+func lexEndFrontMatterHTMLCommenAndStop(l *pageLexer) stateFunc {
 	l.isInHTMLComment = false
 	right := l.index(htmlCommentEnd)
 	if right == -1 {
@@ -65,8 +102,7 @@ func lexEndFrontMatterHTMLComment(l *pageLexer) stateFunc {
 	l.pos += right + len(htmlCommentEnd)
 	l.emit(TypeIgnore)
 
-	// Now move on to the shortcodes.
-	return lexMainSection
+	return nil
 }
 
 func lexFrontMatterJSON(l *pageLexer) stateFunc {

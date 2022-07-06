@@ -21,13 +21,26 @@ import (
 	"github.com/spf13/cast"
 )
 
-var _ ResourceFinder = (*Resources)(nil)
+var (
+	_ ResourceFinder = (*Resources)(nil)
+	_ StaleInfo      = Resources{}
+)
 
 // Resources represents a slice of resources, which can be a mix of different types.
 // I.e. both pages and images etc.
 type Resources []Resource
 
 // var _ resource.ResourceFinder = (*Namespace)(nil)
+// Resources is stale if any of the the elements are stale.
+func (rs Resources) IsStale() bool {
+	for _, r := range rs {
+		if s, ok := r.(StaleInfo); ok && s.IsStale() {
+			return true
+		}
+	}
+	return false
+}
+
 // ResourcesConverter converts a given slice of Resource objects to Resources.
 type ResourcesConverter interface {
 	// For internal use.
@@ -80,6 +93,7 @@ func (r Resources) GetMatch(pattern any) Resource {
 	}
 
 	for _, resource := range r {
+		// TODO1
 		if g.Match(strings.ToLower(resource.Name())) {
 			return resource
 		}
