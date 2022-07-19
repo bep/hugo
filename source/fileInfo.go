@@ -133,7 +133,7 @@ func NewFileInfoFrom(path, filename string) (*File, error) {
 	meta := &hugofs.FileMeta{
 		Filename: filename,
 		Path:     path,
-		// TODO1 PathInfo: paths.Parse(filepath.ToSlash(path)),
+		PathInfo: paths.Parse(filepath.ToSlash(path)),
 	}
 
 	return NewFileInfo(hugofs.NewFileMetaDirEntry(nil, meta))

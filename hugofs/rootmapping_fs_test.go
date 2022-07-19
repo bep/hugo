@@ -254,7 +254,7 @@ func TestRootMappingFsMount(t *testing.T) {
 	// Union with duplicate dir names filtered.
 	c.Assert(dirs1, qt.DeepEquals, []string{"test.txt", "test.txt", "other.txt", "test.txt"})
 
-	files, err := afero.ReadDir(rfs, filepath.FromSlash("content/blog"))
+	files, err := ReadDir(rfs, filepath.FromSlash("content/blog"))
 	c.Assert(err, qt.IsNil)
 	c.Assert(len(files), qt.Equals, 4)
 
@@ -278,7 +278,7 @@ func TestRootMappingFsMount(t *testing.T) {
 	singlesDir, err := rfs.Open(filepath.FromSlash("content/singles"))
 	c.Assert(err, qt.IsNil)
 	defer singlesDir.Close()
-	singles, err := singlesDir.Readdir(-1)
+	singles, err := singlesDir.(iofs.ReadDirFile).ReadDir(-1)
 	c.Assert(err, qt.IsNil)
 	c.Assert(singles, qt.HasLen, 2)
 	for i, lang := range []string{"no", "sv"} {
@@ -425,11 +425,11 @@ func TestRootMappingFsOs(t *testing.T) {
 	f, err := dirc.Open()
 	c.Assert(err, qt.IsNil)
 	defer f.Close()
-	fileInfos, err := f.Readdir(-1)
+	dirEntries, err := f.(iofs.ReadDirFile).ReadDir(-1)
 	c.Assert(err, qt.IsNil)
-	sortFileInfos(fileInfos)
+	sortDirEntries(dirEntries)
 	i := 0
-	for _, fi := range fileInfos {
+	for _, fi := range dirEntries {
 		if fi.IsDir() || fi.Name() == "ms-1.txt" {
 			continue
 		}
@@ -544,11 +544,11 @@ func TestRootMappingFileFilter(t *testing.T) {
 	assertExists("content/myen1.txt", true)
 	assertExists("content/myfr1.txt", false)
 
-	dirEntriesSub, err := afero.ReadDir(rfs, filepath.Join("content", "sub"))
+	dirEntriesSub, err := ReadDir(rfs, filepath.Join("content", "sub"))
 	c.Assert(err, qt.IsNil)
 	c.Assert(len(dirEntriesSub), qt.Equals, 3)
 
-	dirEntries, err := afero.ReadDir(rfs, "content")
+	dirEntries, err := ReadDir(rfs, "content")
 
 	c.Assert(err, qt.IsNil)
 	c.Assert(len(dirEntries), qt.Equals, 4)

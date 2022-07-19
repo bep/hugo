@@ -268,7 +268,7 @@ func (f *sliceDir) Readdir(count int) ([]os.FileInfo, error) {
 }
 
 func (f *sliceDir) Readdirnames(count int) ([]string, error) {
-	dirsi, err := f.Readdir(count)
+	dirsi, err := f.ReadDir(count)
 	if err != nil {
 		return nil, err
 	}

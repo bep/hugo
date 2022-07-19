@@ -231,8 +231,25 @@ func (t *templateExec) ExecuteWithContext(ctx context.Context, templ tpl.Templat
 		rlocker.RLock()
 		defer rlocker.RUnlock()
 	}
+
 	if t.Metrics != nil {
 		defer t.Metrics.MeasureSince(templ.Name(), time.Now())
+	}
+
+	if t.templateUsageTracker != nil {
+		if ts, ok := templ.(*templateState); ok {
+			t.templateUsageTrackerMu.Lock()
+			if _, found := t.templateUsageTracker[ts.Name()]; !found {
+				t.templateUsageTracker[ts.Name()] = ts.info
+			}
+
+			if !ts.baseInfo.IsZero() {
+				if _, found := t.templateUsageTracker[ts.baseInfo.name]; !found {
+					t.templateUsageTracker[ts.baseInfo.name] = ts.baseInfo
+				}
+			}
+			t.templateUsageTrackerMu.Unlock()
+		}
 	}
 
 	execErr := t.executor.ExecuteWithContext(ctx, templ, wr, data)

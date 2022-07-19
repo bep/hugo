@@ -125,7 +125,7 @@ func GetExecEnviron(workDir string, cfg config.Provider, fs afero.Fs) []string {
 	config.SetEnvVars(&env, "HUGO_ENV", cfg.GetString("environment"))
 
 	if fs != nil {
-		fis, err := afero.ReadDir(fs, files.FolderJSConfig)
+		fis, err := hugofs.ReadDir(fs, files.FolderJSConfig)
 		if err == nil {
 			for _, fi := range fis {
 				key := fmt.Sprintf("HUGO_FILE_%s", strings.ReplaceAll(strings.ToUpper(fi.Name()), ".", "_"))

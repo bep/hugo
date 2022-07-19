@@ -61,9 +61,9 @@ func TestTreeInsert(t *testing.T) {
 	c := qt.New(t)
 
 	tree := doctree.New(
-		doctree.Config[GetLangProvider]{
+		doctree.Config[*testValue]{
 			Dimensions: []int{0, 0},
-			Shifter:    &getLangShifter{},
+			Shifter:    &testShifter{},
 		},
 	)
 
@@ -75,14 +75,13 @@ func TestTreeInsert(t *testing.T) {
 	c.Assert(tree.Get("/a"), eq, &testValue{ID: "/a", Lang: 0, Role: 0})
 	c.Assert(tree.Get("/notfound"), qt.IsNil)
 
-	ab2 := &testValue{ID: "/a/b", Lang: 1}
+	ab2 := &testValue{ID: "/a/b", Lang: 0}
 	v, ok := tree.Insert("/a/b", ab2)
 	c.Assert(ok, qt.IsTrue)
-	c.Assert(v, qt.DeepEquals, []GetLangProvider{})
+	c.Assert(v, qt.DeepEquals, ab2)
 
-	// This test isn't very realistic, but good enough for now.
 	tree1 := tree.Increment(0)
-	c.Assert(tree1.Get("/a/b"), qt.DeepEquals, []GetLangProvider{})
+	c.Assert(tree1.Get("/a/b"), qt.DeepEquals, &testValue{ID: "/a/b", Lang: 1})
 }
 
 func TestTreeData(t *testing.T) {
@@ -233,7 +232,7 @@ func BenchmarkDimensionsWalk(b *testing.B) {
 
 		for i := 0; i < numElements; i++ {
 			lang, role := rand.Intn(2), rand.Intn(2)
-			tree.Insert(fmt.Sprintf("/%d", i), &testValue{ID: fmt.Sprintf("/%d", i), Lang: lang, Role: role, Weight: i, noCopy: true})
+			tree.Insert(fmt.Sprintf("/%d", i), &testValue{ID: fmt.Sprintf("/%d", i), Lang: lang, Role: role, Weight: i, NoCopy: true})
 		}
 
 		return tree
@@ -280,7 +279,7 @@ type testValue struct {
 	Weight   int
 	IsBranch bool
 
-	noCopy bool
+	NoCopy bool
 }
 
 func (t *testValue) getLang() int {
@@ -295,7 +294,7 @@ func (s *testShifter) Shift(n *testValue, dimension []int) (*testValue, bool) {
 	if s.echo {
 		return n, true
 	}
-	if n.noCopy {
+	if n.NoCopy {
 		if n.Lang == dimension[0] && n.Role == dimension[1] {
 			return n, true
 		}
@@ -319,27 +318,5 @@ func (s *testShifter) Dimension(n *testValue, d int) []*testValue {
 }
 
 func (s *testShifter) Insert(old, new *testValue) (*testValue, bool) {
-	return new, true
-}
-
-type GetLangProvider interface {
-	getLang() int
-}
-
-type getLangShifter struct{}
-
-func (s *getLangShifter) Shift(n GetLangProvider, dimensions []int) (GetLangProvider, bool) {
-	return n, true
-}
-
-func (s *getLangShifter) All(n GetLangProvider) []GetLangProvider {
-	return []GetLangProvider{n}
-}
-
-func (s *getLangShifter) Dimension(n GetLangProvider, d int) []GetLangProvider {
-	panic("not implemented") // TODO: Implement
-}
-
-func (s *getLangShifter) Insert(old, new GetLangProvider) (GetLangProvider, bool) {
 	return new, true
 }

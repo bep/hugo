@@ -123,17 +123,7 @@ func (f *filenameFilterDir) ReadDir(n int) ([]fs.DirEntry, error) {
 }
 
 func (f *filenameFilterDir) Readdir(count int) ([]os.FileInfo, error) {
-	fis, err := f.File.Readdir(-1)
-	if err != nil {
-		return nil, err
-	}
-	var result []os.FileInfo
-	for _, fi := range fis {
-		if f.predicate(fi.(FileMetaDirEntry)) {
-			result = append(result, fi)
-		}
-	}
-	return result, nil
+	panic("not supported: Use ReadDir")
 }
 
 func (f *filenameFilterDir) predicate(fim FileMetaDirEntry) bool {
@@ -141,7 +131,7 @@ func (f *filenameFilterDir) predicate(fim FileMetaDirEntry) bool {
 }
 
 func (f *filenameFilterDir) Readdirnames(count int) ([]string, error) {
-	dirsi, err := f.Readdir(count)
+	dirsi, err := f.ReadDir(count)
 	if err != nil {
 		return nil, err
 	}

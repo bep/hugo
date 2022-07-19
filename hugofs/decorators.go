@@ -16,6 +16,7 @@ package hugofs
 import (
 	"fmt"
 	"io/fs"
+	iofs "io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -240,7 +241,7 @@ func (l *baseFileDecoratorFile) ReadDir(n int) ([]fs.DirEntry, error) {
 }
 
 func (l *baseFileDecoratorFile) Readdir(c int) (ofi []os.FileInfo, err error) {
-	fis, err := l.File.Readdir(c)
+	fis, err := l.File.(iofs.ReadDirFile).ReadDir(c)
 	if err != nil {
 		return nil, err
 	}

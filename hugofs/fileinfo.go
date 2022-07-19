@@ -247,6 +247,8 @@ func NewFileMetaDirEntry(fi FileNameIsDir, m *FileMeta) FileMetaDirEntry {
 		return &dirEntryMeta{DirEntry: v, m: m}
 	case fs.FileInfo:
 		return &dirEntryMeta{DirEntry: dirEntry{v}, m: m}
+	case nil:
+		return &dirEntryMeta{DirEntry: dirEntry{}, m: m}
 	default:
 		panic(fmt.Sprintf("Unsupported type: %T", fi))
 	}
@@ -375,7 +377,7 @@ func fromSlash(filenames []string) []string {
 	return filenames
 }
 
-func sortFileInfos(fis []os.FileInfo) {
+func sortDirEntries(fis []fs.DirEntry) {
 	sort.Slice(fis, func(i, j int) bool {
 		fimi, fimj := fis[i].(FileMetaDirEntry), fis[j].(FileMetaDirEntry)
 		return fimi.Meta().Filename < fimj.Meta().Filename

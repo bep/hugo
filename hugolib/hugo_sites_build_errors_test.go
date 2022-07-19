@@ -482,7 +482,7 @@ line 5
 	b.Assert(err, qt.IsNotNil)
 	errors := herrors.UnwrapFileErrorsWithErrorContext(err)
 
-	b.Assert(errors, qt.HasLen, 2)
+	b.Assert(errors, qt.HasLen, 3)
 	b.Assert(errors[0].Error(), qt.Contains, filepath.FromSlash(`"/content/_index.md:1:1": "/layouts/_default/_markup/render-heading.html:2:5": execute of template failed`))
 
 }

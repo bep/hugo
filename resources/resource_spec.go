@@ -224,6 +224,7 @@ func (r *Spec) newResource(sourceFs afero.Fs, fd ResourceSourceDescriptor) (reso
 			return nil, err
 		}
 		sourceFilename = fd.SourceFilename
+
 	} else {
 		sourceFilename = fd.SourceFile.Filename()
 	}

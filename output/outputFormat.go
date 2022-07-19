@@ -194,11 +194,12 @@ var (
 	}
 
 	SitemapFormat = Format{
-		Name:      "Sitemap",
-		MediaType: media.XMLType,
-		BaseName:  "sitemap",
-		Ugly:      true,
-		Rel:       "sitemap",
+		Name:        "Sitemap",
+		MediaType:   media.XMLType,
+		IsPlainText: true,
+		BaseName:    "sitemap",
+		Ugly:        true,
+		Rel:         "sitemap",
 	}
 )
 

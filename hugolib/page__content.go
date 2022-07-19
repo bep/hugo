@@ -462,6 +462,10 @@ func (c *cachedContent) sourceHead() ([]byte, error) {
 
 	i, err := io.ReadFull(r, b)
 	if err != nil && err != io.ErrUnexpectedEOF {
+		if err == io.EOF {
+			// Empty source.
+			return nil, nil
+		}
 		return nil, err
 	}
 
@@ -581,7 +585,12 @@ func (c *cachedContent) contentRendered(cp *pageContentOutput) (contentTableOfCo
 		return result, nil
 	})
 
-	return v.(contentTableOfContents), err
+	if err != nil {
+
+		return contentTableOfContents{}, cp.po.ps.wrapError(err)
+	}
+
+	return v.(contentTableOfContents), nil
 }
 
 func (c *cachedContent) contentPlain(cp *pageContentOutput) (plainPlainWords, error) {

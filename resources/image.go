@@ -401,11 +401,11 @@ func (i *imageResource) getImageMetaCacheTargetPath() string {
 	cfgHash := i.getSpec().imaging.Cfg.CfgHash
 	df := i.getResourcePaths().relTargetDirFile
 	if fi := i.getFileInfo(); fi != nil {
-		if fi.Meta().PathInfo == nil {
-			panic("no path info for " + fi.Meta().Filename)
+		if fi.Meta().PathInfo != nil {
+			// TODO1
+			df.dir = fi.Meta().PathInfo.Dir()
 		}
-		// TODO1
-		df.dir = fi.Meta().PathInfo.Dir()
+
 	}
 	p1, _ := paths.FileAndExt(df.file)
 	h := i.hash()

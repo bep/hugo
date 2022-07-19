@@ -159,7 +159,7 @@ type Cache struct {
 // Clear clears the cache state.
 // This method is not thread safe.
 func (c *Cache) Clear() {
-	c.cache.Delete("")
+	c.cache.Clear()
 }
 
 // ClearOn clears all the caches given a eviction strategy and (optional) a

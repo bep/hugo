@@ -215,7 +215,7 @@ func (f *filterDir) Readdir(count int) ([]os.FileInfo, error) {
 }
 
 func (f *filterDir) Readdirnames(count int) ([]string, error) {
-	dirsi, err := f.Readdir(count)
+	dirsi, err := f.File.(iofs.ReadDirFile).ReadDir(count)
 	if err != nil {
 		return nil, err
 	}
