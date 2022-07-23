@@ -141,7 +141,7 @@ func (w *Walkway) Walk() error {
 	if w.fi != nil {
 		fi = w.fi
 		if fi.Meta().Component == "" {
-			return w.walkFn(w.root, nil, errors.New("missing metadata"))
+			return w.walkFn(w.root, nil, errors.New("FileMetaDirEntry: missing metadata"))
 		}
 	} else {
 		info, _, err := lstatIfPossible(w.fs, w.root)

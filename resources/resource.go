@@ -233,7 +233,7 @@ func (d dirFile) path() string {
 type fileInfo interface {
 	setOpenSource(resource.OpenReadSeekCloser)
 	setTargetPath(dirFile)
-	size() int
+	size() int64
 	hashProvider
 }
 
@@ -290,7 +290,7 @@ func (l *genericResource) ReadSeekCloser() (hugio.ReadSeekCloser, error) {
 	return l.openSource()
 }
 
-func (l *genericResource) size() int {
+func (l *genericResource) size() int64 {
 	l.hash()
 	return l.h.size
 }
@@ -298,7 +298,7 @@ func (l *genericResource) size() int {
 func (l *genericResource) hash() string {
 	l.h.init.Do(func() {
 		var hash string
-		var size int
+		var size int64
 		var f hugio.ReadSeekCloser
 		f, err := l.ReadSeekCloser()
 		if err != nil {
@@ -668,6 +668,6 @@ type resourceContent struct {
 
 type resourceHash struct {
 	value string
-	size  int
+	size  int64
 	init  sync.Once
 }

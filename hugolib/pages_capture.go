@@ -247,7 +247,6 @@ func (c *pagesCollector) collectDirDir(rootDir hugofs.FileMetaDirEntry, dpath st
 				// section, which is in line with the <= 0.55 behaviour.
 				// TODO1 create issue, we now make it a bundle. meta.Classifier = files.ContentClassContent
 			}
-
 		}
 
 		err := handleDir(btype, dir, path, readdir)
@@ -310,11 +309,14 @@ func (c *pagesCollector) handleBundleBranch(readdir []hugofs.FileMetaDirEntry) e
 
 func (c *pagesCollector) handleBundleLeaf(dir hugofs.FileMetaDirEntry, path string, readdir []hugofs.FileMetaDirEntry) error {
 	walk := func(path string, info hugofs.FileMetaDirEntry, err error) error {
-		if err != nil {
+		if err != nil || info.IsDir() {
 			return err
 		}
 
 		pathInfo := info.Meta().PathInfo
+		if pathInfo == nil {
+			panic("pathInfo is nil")
+		}
 		if !pathInfo.IsLeafBundle() {
 			// Everything inside a leaf bundle is a Resource,
 			// even the content pages.

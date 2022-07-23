@@ -450,7 +450,7 @@ func MD5String(f string) string {
 // the file for speed, so don't use it if the files are very subtly different.
 // It will not close the file.
 // It will return the MD5 hash and the size of r in bytes.
-func MD5FromReaderFast(r io.ReadSeeker) (string, int, error) {
+func MD5FromReaderFast(r io.ReadSeeker) (string, int64, error) {
 	const (
 		// Do not change once set in stone!
 		maxChunks = 8
@@ -463,7 +463,7 @@ func MD5FromReaderFast(r io.ReadSeeker) (string, int, error) {
 
 	for i := 0; i < maxChunks; i++ {
 		if i > 0 {
-			_, err := r.Seek(seek, 0)
+			_, err := r.Seek(seek, io.SeekStart)
 			if err != nil {
 				if err == io.EOF {
 					break
@@ -483,7 +483,9 @@ func MD5FromReaderFast(r io.ReadSeeker) (string, int, error) {
 		h.Write(buff)
 	}
 
-	return hex.EncodeToString(h.Sum(nil)), 132, nil
+	size, _ := r.Seek(0, io.SeekEnd)
+
+	return hex.EncodeToString(h.Sum(nil)), size, nil
 }
 
 // MD5FromReader creates a MD5 hash from the given reader.
