@@ -176,7 +176,7 @@ func fetchResourceForSpec(spec *Spec, c *qt.C, name string, targetPathAddends ..
 
 	factory := newTargetPaths("/a")
 
-	r, err := spec.New(ResourceSourceDescriptor{Fs: spec.Fs.Source, TargetPaths: factory, LazyPublish: true, RelTargetFilename: name, SourceFilename: targetFilename})
+	r, err := spec.New(ResourceSourceDescriptor{Fs: spec.Fs.Source, TargetPathsRemoveMe: factory, LazyPublish: true, RelTargetFilename: name, SourceFilename: targetFilename})
 	c.Assert(err, qt.IsNil)
 	c.Assert(r, qt.Not(qt.IsNil))
 

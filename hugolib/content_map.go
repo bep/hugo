@@ -14,6 +14,7 @@
 package hugolib
 
 import (
+	"fmt"
 	"path"
 	"path/filepath"
 	"strings"
@@ -161,6 +162,8 @@ func (m *pageMap) newResource(ownerPath *paths.Path, fim hugofs.FileMetaDirEntry
 	r := func() (hugio.ReadSeekCloser, error) {
 		return meta.Open()
 	}
+
+	fmt.Println("===>", ownerPath.Base(), resourcePath.Base())
 
 	target := strings.TrimPrefix(resourcePath.Base(), ownerPath.Dir())
 

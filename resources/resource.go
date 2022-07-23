@@ -61,22 +61,23 @@ var (
 )
 
 type ResourceSourceDescriptor struct {
-	// TargetPaths is a callback to fetch paths's relative to its owner.
-	TargetPaths func() page.TargetPaths
 
 	// Need one of these to load the resource content.
 	SourceFile         *source.File
 	OpenReadSeekCloser resource.OpenReadSeekCloser
 
+	// Delay publishing until either Permalink or RelPermalink is called. Maybe never.
+	LazyPublish bool
+
 	FileInfo os.FileInfo
 
-	// If OpenReadSeekerCloser is not set, we use this to open the file.
-	SourceFilename string
+	RelPermalink string
+	Permalink    string
+	TargetPaths  []string
 
-	Fs afero.Fs
-
-	// Set when its known up front, else it's resolved from the target filename.
-	MediaType media.Type
+	// TargetPathsRemoveMe is a callback to fetch paths's relative to its owner.
+	// TODO1
+	TargetPathsRemoveMe func() page.TargetPaths
 
 	// The relative target filename without any language code.
 	RelTargetFilename string
@@ -88,8 +89,13 @@ type ResourceSourceDescriptor struct {
 	// multiple targets.
 	TargetBasePaths []string
 
-	// Delay publishing until either Permalink or RelPermalink is called. Maybe never.
-	LazyPublish bool
+	// If OpenReadSeekerCloser is not set, we use this to open the file.
+	SourceFilename string
+
+	Fs afero.Fs
+
+	// Set when its known up front, else it's resolved from the target filename.
+	MediaType media.Type
 
 	// Used to track depenencies (e.g. imports). May be nil if that's of no concern.
 	DependencyManager identity.Manager

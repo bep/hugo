@@ -273,7 +273,7 @@ func (r *Spec) newResource(sourceFs afero.Fs, fd ResourceSourceDescriptor) (reso
 		sourceFs,
 		fd.OpenReadSeekCloser,
 		fd.TargetBasePaths,
-		fd.TargetPaths,
+		fd.TargetPathsRemoveMe,
 		fi,
 		sourceFilename,
 		fd.RelTargetFilename,
