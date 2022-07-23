@@ -219,6 +219,13 @@ func (p *Path) Container() string {
 	return p.s[p.posContainerLow : p.posContainerHigh-1]
 }
 
+func (p *Path) ContainerDir() string {
+	if p.posContainerLow == -1 {
+		return p.Dir()
+	}
+	return p.s[:p.posContainerLow]
+}
+
 func (p *Path) Section() string {
 	if p.posSectionHigh == -1 {
 		return ""

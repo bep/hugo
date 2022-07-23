@@ -17,9 +17,9 @@ import (
 	"context"
 	"image"
 	"io"
-	"path/filepath"
 
 	"github.com/gohugoio/hugo/cache/memcache"
+	"github.com/gohugoio/hugo/common/hugio"
 
 	"github.com/gohugoio/hugo/resources/images"
 
@@ -38,16 +38,13 @@ func (c *imageCache) getOrCreate(
 	parent *imageResource, conf images.ImageConfig,
 	createImage func() (*imageResource, image.Image, error)) (*resourceAdapter, error) {
 	relTarget := parent.relTargetPathFromConfig(conf)
-	memKey := parent.relTargetPathForRel(relTarget.path(), false, false, false)
+	memKey := relTarget.path()
 	memKey = memcache.CleanKey(memKey)
 
 	// TODO1 we need the real context from above.
 	v, err := c.mcache.GetOrCreate(context.TODO(), memKey, func() *memcache.Entry {
 		// For the file cache we want to generate and store it once if possible.
 		fileKeyPath := relTarget
-		if fi := parent.root.getFileInfo(); fi != nil {
-			fileKeyPath.dir = filepath.ToSlash(filepath.Dir(fi.Meta().Path))
-		}
 		fileKey := fileKeyPath.path()
 
 		var img *imageResource
@@ -57,9 +54,12 @@ func (c *imageCache) getOrCreate(
 		// the content to the destinations.
 		read := func(info filecache.ItemInfo, r io.ReadSeeker) error {
 			img = parent.clone(nil)
-			rp := img.getResourcePaths()
-			rp.relTargetDirFile.file = relTarget.file
-			img.setSourceFilename(info.Name)
+			targetPath := img.getTargetPathDirFile()
+			targetPath.file = relTarget.file
+			img.setTargetPath(targetPath)
+			img.setOpenSource(func() (hugio.ReadSeekCloser, error) {
+				return c.fcache.Fs.Open(info.Name)
+			})
 			img.setMediaType(conf.TargetFormat.MediaType())
 
 			if err := img.InitConfig(r); err != nil {
@@ -93,10 +93,12 @@ func (c *imageCache) getOrCreate(
 			if err != nil {
 				return
 			}
-			rp := img.getResourcePaths()
-			rp.relTargetDirFile.file = relTarget.file
-			img.setSourceFilename(info.Name)
-
+			targetPath := img.getTargetPathDirFile()
+			targetPath.file = relTarget.file
+			img.setTargetPath(targetPath)
+			img.setOpenSource(func() (hugio.ReadSeekCloser, error) {
+				return c.fcache.Fs.Open(info.Name)
+			})
 			return img.EncodeTo(conf, conv, w)
 		}
 
@@ -111,9 +113,6 @@ func (c *imageCache) getOrCreate(
 		if err != nil {
 			return &memcache.Entry{Err: err}
 		}
-
-		// The file is now stored in this cache.
-		img.setSourceFs(c.fcache.Fs)
 
 		imgAdapter := newResourceAdapter(parent.getSpec(), true, img)
 

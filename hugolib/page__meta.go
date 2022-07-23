@@ -15,7 +15,6 @@ package hugolib
 
 import (
 	"fmt"
-	"path"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -257,16 +256,6 @@ func (p *pageMeta) Params() maps.Params {
 
 func (p *pageMeta) Path() string {
 	return p.pathInfo.Base()
-}
-
-func (p *pageMeta) SectionsEntries() []string {
-	// TODO1
-	return strings.Split(p.Path(), "/")
-}
-
-func (p *pageMeta) SectionsPath() string {
-	// TODO1
-	return p.Path()
 }
 
 // RelatedKeywords implements the related.Document interface needed for fast page searches.
@@ -822,10 +811,12 @@ func (p *pageMeta) applyDefaultValues() error {
 				p.title = sectionName
 			}
 		case pagekinds.Term:
-			key := p.SectionsEntries()[len(p.SectionsEntries())-1]
-			p.title = strings.Replace(p.s.titleFunc(key), "-", " ", -1)
+			// TODO1
+			//key := p.SectionsEntries()[len(p.SectionsEntries())-1]
+			//p.title = strings.Replace(p.s.titleFunc(key), "-", " ", -1)
 		case pagekinds.Taxonomy:
-			p.title = p.s.titleFunc(path.Join(p.SectionsEntries()...))
+			// TODO1
+			//p.title = p.s.titleFunc(path.Join(p.SectionsEntries()...))
 		case pagekinds.Status404:
 			p.title = "404 Page not found"
 

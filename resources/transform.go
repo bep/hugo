@@ -275,6 +275,8 @@ func (r *resourceAdapter) RelPermalink() string {
 }
 
 func (r *resourceAdapter) Resize(spec string) (images.ImageResource, error) {
+	// TODO1
+	defer herrors.Recover()
 	return r.getImageOps().Resize(spec)
 }
 
@@ -701,9 +703,10 @@ type transformationUpdate struct {
 	content        *string
 	sourceFilename *string
 	sourceFs       afero.Fs
-	targetPath     string
-	mediaType      media.Type
-	data           map[string]any
+
+	targetPath string
+	mediaType  media.Type
+	data       map[string]any
 
 	startCtx ResourceTransformationCtx
 }

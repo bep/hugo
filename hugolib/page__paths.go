@@ -107,10 +107,12 @@ func (l pagePaths) OutputFormats() page.OutputFormats {
 	return l.outputFormats
 }
 
+// TODO1
 func createTargetPathDescriptorNew(p *pageState) (page.TargetPathDescriptor, error) {
 	s := p.s
 	d := s.Deps
 	pm := p.m
+	pi := pm.pathInfo
 
 	alwaysInSubDir := p.Kind() == pagekinds.Sitemap
 
@@ -120,7 +122,7 @@ func createTargetPathDescriptorNew(p *pageState) (page.TargetPathDescriptor, err
 		Sections:    p.SectionsEntries(),
 		UglyURLs:    s.Info.uglyURLs(p),
 		ForcePrefix: s.h.IsMultihost() || alwaysInSubDir,
-		Dir:         filepath.FromSlash(pm.pathInfo.Dir()),
+		Dir:         filepath.FromSlash(pi.ContainerDir()),
 		URL:         pm.urlPaths.URL,
 	}
 

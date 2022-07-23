@@ -496,7 +496,6 @@ func (l configLoader) applyDeps(cfg deps.DepsCfg, sites ...*Site) error {
 				}
 
 				taxonomyEntriesTreeConfig := doctree.Config[*weightedContentNode]{
-					// bookmark
 					Dimensions: []int{0}, // Language
 					Shifter:    &weightedContentNodeShifter{},
 				}

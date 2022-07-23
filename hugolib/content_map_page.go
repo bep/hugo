@@ -16,6 +16,7 @@ package hugolib
 import (
 	"context"
 	"fmt"
+	"path"
 	"sort"
 	"strconv"
 	"strings"
@@ -311,10 +312,37 @@ func (m *pageMap) getResourcesForPage(p *pageState) resource.Resources {
 			tree = m.treeBranchResources
 		}
 
+		targetPaths := p.targetPaths()
+		pagePath := p.Path()
+
+		if targetPaths.Link == "/mybundle/mybundle/" {
+
+		}
+
 		var res resource.Resources
 		err := tree.Walk(context.TODO(), doctree.WalkConfig[resource.Resource]{
 			Prefix: prefix,
 			Callback: func(ctx *doctree.WalkContext[resource.Resource], key string, n resource.Resource) (bool, error) {
+				// bookmark
+				if init, ok := n.(*resources.ResourceLazyInit); ok {
+					var err error
+					n, err = init.Init(func(p *paths.Path, openContent resource.OpenReadSeekCloser) (resource.Resource, error) {
+						relPath := strings.TrimPrefix(p.Path(), pagePath)
+						var rd resources.ResourceSourceDescriptor
+						rd.OpenReadSeekCloser = openContent
+						rd.Path = p
+						rd.RelPermalink = path.Join(targetPaths.SubResourceBaseLink, relPath)
+						rd.TargetPath = path.Join(targetPaths.SubResourceBaseTarget, relPath)
+
+						return m.s.ResourceSpec.New(rd)
+
+					})
+
+					if err != nil {
+						return false, err
+					}
+				}
+
 				res = append(res, n)
 				return false, nil
 			},
@@ -912,7 +940,6 @@ func (site *sitePagesAssembler) addMissingTaxonomies() error {
 
 }
 
-// bookmark
 func (site *Site) AssemblePages(changeTracker *whatChanged) error {
 
 	assembler := &sitePagesAssembler{

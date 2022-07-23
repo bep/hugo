@@ -120,7 +120,7 @@ func FromStringAndExt(t, ext string) (Type, error) {
 	if err != nil {
 		return tp, err
 	}
-	tp.suffixesCSV = strings.TrimPrefix(ext, ".")
+	tp.suffixesCSV = ext
 	tp.Delimiter = defaultDelimiter
 	tp.init()
 	return tp, nil

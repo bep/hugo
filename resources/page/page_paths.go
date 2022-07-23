@@ -189,7 +189,7 @@ func CreateTargetPaths(d TargetPathDescriptor) (tp TargetPaths) {
 
 	tp.TargetFilename = filepath.FromSlash(pagePath)
 	if !pb.noSubResources {
-		tp.SubResourceBaseTarget = filepath.FromSlash(pb.PathDir())
+		tp.SubResourceBaseTarget = pb.PathDir()
 		tp.SubResourceBaseLink = pb.LinkDir()
 	}
 	if d.URL != "" {
@@ -254,15 +254,16 @@ type TargetPathDescriptor struct {
 }
 
 // TODO(bep) move this type.
+// TODO1 check slashes.
 type TargetPaths struct {
 
 	// Where to store the file on disk relative to the publish dir. OS slashes.
 	TargetFilename string
 
-	// The directory to write sub-resources of the above.
+	// The directory to write sub-resources of the above. Unix slashes.
 	SubResourceBaseTarget string
 
-	// The base for creating links to sub-resources of the above.
+	// The base for creating links to sub-resources of the above. Unix slashes.
 	SubResourceBaseLink string
 
 	// The relative permalink to this resource. Unix slashes.

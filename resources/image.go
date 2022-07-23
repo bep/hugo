@@ -55,7 +55,7 @@ var (
 type imageResource struct {
 	*images.Image
 
-	// When a image is processed in a chain, this holds the reference to the
+	// When an image is processed in a chain, this holds the reference to the
 	// original (first).
 	root *imageResource
 
@@ -278,7 +278,7 @@ func (i *imageResource) doWithImageConfig(conf images.ImageConfig, f func(src im
 		}()
 
 		errOp := conf.Action
-		errPath := i.getSourceFilename()
+		errPath := "TODO1" // i.getSourceFilename()
 
 		src, err := i.DecodeImage()
 		if err != nil {
@@ -322,18 +322,20 @@ func (i *imageResource) doWithImageConfig(conf images.ImageConfig, f func(src im
 		}
 
 		ci := i.clone(converted)
-		ci.setBasePath(conf)
+		targetPath := i.relTargetPathFromConfig(conf)
+		ci.setTargetPath(targetPath)
 		ci.Format = conf.TargetFormat
 		ci.setMediaType(conf.TargetFormat.MediaType())
 
 		return ci, converted, nil
 	})
 	if err != nil {
-		if i.root != nil && i.root.getFileInfo() != nil {
+		// TODO1
+		/*if i.root != nil && i.root.getFileInfo() != nil {
 			return nil, fmt.Errorf("image %q: %w", i.root.getFileInfo().Meta().Filename, err)
-		}
+		}*/
 	}
-	return img, nil
+	return img, err
 }
 
 func (i *imageResource) decodeImageConfig(action, spec string) (images.ImageConfig, error) {
@@ -391,22 +393,11 @@ func (i *imageResource) clone(img image.Image) *imageResource {
 	}
 }
 
-func (i *imageResource) setBasePath(conf images.ImageConfig) {
-	i.getResourcePaths().relTargetDirFile = i.relTargetPathFromConfig(conf)
-}
-
 func (i *imageResource) getImageMetaCacheTargetPath() string {
 	const imageMetaVersionNumber = 1 // Increment to invalidate the meta cache
 
 	cfgHash := i.getSpec().imaging.Cfg.CfgHash
-	df := i.getResourcePaths().relTargetDirFile
-	if fi := i.getFileInfo(); fi != nil {
-		if fi.Meta().PathInfo != nil {
-			// TODO1
-			df.dir = fi.Meta().PathInfo.Dir()
-		}
-
-	}
+	df := i.getTargetPathDirFile()
 	p1, _ := paths.FileAndExt(df.file)
 	h := i.hash()
 	idStr := helpers.HashString(h, i.size(), imageMetaVersionNumber, cfgHash)
@@ -415,7 +406,7 @@ func (i *imageResource) getImageMetaCacheTargetPath() string {
 }
 
 func (i *imageResource) relTargetPathFromConfig(conf images.ImageConfig) dirFile {
-	p1, p2 := paths.FileAndExt(i.getResourcePaths().relTargetDirFile.file)
+	p1, p2 := paths.FileAndExt(i.getTargetPathDirFile().file)
 	if conf.TargetFormat != i.Format {
 		p2 = conf.TargetFormat.DefaultExtension()
 	}
@@ -448,7 +439,7 @@ func (i *imageResource) relTargetPathFromConfig(conf images.ImageConfig) dirFile
 	}
 
 	return dirFile{
-		dir:  i.getResourcePaths().relTargetDirFile.dir,
+		dir:  i.getTargetPathDirFile().dir,
 		file: fmt.Sprintf("%s%s_%s%s", p1, idStr, key, p2),
 	}
 }

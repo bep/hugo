@@ -14,7 +14,6 @@
 package hugolib
 
 import (
-	"fmt"
 	"path"
 	"path/filepath"
 	"strings"
@@ -163,22 +162,10 @@ func (m *pageMap) newResource(ownerPath *paths.Path, fim hugofs.FileMetaDirEntry
 		return meta.Open()
 	}
 
-	fmt.Println("===>", ownerPath.Base(), resourcePath.Base())
-
-	target := strings.TrimPrefix(resourcePath.Base(), ownerPath.Dir())
-
-	return m.s.ResourceSpec.New(
-		resources.ResourceSourceDescriptor{
-			//TargetPaths:        owner.getTargetPaths,
-			OpenReadSeekCloser: r,
-			FileInfo:           fim,
-			RelTargetFilename:  filepath.FromSlash(target),
-			//TargetBasePaths:    targetBasePaths,
-			LazyPublish: true, // !owner.m.buildConfig.PublishResources,
-			// TODO
-			//GroupIdentity:      n.GetIdentity(),
-			//DependencyManager:  n.GetDependencyManager(),
-		})
+	return &resources.ResourceLazyInit{
+		Path:        resourcePath,
+		OpenContent: r,
+	}, nil
 }
 
 type viewInfoTrait interface {

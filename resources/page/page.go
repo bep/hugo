@@ -215,13 +215,6 @@ type PageMetaProvider interface {
 	// Section returns the first path element below the content root.
 	Section() string
 
-	// Returns a slice of sections (directories if it's a file) to this
-	// Page.
-	SectionsEntries() []string
-
-	// SectionsPath is SectionsEntries joined with a /.
-	SectionsPath() string
-
 	// Sitemap returns the sitemap configuration for this page.
 	Sitemap() config.Sitemap
 
@@ -407,6 +400,13 @@ type TreeProvider interface {
 	// Page returns a reference to the Page itself, mostly
 	// implemented to enable portable partials between regular, shortcode and markdown hook templates.
 	Page() Page
+
+	// Returns a slice of sections (directories if it's a file) to this
+	// Page.
+	SectionsEntries() []string
+
+	// SectionsPath is SectionsEntries joined with a /.
+	SectionsPath() string
 }
 
 // DeprecatedWarningPageMethods lists deprecated Page methods that will trigger

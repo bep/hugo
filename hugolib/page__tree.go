@@ -151,3 +151,11 @@ func (pt pageTree) Sections() page.Pages {
 func (pt pageTree) Page() page.Page {
 	return pt.p
 }
+
+func (p pageTree) SectionsEntries() []string {
+	return strings.Split(p.SectionsPath(), "/")[1:]
+}
+
+func (p pageTree) SectionsPath() string {
+	return p.CurrentSection().Path()
+}

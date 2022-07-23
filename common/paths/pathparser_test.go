@@ -140,6 +140,7 @@ func TestParse(t *testing.T) {
 				c.Assert(p.Dir(), qt.Equals, "/a/b")
 				c.Assert(p.Ext(), qt.Equals, "md")
 				c.Assert(p.Container(), qt.Equals, "b")
+				c.Assert(p.ContainerDir(), qt.Equals, "/a")
 				c.Assert(p.Section(), qt.Equals, "a")
 				c.Assert(p.NameNoExt(), qt.Equals, "index.no")
 				c.Assert(p.NameNoLang(), qt.Equals, "index.md")
