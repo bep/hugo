@@ -103,6 +103,7 @@ func parse(s string, parseOpts ...func(b *Path)) (*Path, error) {
 	isContent := p.component == files.ComponentFolderContent && files.IsContentExt(p.Ext())
 
 	if isContent {
+
 		id := p.identifiers[len(p.identifiers)-1]
 		b := p.s[p.posContainerHigh : id.Low-1]
 		switch b {
@@ -220,10 +221,10 @@ func (p *Path) Container() string {
 }
 
 func (p *Path) ContainerDir() string {
-	if p.posContainerLow == -1 {
+	if p.posContainerLow == -1 || !p.IsBundle() {
 		return p.Dir()
 	}
-	return p.s[:p.posContainerLow]
+	return p.s[:p.posContainerLow-1]
 }
 
 func (p *Path) Section() string {

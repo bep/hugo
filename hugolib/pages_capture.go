@@ -314,9 +314,7 @@ func (c *pagesCollector) handleBundleLeaf(dir hugofs.FileMetaDirEntry, path stri
 		}
 
 		pathInfo := info.Meta().PathInfo
-		if pathInfo == nil {
-			panic("pathInfo is nil")
-		}
+
 		if !pathInfo.IsLeafBundle() {
 			// Everything inside a leaf bundle is a Resource,
 			// even the content pages.

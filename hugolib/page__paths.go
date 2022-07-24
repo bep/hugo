@@ -15,7 +15,6 @@ package hugolib
 
 import (
 	"net/url"
-	"path/filepath"
 
 	"github.com/gohugoio/hugo/resources/page/pagekinds"
 
@@ -122,7 +121,7 @@ func createTargetPathDescriptorNew(p *pageState) (page.TargetPathDescriptor, err
 		Sections:    p.SectionsEntries(),
 		UglyURLs:    s.Info.uglyURLs(p),
 		ForcePrefix: s.h.IsMultihost() || alwaysInSubDir,
-		Dir:         filepath.FromSlash(pi.ContainerDir()),
+		Dir:         pi.ContainerDir(),
 		URL:         pm.urlPaths.URL,
 	}
 

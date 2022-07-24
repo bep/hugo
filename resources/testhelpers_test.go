@@ -10,8 +10,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/gohugoio/hugo/common/hugio"
 	"github.com/gohugoio/hugo/config"
-	"github.com/gohugoio/hugo/identity"
 
 	"github.com/gohugoio/hugo/cache/memcache"
 
@@ -174,9 +174,13 @@ func fetchResourceForSpec(spec *Spec, c *qt.C, name string, targetPathAddends ..
 	src.Close()
 	c.Assert(err, qt.IsNil)
 
-	factory := newTargetPaths("/a")
-
-	r, err := spec.New(ResourceSourceDescriptor{Fs: spec.Fs.Source, TargetPathsRemoveMe: factory, LazyPublish: true, RelTargetFilename: name, SourceFilename: targetFilename})
+	r, err := spec.New(
+		ResourceSourceDescriptor{
+			OpenReadSeekCloser: func() (hugio.ReadSeekCloser, error) {
+				return spec.Fs.Source.Open(targetFilename)
+			},
+			LazyPublish: true, TargetPath: name,
+		})
 	c.Assert(err, qt.IsNil)
 	c.Assert(r, qt.Not(qt.IsNil))
 
@@ -210,22 +214,19 @@ func writeToFs(t testing.TB, fs afero.Fs, filename, content string) {
 	}
 }
 
-func newGenericResource(r *Spec, sourceFs afero.Fs,
-	targetPathBuilder func() page.TargetPaths,
-	osFileInfo os.FileInfo,
-	sourceFilename,
-	baseFilename string,
-	mediaType media.Type) *genericResource {
-	return r.newGenericResourceWithBase(
-		identity.NopManager,
-		identity.NopManager,
-		sourceFs,
-		nil,
-		nil,
-		targetPathBuilder,
-		osFileInfo,
-		sourceFilename,
-		baseFilename,
-		mediaType,
+func newResource(spec *Spec, targetPath, name string, mediaType media.Type) resource.Resource {
+	r, err := spec.New(
+		ResourceSourceDescriptor{
+			TargetPath: targetPath,
+			Name:       name,
+			MediaType:  mediaType,
+			OpenReadSeekCloser: func() (hugio.ReadSeekCloser, error) {
+				return hugio.NewReadSeekerNoOpCloserFromString("some content"), nil
+			},
+		},
 	)
+	if err != nil {
+		panic(err)
+	}
+	return r
 }

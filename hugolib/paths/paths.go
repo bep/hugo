@@ -34,8 +34,10 @@ type Paths struct {
 	Cfg config.Provider
 
 	BaseURL
-	BaseURLString       string
-	BaseURLNoPathString string
+	BaseURLStringOrig string
+
+	BaseURLString       string // No trailing slash.
+	BaseURLNoPathString string // No trailing slash.
 
 	// If the baseURL contains a base path, e.g. https://example.com/docs, then "/docs" will be the BasePath.
 	BasePath string
@@ -156,7 +158,8 @@ func New(fs *hugofs.Fs, cfg config.Provider) (*Paths, error) {
 		Fs:                  fs,
 		Cfg:                 cfg,
 		BaseURL:             baseURL,
-		BaseURLString:       baseURLString,
+		BaseURLStringOrig:   baseURLString,
+		BaseURLString:       strings.TrimSuffix(baseURLString, "/"),
 		BaseURLNoPathString: baseURLNoPathString,
 
 		DisablePathToLower: cfg.GetBool("disablePathToLower"),

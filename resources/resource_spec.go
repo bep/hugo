@@ -15,9 +15,7 @@ package resources
 
 import (
 	"errors"
-	"fmt"
 	"mime"
-	"os"
 	"path"
 	"sync"
 
@@ -26,6 +24,7 @@ import (
 
 	"github.com/gohugoio/hugo/common/herrors"
 	"github.com/gohugoio/hugo/common/hexec"
+	"github.com/gohugoio/hugo/common/paths"
 
 	"github.com/gohugoio/hugo/config"
 	"github.com/gohugoio/hugo/identity"
@@ -40,7 +39,6 @@ import (
 	"github.com/gohugoio/hugo/resources/images"
 	"github.com/gohugoio/hugo/resources/page"
 	"github.com/gohugoio/hugo/resources/resource"
-	"github.com/spf13/afero"
 )
 
 func NewSpec(
@@ -139,60 +137,30 @@ type PostBuildAssets struct {
 }
 
 func (r *Spec) New(fd ResourceSourceDescriptor) (resource.Resource, error) {
-	return r.newResourceFor(fd)
-}
-
-func (s *Spec) String() string {
-	return "spec"
-}
-
-// TODO(bep) clean up below
-func (r *Spec) newGenericResourceWithBase(
-	groupIdentity identity.Identity,
-	dependencyManager identity.Manager,
-	sourceFs afero.Fs,
-	openReadSeekerCloser resource.OpenReadSeekCloser,
-	targetPathBaseDirs []string,
-	targetPathBuilder func() page.TargetPaths,
-	osFileInfo os.FileInfo,
-	sourceFilename,
-	baseFilename string,
-	mediaType media.Type) *genericResource {
-
-	if osFileInfo != nil && osFileInfo.IsDir() {
-		panic(fmt.Sprintf("dirs not supported resource types: %v", osFileInfo))
+	if len(fd.TargetBasePaths) == 0 {
+		// If not set, we publish the same resource to all hosts.
+		// TODO1
+		fd.TargetBasePaths = r.MultihostTargetBasePaths
 	}
-
-	// This value is used both to construct URLs and file paths, but start
-	// with a Unix-styled path.
-	baseFilename = helpers.ToSlashTrimLeading(baseFilename)
-
-	resourceType := mediaType.MainType
-
-	g := &genericResource{
-		groupIdentity:     groupIdentity,
-		dependencyManager: dependencyManager,
-
-		mediaType:       mediaType,
-		resourceType:    resourceType,
-		spec:            r,
-		params:          make(map[string]any),
-		name:            baseFilename,
-		title:           baseFilename,
-		resourceContent: &resourceContent{},
-	}
-
-	return g
-}
-
-func (r *Spec) newResource(sourceFs afero.Fs, fd ResourceSourceDescriptor) (resource.Resource, error) {
 
 	if fd.OpenReadSeekCloser == nil {
 		return nil, errors.New("OpenReadSeekCloser is nil")
 	}
 
-	if len(fd.TargetPath) == 0 {
-		return nil, errors.New("TargetPaths is empty")
+	if fd.TargetPath == "" {
+		return nil, errors.New("TargetPath is empty")
+	}
+
+	if fd.Path == nil {
+		fd.Path = paths.Parse(fd.TargetPath)
+	}
+
+	if fd.RelPermalink == "" {
+		fd.RelPermalink = fd.Path.Path()
+	}
+
+	if fd.Name == "" {
+		fd.Name = fd.TargetPath
 	}
 
 	mediaType := fd.MediaType
@@ -220,16 +188,10 @@ func (r *Spec) newResource(sourceFs afero.Fs, fd ResourceSourceDescriptor) (reso
 		}
 	}
 
-	if fd.GroupIdentity == nil {
-		// TODO1
-		fd.GroupIdentity = identity.StringIdentity("/" + memcache.CleanKey(fd.RelTargetFilename))
-	}
-
 	if fd.DependencyManager == nil {
 		fd.DependencyManager = identity.NopManager
 	}
 
-	name := fd.Path.Name()
 	fpath, fname := path.Split(fd.TargetPath)
 	lpath, lname := path.Split(fd.RelPermalink)
 
@@ -244,8 +206,8 @@ func (r *Spec) newResource(sourceFs afero.Fs, fd ResourceSourceDescriptor) (reso
 		h:                 &resourceHash{},
 		spec:              r,
 		params:            make(map[string]any),
-		name:              name,
-		title:             name,
+		name:              fd.Name,
+		title:             fd.Name,
 		resourceContent:   &resourceContent{},
 	}
 
@@ -278,13 +240,6 @@ func (r *Spec) newResource(sourceFs afero.Fs, fd ResourceSourceDescriptor) (reso
 	return newResourceAdapter(gr.spec, fd.LazyPublish, gr), nil
 }
 
-func (r *Spec) newResourceFor(fd ResourceSourceDescriptor) (resource.Resource, error) {
-
-	if len(fd.TargetBasePaths) == 0 {
-		// If not set, we publish the same resource to all hosts.
-		// TODO1
-		fd.TargetBasePaths = r.MultihostTargetBasePaths
-	}
-
-	return r.newResource(fd.Fs, fd)
+func (s *Spec) String() string {
+	return "spec"
 }

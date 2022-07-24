@@ -511,6 +511,10 @@ func (c *cachedContent) contentRendered(cp *pageContentOutput) (contentTableOfCo
 			return "", err
 		}
 
+		if len(source) == 0 {
+			return contentTableOfContents{}, nil
+		}
+
 		if err := c.initContentMap(source); err != nil {
 			return "", err
 		}

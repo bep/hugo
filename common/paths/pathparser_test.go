@@ -63,6 +63,8 @@ func TestParse(t *testing.T) {
 				c.Assert(p.BaseNameNoIdentifier(), qt.Equals, "c")
 				c.Assert(p.Path(), qt.Equals, "/a/b/c.md")
 				c.Assert(p.Dir(), qt.Equals, "/a/b")
+				c.Assert(p.Container(), qt.Equals, "b")
+				c.Assert(p.ContainerDir(), qt.Equals, "/a/b")
 				c.Assert(p.Ext(), qt.Equals, "md")
 			},
 		},
@@ -200,8 +202,8 @@ func TestParse(t *testing.T) {
 	}
 	for _, test := range tests {
 		c.Run(test.name, func(c *qt.C) {
-			if test.name != "Identifiers" {
-				// c.Skip()
+			if test.name != "Basic Markdown file" {
+				//c.Skip()
 			}
 			test.assert(c, Parse(test.path))
 		})

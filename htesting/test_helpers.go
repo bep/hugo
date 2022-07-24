@@ -30,6 +30,7 @@ import (
 )
 
 // IsTest reports whether we're running as a test.
+// TODO1 check usage.
 var IsTest bool
 
 func init() {

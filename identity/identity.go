@@ -53,15 +53,28 @@ func (ids Identities) AsSlice() []Identity {
 	return s
 }
 
-func (ids Identities) contains(depth int, probableMatch bool, id Identity) bool {
+func (ids Identities) String() string {
+	var sb strings.Builder
+	i := 0
+	for id := range ids {
+		sb.WriteString(fmt.Sprintf("[%s]", id.IdentifierBase()))
+		if i < len(ids)-1 {
+			sb.WriteString(", ")
+		}
+		i++
+	}
+	return sb.String()
+}
+
+func (ids Identities) find(depth int, probableMatch bool, id Identity) (Identity, bool) {
 	if id == Anonymous {
-		return false
+		return nil, false
 	}
 	if probableMatch && id == GenghisKhan {
-		return true
+		return id, true
 	}
 	if _, found := ids[id]; found {
-		return true
+		return id, true
 	}
 
 	depth++
@@ -70,7 +83,7 @@ func (ids Identities) contains(depth int, probableMatch bool, id Identity) bool 
 	if depth > 100 {
 		// Bail out.¨
 		if probableMatch {
-			return true
+			return GenghisKhan, true
 		}
 		panic("probable infinite recursion in identity search")
 	}
@@ -78,34 +91,37 @@ func (ids Identities) contains(depth int, probableMatch bool, id Identity) bool 
 	for id2 := range ids {
 		if id2 == id {
 			// TODO1 Eq interface.
-			return true
+			return id2, true
 		}
 
 		if probableMatch {
+			if id2 == nil || id == nil {
+				continue
+			}
 
 			if id2.IdentifierBase() == id.IdentifierBase() {
-				return true
+				return id2, true
 			}
 
 			if pe, ok := id.(IsProbablyDependentProvider); ok && pe.IsProbablyDependent(id2) {
-				return true
+				return id2, true
 			}
 
 			if pe, ok := id2.(IsProbablyDependentProvider); ok && pe.IsProbablyDependent(id) {
-				return true
+				return id2, true
 			}
 
 		}
 
 		switch t := id2.(type) {
 		case IdentitiesProvider:
-			if nested := t.GetIdentities().contains(depth, probableMatch, id); nested {
-				return nested
+			if nested, found := t.GetIdentities().find(depth, probableMatch, id); found {
+				return nested, found
 			}
 		}
 	}
 
-	return false
+	return nil, false
 }
 
 // IdentitiesProvider provides all Identities.
@@ -251,12 +267,17 @@ func (im *identityManager) GetIdentities() Identities {
 }
 
 func (im *identityManager) Contains(id Identity) bool {
-	return im.ids.contains(0, false, id)
+	_, found := im.ids.find(0, false, id)
+	return found
 }
 
 func (im *identityManager) ContainsProbably(id Identity) bool {
-	p := im.ids.contains(0, true, id)
-	return p
+	v, found := im.ids.find(0, true, id)
+	if found {
+		fmt.Println("HERE?", im.ids, "=>", id, "=>", v)
+
+	}
+	return found
 }
 
 // Incrementer increments and returns the value.
@@ -291,6 +312,10 @@ func isProbablyDependent(p1, p2 Identity) bool {
 
 	if p1 == p2 {
 		return true
+	}
+
+	if p1 == nil || p2 == nil {
+		return false
 	}
 
 	if p1.IdentifierBase() == p2.IdentifierBase() {

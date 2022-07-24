@@ -18,6 +18,7 @@ import (
 
 	"github.com/gohugoio/hugo/cache/filecache"
 	"github.com/gohugoio/hugo/cache/memcache"
+	"github.com/gohugoio/hugo/common/hugio"
 	"github.com/gohugoio/hugo/config"
 	"github.com/gohugoio/hugo/helpers"
 	"github.com/gohugoio/hugo/hugofs"
@@ -63,15 +64,21 @@ func NewResourceTransformer(filename, content string) (resources.ResourceTransfo
 	return NewResourceTransformerForSpec(spec, filename, content)
 }
 
-func NewResourceTransformerForSpec(spec *resources.Spec, filename, content string) (resources.ResourceTransformer, error) {
-	filename = filepath.FromSlash(filename)
+func NewResourceTransformerForSpec(spec *resources.Spec, pathname, content string) (resources.ResourceTransformer, error) {
+	filename := filepath.FromSlash(pathname)
 
 	fs := spec.Fs.Source
 	if err := afero.WriteFile(fs, filename, []byte(content), 0777); err != nil {
 		return nil, err
 	}
 
-	r, err := spec.New(resources.ResourceSourceDescriptor{Fs: fs, SourceFilename: filename})
+	r, err := spec.New(
+		resources.ResourceSourceDescriptor{
+			TargetPath: pathname,
+			OpenReadSeekCloser: func() (hugio.ReadSeekCloser, error) {
+				return fs.Open(filename)
+			},
+		})
 	if err != nil {
 		return nil, err
 	}

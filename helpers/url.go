@@ -85,7 +85,7 @@ func (p *PathSpec) getBaseURLRoot(path string) string {
 		return p.BaseURLNoPathString
 	} else {
 		// Treat it as relative to the baseURL.
-		return p.BaseURLString
+		return p.BaseURLStringOrig
 	}
 }
 

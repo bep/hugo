@@ -16,6 +16,8 @@ package hugolib
 import (
 	"context"
 	"fmt"
+	"path"
+	"strings"
 	"sync"
 
 	"github.com/gohugoio/hugo/hugolib/doctree"
@@ -237,11 +239,72 @@ func (s *Site) renderPaginator(p *pageState, templ tpl.Template) error {
 
 // renderAliases renders shell pages that simply have a redirect in the header.
 func (s *Site) renderAliases() error {
-	var err error
+	return s.pageMap.treePages.Walk(
+		context.TODO(),
+		doctree.WalkConfig[contentNodeI]{
+			Callback: func(ctx *doctree.WalkContext[contentNodeI], key string, n contentNodeI) (bool, error) {
+				p := n.(*pageState)
 
-	// TODO1
+				// We cannot alias a page that's not rendered.
+				if p.m.noLink() {
+					return false, nil
+				}
 
-	return err
+				if len(p.Aliases()) == 0 {
+					return false, nil
+				}
+
+				pathSeen := make(map[string]bool)
+				for _, of := range p.OutputFormats() {
+					if !of.Format.IsHTML {
+						continue
+					}
+
+					f := of.Format
+
+					if pathSeen[f.Path] {
+						continue
+					}
+					pathSeen[f.Path] = true
+
+					plink := of.Permalink()
+
+					for _, a := range p.Aliases() {
+						isRelative := !strings.HasPrefix(a, "/")
+
+						if isRelative {
+							// Make alias relative, where "." will be on the
+							// same directory level as the current page.
+							basePath := path.Join(p.targetPaths().SubResourceBaseLink, "..")
+							a = path.Join(basePath, a)
+
+						} else {
+							// Make sure AMP and similar doesn't clash with regular aliases.
+							a = path.Join(f.Path, a)
+						}
+
+						if s.UglyURLs && !strings.HasSuffix(a, ".html") {
+							a += ".html"
+						}
+
+						lang := p.Language().Lang
+
+						if s.h.multihost && !strings.HasPrefix(a, "/"+lang) {
+							// These need to be in its language root.
+							a = path.Join(lang, a)
+						}
+
+						err := s.writeDestAlias(a, plink, f, p)
+						if err != nil {
+							return true, err
+						}
+					}
+				}
+
+				return false, nil
+			},
+		})
+
 }
 
 // renderMainLanguageRedirect creates a redirect to the main language home,

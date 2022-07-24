@@ -25,7 +25,6 @@ import (
 	"net/http/httputil"
 	"net/url"
 	"path"
-	"path/filepath"
 	"strings"
 
 	"github.com/gohugoio/hugo/common/hugio"
@@ -185,7 +184,7 @@ func (c *Client) FromRemote(uri string, optionsm map[string]any) (resource.Resou
 			OpenReadSeekCloser: func() (hugio.ReadSeekCloser, error) {
 				return hugio.NewReadSeekerNoOpCloser(bytes.NewReader(body)), nil
 			},
-			RelTargetFilename: filepath.Clean(resourceID),
+			TargetPath: resourceID,
 		})
 }
 

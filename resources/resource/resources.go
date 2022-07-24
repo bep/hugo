@@ -93,6 +93,7 @@ func (r Resources) GetMatch(pattern any) Resource {
 	}
 
 	for _, resource := range r {
+		// TODO1
 		if g.Match(strings.ToLower(resource.Name())) {
 			return resource
 		}

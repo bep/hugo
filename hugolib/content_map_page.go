@@ -315,10 +315,6 @@ func (m *pageMap) getResourcesForPage(p *pageState) resource.Resources {
 		targetPaths := p.targetPaths()
 		pagePath := p.Path()
 
-		if targetPaths.Link == "/mybundle/mybundle/" {
-
-		}
-
 		var res resource.Resources
 		err := tree.Walk(context.TODO(), doctree.WalkConfig[resource.Resource]{
 			Prefix: prefix,
@@ -333,6 +329,7 @@ func (m *pageMap) getResourcesForPage(p *pageState) resource.Resources {
 						rd.Path = p
 						rd.RelPermalink = path.Join(targetPaths.SubResourceBaseLink, relPath)
 						rd.TargetPath = path.Join(targetPaths.SubResourceBaseTarget, relPath)
+						rd.Name = strings.TrimPrefix(relPath, "/")
 
 						return m.s.ResourceSpec.New(rd)
 

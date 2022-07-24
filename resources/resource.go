@@ -17,7 +17,6 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
-	"os"
 	"path"
 	"path/filepath"
 	"sync"
@@ -30,7 +29,6 @@ import (
 	"github.com/gohugoio/hugo/common/herrors"
 	"github.com/gohugoio/hugo/common/paths"
 
-	"github.com/gohugoio/hugo/cache/memcache"
 	"github.com/gohugoio/hugo/common/types"
 	"github.com/gohugoio/hugo/media"
 	"github.com/gohugoio/hugo/source"
@@ -39,9 +37,7 @@ import (
 
 	"github.com/gohugoio/hugo/common/hugio"
 	"github.com/gohugoio/hugo/common/maps"
-	"github.com/gohugoio/hugo/resources/page"
 	"github.com/gohugoio/hugo/resources/resource"
-	"github.com/spf13/afero"
 
 	"github.com/gohugoio/hugo/helpers"
 )
@@ -69,6 +65,7 @@ type ResourceSourceDescriptor struct {
 
 	Path       *paths.Path
 	TargetPath string
+	Name       string
 	// Any base paths prepended to the target path. This will also typically be the
 	// language code, but setting it here means that it should not have any effect on
 	// the permalink.
@@ -81,19 +78,8 @@ type ResourceSourceDescriptor struct {
 	// Delay publishing until either Permalink or RelPermalink is called. Maybe never.
 	LazyPublish bool
 
-	FileInfo os.FileInfo
-
-	// TargetPathsRemoveMe is a callback to fetch paths's relative to its owner.
-	// TODO1
-	TargetPathsRemoveMe func() page.TargetPaths
-
-	// The relative target filename without any language code.
-	RelTargetFilename string
-
 	// If OpenReadSeekerCloser is not set, we use this to open the file.
 	SourceFilename string
-
-	Fs afero.Fs
 
 	// Set when its known up front, else it's resolved from the target filename.
 	MediaType media.Type
@@ -338,6 +324,7 @@ func (l *genericResource) cloneTo(targetPath string) resource.Resource {
 	targetPath = helpers.ToSlashTrimLeading(targetPath)
 	dir, file := path.Split(targetPath)
 	c.targetPath = dirFile{dir: dir, file: file}
+	c.relPermalink = c.targetPath
 
 	return c
 
@@ -377,7 +364,7 @@ func (l *genericResource) Key() string {
 		}
 	}*/
 
-	return memcache.CleanKey(l.RelPermalink())
+	return l.relPermalink.path()
 }
 
 func (l *genericResource) MediaType() media.Type {
@@ -396,8 +383,13 @@ func (l *genericResource) Params() maps.Params {
 	return l.params
 }
 
+// TODO1 UrlEscape.
+func (l *genericResource) RelPermalink() string {
+	return helpers.AddLeadingSlash(path.Join(l.spec.PathSpec.GetBasePath(false), l.relPermalink.path()))
+}
+
 func (l *genericResource) Permalink() string {
-	return l.spec.PermalinkForBaseURL(l.relPermalink.path(), l.spec.BaseURL.HostURL())
+	return l.spec.BaseURLString + helpers.AddLeadingSlash(l.relPermalink.path())
 }
 
 func (l *genericResource) Publish() error {
@@ -421,10 +413,6 @@ func (l *genericResource) Publish() error {
 	})
 
 	return err
-}
-
-func (l *genericResource) RelPermalink() string {
-	return l.relPermalink.path()
 }
 
 func (l *genericResource) ResourceType() string {
@@ -486,11 +474,9 @@ func (l *genericResource) getSpec() *Spec {
 }
 
 func (l *genericResource) getTargetFilenames() []string {
-	paths := l.relTargetPaths()
-	for i, p := range paths {
-		paths[i] = filepath.Clean(p)
-	}
-	return paths
+	// TODO1 multiple.
+	return []string{filepath.FromSlash(l.targetPath.path())}
+
 }
 
 func (l *genericResource) getTargetPathDirFile() dirFile {
@@ -598,7 +584,7 @@ func (l *genericResource) openDestinationsForWriting() (w io.WriteCloser, err er
 }
 
 func (r *genericResource) openPublishFileForWriting(relTargetPath string) (io.WriteCloser, error) {
-	return helpers.OpenFilesForWriting(r.spec.BaseFs.PublishFs, r.relTargetPathsFor(relTargetPath)...)
+	return helpers.OpenFilesForWriting(r.spec.BaseFs.PublishFs, filepath.FromSlash(relTargetPath)) // TODO1
 }
 
 func (l *genericResource) permalinkFor(target string) string {
@@ -614,23 +600,11 @@ func (l *genericResource) relPermalinkForRel(rel string, isAbs bool) string {
 }
 
 func (l *genericResource) relTargetPathForRel(rel string, addBaseTargetPath, isAbs, isURL bool) string {
-	panic("TODO1 remove this")
+	panic("relTargetPathForRel: TODO1 remove this")
 }
 
 func (l *genericResource) relTargetPathForRelAndBasePath(rel, basePath string, isAbs, isURL bool) string {
-	panic("TODO1 remove this")
-}
-
-func (l *genericResource) relTargetPaths() []string {
-	return l.relTargetPathsForRel(l.TargetPath())
-}
-
-func (l *genericResource) relTargetPathsFor(target string) []string {
-	return l.relTargetPathsForRel(target)
-}
-
-func (l *genericResource) relTargetPathsForRel(rel string) []string {
-	panic("TODO1 remove this")
+	panic("relTargetPathForRelAndBasePath: TODO1 remove this")
 }
 
 func (l *genericResource) updateParams(params map[string]any) {
@@ -655,8 +629,6 @@ type permalinker interface {
 	targetPather
 	permalinkFor(target string) string
 	relPermalinkFor(target string) string
-	relTargetPaths() []string
-	relTargetPathsFor(target string) []string
 }
 
 type resourceContent struct {

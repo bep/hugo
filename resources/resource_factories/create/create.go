@@ -30,6 +30,7 @@ import (
 	"github.com/gohugoio/hugo/hugofs"
 
 	"github.com/gohugoio/hugo/cache/filecache"
+	"github.com/gohugoio/hugo/common/herrors"
 	"github.com/gohugoio/hugo/common/hugio"
 	"github.com/gohugoio/hugo/resources"
 	"github.com/gohugoio/hugo/resources/resource"
@@ -62,19 +63,22 @@ func (c *Client) Copy(r resource.Resource, targetPath string) (resource.Resource
 	})
 }
 
-// Get creates a new Resource by opening the given filename in the assets filesystem.
-func (c *Client) Get(filename string) (resource.Resource, error) {
-	filename = filepath.Clean(filename)
-	key := memcache.CleanKey(filename)
+// Get creates a new Resource by opening the given pathname in the assets filesystem.
+func (c *Client) Get(pathname string) (resource.Resource, error) {
+	defer herrors.Recover()
+	pathname = path.Clean(pathname)
+	key := memcache.CleanKey(pathname)
 	return c.rs.ResourceCache.GetOrCreate(context.TODO(), key, memcache.ClearOnChange, func() (resource.Resource, error) {
 		// TODO1 consolidate etc. (make into one identity)
 		id := identity.NewManager(identity.StringIdentity(key))
 		return c.rs.New(resources.ResourceSourceDescriptor{
-			Fs:                c.rs.BaseFs.Assets.Fs,
-			LazyPublish:       true,
-			SourceFilename:    filename,
+			LazyPublish: true,
+			OpenReadSeekCloser: func() (hugio.ReadSeekCloser, error) {
+				return c.rs.BaseFs.Assets.Fs.Open(filepath.FromSlash(pathname))
+			},
 			GroupIdentity:     id,
 			DependencyManager: id,
+			TargetPath:        pathname,
 		})
 	})
 }
@@ -111,11 +115,10 @@ func (c *Client) match(name, pattern string, matchFunc func(r resource.Resource)
 			meta := info.Meta()
 			r, err := c.rs.New(resources.ResourceSourceDescriptor{
 				LazyPublish: true,
-				FileInfo:    info,
 				OpenReadSeekCloser: func() (hugio.ReadSeekCloser, error) {
 					return meta.Open()
 				},
-				RelTargetFilename: meta.Path,
+				TargetPath: meta.Path,
 			})
 			if err != nil {
 				return true, err
@@ -140,15 +143,15 @@ func (c *Client) match(name, pattern string, matchFunc func(r resource.Resource)
 
 // FromString creates a new Resource from a string with the given relative target path.
 func (c *Client) FromString(targetPath, content string) (resource.Resource, error) {
+	targetPath = path.Clean(targetPath)
 	r, err := c.rs.ResourceCache.GetOrCreate(context.TODO(), memcache.CleanKey(targetPath), memcache.ClearOnRebuild, func() (resource.Resource, error) {
 		return c.rs.New(
 			resources.ResourceSourceDescriptor{
-				Fs:          c.rs.FileCaches.AssetsCache().Fs,
 				LazyPublish: true,
 				OpenReadSeekCloser: func() (hugio.ReadSeekCloser, error) {
 					return hugio.NewReadSeekerNoOpCloserFromString(content), nil
 				},
-				RelTargetFilename: filepath.Clean(targetPath),
+				TargetPath: targetPath,
 			})
 	})
 

@@ -325,14 +325,20 @@ Banner: post.jpg`,
 		t.Parallel()
 
 		b := newSite(t, true)
-		b.Build(BuildCfg{})
+		counters := &testCounters{}
+		b.Build(BuildCfg{testCounters: counters})
+		b.Assert(int(counters.pageRenderCounter), qt.Equals, 11)
+		b.Assert(int(counters.contentRenderCounter), qt.Equals, 2)
 
 		b.EditFiles("content/post/_index.md", indexContentCascade+"\ncontent edit")
 
-		counters := &testCounters{}
+		counters = &testCounters{}
 		b.Build(BuildCfg{testCounters: counters})
+
+		b.Assert(int(counters.pageRenderCounter), qt.Equals, 1)
+
 		// As we only changed the content, not the cascade front matter,
-		// only the home page is re-rendered.
+		// only the section page is re-rendered.
 		b.Assert(int(counters.contentRenderCounter), qt.Equals, 1)
 
 		b.AssertFileContent("public/post/index.html", `Banner: post.jpg|Layout: postlayout|Type: posttype|Content: <p>content edit</p>`)

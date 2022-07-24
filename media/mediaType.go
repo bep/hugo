@@ -116,6 +116,7 @@ func FromContent(types Types, extensionHints []string, content []byte) Type {
 
 // FromStringAndExt creates a Type from a MIME string and a given extension.
 func FromStringAndExt(t, ext string) (Type, error) {
+	ext = strings.TrimPrefix(ext, ".")
 	tp, err := fromString(t)
 	if err != nil {
 		return tp, err

@@ -779,7 +779,7 @@ func (s *SiteInfo) String() string {
 }
 
 func (s *SiteInfo) BaseURL() template.URL {
-	return template.URL(s.s.PathSpec.BaseURL.String())
+	return template.URL(s.s.PathSpec.BaseURLStringOrig)
 }
 
 // ServerPort returns the port part of the BaseURL, 0 if none found.

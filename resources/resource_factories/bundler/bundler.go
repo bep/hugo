@@ -18,7 +18,7 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"path/filepath"
+	"path"
 
 	"github.com/gohugoio/hugo/cache/memcache"
 
@@ -83,6 +83,7 @@ func (r *multiReadSeekCloser) Close() error {
 
 // Concat concatenates the list of Resource objects.
 func (c *Client) Concat(targetPath string, r resource.Resources) (resource.Resource, error) {
+	targetPath = path.Clean(targetPath)
 	return c.rs.ResourceCache.GetOrCreate(context.TODO(), targetPath, memcache.ClearOnRebuild, func() (resource.Resource, error) {
 		var resolvedm media.Type
 
@@ -135,10 +136,9 @@ func (c *Client) Concat(targetPath string, r resource.Resources) (resource.Resou
 
 		composite, err := c.rs.New(
 			resources.ResourceSourceDescriptor{
-				Fs:                 c.rs.FileCaches.AssetsCache().Fs,
 				LazyPublish:        true,
 				OpenReadSeekCloser: concatr,
-				RelTargetFilename:  filepath.Clean(targetPath),
+				TargetPath:         targetPath,
 			})
 		if err != nil {
 			return nil, err

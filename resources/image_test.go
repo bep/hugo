@@ -84,7 +84,7 @@ func TestImageTransformBasic(t *testing.T) {
 		c.Assert(img.Height(), qt.Equals, h)
 	}
 
-	c.Assert(image.RelPermalink(), qt.Equals, "/a/sunset.jpg")
+	c.Assert(image.RelPermalink(), qt.Equals, "/sunset.jpg")
 	c.Assert(image.ResourceType(), qt.Equals, "image")
 	assertWidthHeight(image, 900, 562)
 
@@ -110,28 +110,28 @@ func TestImageTransformBasic(t *testing.T) {
 	assertWidthHeight(resizedAndRotated, 125, 200)
 
 	assertWidthHeight(resized, 300, 200)
-	c.Assert(resized.RelPermalink(), qt.Equals, "/a/sunset_hu59e56ffff1bc1d8d122b1403d34e039f_90587_300x200_resize_q68_linear.jpg")
+	c.Assert(resized.RelPermalink(), qt.Equals, "/sunset_hu59e56ffff1bc1d8d122b1403d34e039f_90587_300x200_resize_q68_linear.jpg")
 
 	fitted, err := resized.Fit("50x50")
 	c.Assert(err, qt.IsNil)
-	c.Assert(fitted.RelPermalink(), qt.Equals, "/a/sunset_hu59e56ffff1bc1d8d122b1403d34e039f_90587_625708021e2bb281c9f1002f88e4753f.jpg")
+	c.Assert(fitted.RelPermalink(), qt.Equals, "/sunset_hu59e56ffff1bc1d8d122b1403d34e039f_90587_625708021e2bb281c9f1002f88e4753f.jpg")
 	assertWidthHeight(fitted, 50, 33)
 
 	// Check the MD5 key threshold
 	fittedAgain, _ := fitted.Fit("10x20")
 	fittedAgain, err = fittedAgain.Fit("10x20")
 	c.Assert(err, qt.IsNil)
-	c.Assert(fittedAgain.RelPermalink(), qt.Equals, "/a/sunset_hu59e56ffff1bc1d8d122b1403d34e039f_90587_3f65ba24dc2b7fba0f56d7f104519157.jpg")
+	c.Assert(fittedAgain.RelPermalink(), qt.Equals, "/sunset_hu59e56ffff1bc1d8d122b1403d34e039f_90587_3f65ba24dc2b7fba0f56d7f104519157.jpg")
 	assertWidthHeight(fittedAgain, 10, 7)
 
 	filled, err := image.Fill("200x100 bottomLeft")
 	c.Assert(err, qt.IsNil)
-	c.Assert(filled.RelPermalink(), qt.Equals, "/a/sunset_hu59e56ffff1bc1d8d122b1403d34e039f_90587_200x100_fill_q68_linear_bottomleft.jpg")
+	c.Assert(filled.RelPermalink(), qt.Equals, "/sunset_hu59e56ffff1bc1d8d122b1403d34e039f_90587_200x100_fill_q68_linear_bottomleft.jpg")
 	assertWidthHeight(filled, 200, 100)
 
 	smart, err := image.Fill("200x100 smart")
 	c.Assert(err, qt.IsNil)
-	c.Assert(smart.RelPermalink(), qt.Equals, fmt.Sprintf("/a/sunset_hu59e56ffff1bc1d8d122b1403d34e039f_90587_200x100_fill_q68_linear_smart%d.jpg", 1))
+	c.Assert(smart.RelPermalink(), qt.Equals, fmt.Sprintf("/sunset_hu59e56ffff1bc1d8d122b1403d34e039f_90587_200x100_fill_q68_linear_smart%d.jpg", 1))
 	assertWidthHeight(smart, 200, 100)
 
 	// Check cache
@@ -141,12 +141,12 @@ func TestImageTransformBasic(t *testing.T) {
 
 	cropped, err := image.Crop("300x300 topRight")
 	c.Assert(err, qt.IsNil)
-	c.Assert(cropped.RelPermalink(), qt.Equals, "/a/sunset_hu59e56ffff1bc1d8d122b1403d34e039f_90587_300x300_crop_q68_linear_topright.jpg")
+	c.Assert(cropped.RelPermalink(), qt.Equals, "/sunset_hu59e56ffff1bc1d8d122b1403d34e039f_90587_300x300_crop_q68_linear_topright.jpg")
 	assertWidthHeight(cropped, 300, 300)
 
 	smartcropped, err := image.Crop("200x200 smart")
 	c.Assert(err, qt.IsNil)
-	c.Assert(smartcropped.RelPermalink(), qt.Equals, fmt.Sprintf("/a/sunset_hu59e56ffff1bc1d8d122b1403d34e039f_90587_200x200_crop_q68_linear_smart%d.jpg", 1))
+	c.Assert(smartcropped.RelPermalink(), qt.Equals, fmt.Sprintf("/sunset_hu59e56ffff1bc1d8d122b1403d34e039f_90587_200x200_crop_q68_linear_smart%d.jpg", 1))
 	assertWidthHeight(smartcropped, 200, 200)
 
 	// Check cache
@@ -171,13 +171,13 @@ func TestImageTransformFormat(t *testing.T) {
 		c.Assert(img.Height(), qt.Equals, h)
 	}
 
-	c.Assert(image.RelPermalink(), qt.Equals, "/a/sunset.jpg")
+	c.Assert(image.RelPermalink(), qt.Equals, "/sunset.jpg")
 	c.Assert(image.ResourceType(), qt.Equals, "image")
 	assertExtWidthHeight(image, ".jpg", 900, 562)
 
 	imagePng, err := image.Resize("450x png")
 	c.Assert(err, qt.IsNil)
-	c.Assert(imagePng.RelPermalink(), qt.Equals, "/a/sunset_hu59e56ffff1bc1d8d122b1403d34e039f_90587_450x0_resize_linear.png")
+	c.Assert(imagePng.RelPermalink(), qt.Equals, "/sunset_hu59e56ffff1bc1d8d122b1403d34e039f_90587_450x0_resize_linear.png")
 	c.Assert(imagePng.ResourceType(), qt.Equals, "image")
 	assertExtWidthHeight(imagePng, ".png", 450, 281)
 	c.Assert(imagePng.Name(), qt.Equals, "sunset.jpg")
@@ -187,7 +187,7 @@ func TestImageTransformFormat(t *testing.T) {
 
 	imageGif, err := image.Resize("225x gif")
 	c.Assert(err, qt.IsNil)
-	c.Assert(imageGif.RelPermalink(), qt.Equals, "/a/sunset_hu59e56ffff1bc1d8d122b1403d34e039f_90587_225x0_resize_linear.gif")
+	c.Assert(imageGif.RelPermalink(), qt.Equals, "/sunset_hu59e56ffff1bc1d8d122b1403d34e039f_90587_225x0_resize_linear.gif")
 	c.Assert(imageGif.ResourceType(), qt.Equals, "image")
 	assertExtWidthHeight(imageGif, ".gif", 225, 141)
 	c.Assert(imageGif.Name(), qt.Equals, "sunset.jpg")
@@ -212,14 +212,14 @@ func TestImagePermalinkPublishOrder(t *testing.T) {
 			}()
 
 			check1 := func(img images.ImageResource) {
-				resizedLink := "/a/sunset_hu59e56ffff1bc1d8d122b1403d34e039f_90587_100x50_resize_q75_box.jpg"
+				resizedLink := "/sunset_hu59e56ffff1bc1d8d122b1403d34e039f_90587_100x50_resize_q75_box.jpg"
 				c.Assert(img.RelPermalink(), qt.Equals, resizedLink)
 				assertImageFile(c, spec.PublishFs, resizedLink, 100, 50)
 			}
 
 			check2 := func(img images.ImageResource) {
-				c.Assert(img.RelPermalink(), qt.Equals, "/a/sunset.jpg")
-				assertImageFile(c, spec.PublishFs, "a/sunset.jpg", 900, 562)
+				c.Assert(img.RelPermalink(), qt.Equals, "/sunset.jpg")
+				assertImageFile(c, spec.PublishFs, "sunset.jpg", 900, 562)
 			}
 
 			orignal := fetchImageForSpec(spec, c, "sunset.jpg")
@@ -253,12 +253,12 @@ func TestImageBugs(t *testing.T) {
 		c.Assert(err, qt.IsNil)
 		c.Assert(resized, qt.Not(qt.IsNil))
 		c.Assert(resized.Width(), qt.Equals, 200)
-		c.Assert(resized.RelPermalink(), qt.Equals, "/a/_hu59e56ffff1bc1d8d122b1403d34e039f_90587_65b757a6e14debeae720fe8831f0a9bc.jpg")
+		c.Assert(resized.RelPermalink(), qt.Equals, "/_hu59e56ffff1bc1d8d122b1403d34e039f_90587_65b757a6e14debeae720fe8831f0a9bc.jpg")
 		resized, err = resized.Resize("100x")
 		c.Assert(err, qt.IsNil)
 		c.Assert(resized, qt.Not(qt.IsNil))
 		c.Assert(resized.Width(), qt.Equals, 100)
-		c.Assert(resized.RelPermalink(), qt.Equals, "/a/_hu59e56ffff1bc1d8d122b1403d34e039f_90587_c876768085288f41211f768147ba2647.jpg")
+		c.Assert(resized.RelPermalink(), qt.Equals, "/_hu59e56ffff1bc1d8d122b1403d34e039f_90587_c876768085288f41211f768147ba2647.jpg")
 
 	})
 
@@ -374,14 +374,14 @@ func TestImageResize8BitPNG(t *testing.T) {
 	image := fetchImage(c, "gohugoio.png")
 
 	c.Assert(image.MediaType().Type(), qt.Equals, "image/png")
-	c.Assert(image.RelPermalink(), qt.Equals, "/a/gohugoio.png")
+	c.Assert(image.RelPermalink(), qt.Equals, "/gohugoio.png")
 	c.Assert(image.ResourceType(), qt.Equals, "image")
 	c.Assert(image.Exif(), qt.IsNil)
 
 	resized, err := image.Resize("800x")
 	c.Assert(err, qt.IsNil)
 	c.Assert(resized.MediaType().Type(), qt.Equals, "image/png")
-	c.Assert(resized.RelPermalink(), qt.Equals, "/a/gohugoio_hu0e1b9e4a4be4d6f86c7b37b9ccce3fbc_73886_800x0_resize_linear_3.png")
+	c.Assert(resized.RelPermalink(), qt.Equals, "/gohugoio_hu0e1b9e4a4be4d6f86c7b37b9ccce3fbc_73886_800x0_resize_linear_3.png")
 	c.Assert(resized.Width(), qt.Equals, 800)
 }
 
@@ -391,14 +391,14 @@ func TestImageResizeInSubPath(t *testing.T) {
 	image := fetchImage(c, "sub/gohugoio2.png")
 
 	c.Assert(image.MediaType(), eq, media.PNGType)
-	c.Assert(image.RelPermalink(), qt.Equals, "/a/sub/gohugoio2.png")
+	c.Assert(image.RelPermalink(), qt.Equals, "/sub/gohugoio2.png")
 	c.Assert(image.ResourceType(), qt.Equals, "image")
 	c.Assert(image.Exif(), qt.IsNil)
 
 	resized, err := image.Resize("101x101")
 	c.Assert(err, qt.IsNil)
 	c.Assert(resized.MediaType().Type(), qt.Equals, "image/png")
-	c.Assert(resized.RelPermalink(), qt.Equals, "/a/sub/gohugoio2_hu0e1b9e4a4be4d6f86c7b37b9ccce3fbc_73886_101x101_resize_linear_3.png")
+	c.Assert(resized.RelPermalink(), qt.Equals, "/sub/gohugoio2_hu0e1b9e4a4be4d6f86c7b37b9ccce3fbc_73886_101x101_resize_linear_3.png")
 	c.Assert(resized.Width(), qt.Equals, 101)
 	c.Assert(resized.Exif(), qt.IsNil)
 
@@ -414,7 +414,7 @@ func TestImageResizeInSubPath(t *testing.T) {
 
 	resizedAgain, err := image.Resize("101x101")
 	c.Assert(err, qt.IsNil)
-	c.Assert(resizedAgain.RelPermalink(), qt.Equals, "/a/sub/gohugoio2_hu0e1b9e4a4be4d6f86c7b37b9ccce3fbc_73886_101x101_resize_linear_3.png")
+	c.Assert(resizedAgain.RelPermalink(), qt.Equals, "/sub/gohugoio2_hu0e1b9e4a4be4d6f86c7b37b9ccce3fbc_73886_101x101_resize_linear_3.png")
 	c.Assert(resizedAgain.Width(), qt.Equals, 101)
 	assertImageFile(c, image.(specProvider).getSpec().BaseFs.PublishFs, publishedImageFilename, 101, 101)
 }

@@ -23,6 +23,7 @@ import (
 	"sync/atomic"
 
 	"github.com/gohugoio/hugo/cache/memcache"
+	"github.com/gohugoio/hugo/htesting"
 	"github.com/gohugoio/hugo/hugofs/glob"
 	"github.com/gohugoio/hugo/hugolib/doctree"
 	"github.com/gohugoio/hugo/resources/page/pagekinds"
@@ -1061,10 +1062,14 @@ func (h *HugoSites) resetPageRenderStateForIdentities(ids ...identity.Identity) 
 		return
 	}
 
+	htesting.Println("Reset page render state for", ids)
+
 	h.withPage(func(s string, p *pageState) bool {
 		var mayBeDependent bool
 		for _, id := range ids {
 			if !identity.IsNotDependent(p, id) {
+				htesting.Println("May be dependent", id, p.Path())
+
 				mayBeDependent = true
 				break
 			}
