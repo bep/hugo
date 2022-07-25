@@ -190,13 +190,28 @@ func (s *IntegrationTestBuilder) Build() *IntegrationTestBuilder {
 	return s
 }
 
+func (s *IntegrationTestBuilder) BuildWithBuildCfg(cfg BuildCfg) *IntegrationTestBuilder {
+	s.Helper()
+	_, err := s.buildE(cfg)
+	if s.Cfg.Verbose || err != nil {
+		fmt.Println(s.logBuff.String())
+	}
+	s.Assert(err, qt.IsNil)
+	return s
+}
+
 func (s *IntegrationTestBuilder) BuildE() (*IntegrationTestBuilder, error) {
+	s.Helper()
+	return s.buildE(BuildCfg{})
+}
+
+func (s *IntegrationTestBuilder) buildE(cfg BuildCfg) (*IntegrationTestBuilder, error) {
 	s.Helper()
 	if err := s.initBuilder(); err != nil {
 		return s, err
 	}
 
-	err := s.build(BuildCfg{})
+	err := s.build(cfg)
 	return s, err
 }
 

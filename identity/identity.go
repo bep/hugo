@@ -40,6 +40,15 @@ func NewManager(root Identity) Manager {
 	}
 }
 
+// NewManagerWithDebugEnabled creates a new Manager with debug enabled.
+func NewManagerWithDebugEnabled(root Identity) Manager {
+	return &identityManager{
+		Identity: root,
+		ids:      Identities{root: true},
+		debug:    true,
+	}
+}
+
 // Identities stores identity providers.
 type Identities map[Identity]bool
 
@@ -73,6 +82,7 @@ func (ids Identities) find(depth int, probableMatch bool, id Identity) (Identity
 	if probableMatch && id == GenghisKhan {
 		return id, true
 	}
+
 	if _, found := ids[id]; found {
 		return id, true
 	}
@@ -89,6 +99,9 @@ func (ids Identities) find(depth int, probableMatch bool, id Identity) (Identity
 	}
 
 	for id2 := range ids {
+		if id2 == Anonymous {
+			continue
+		}
 		if id2 == id {
 			// TODO1 Eq interface.
 			return id2, true
@@ -214,6 +227,8 @@ func (m *nopManager) IdentifierBase() any {
 type identityManager struct {
 	Identity
 
+	debug bool
+
 	// mu protects _changes_ to this manager,
 	// reads currently assumes no concurrent writes.
 	mu  sync.RWMutex
@@ -272,11 +287,7 @@ func (im *identityManager) Contains(id Identity) bool {
 }
 
 func (im *identityManager) ContainsProbably(id Identity) bool {
-	v, found := im.ids.find(0, true, id)
-	if found {
-		fmt.Println("HERE?", im.ids, "=>", id, "=>", v)
-
-	}
+	_, found := im.ids.find(0, true, id)
 	return found
 }
 

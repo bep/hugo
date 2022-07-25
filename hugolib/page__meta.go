@@ -388,6 +388,14 @@ func (ps *pageState) setMetadatPost(cascade map[page.PageMatcher]maps.Params) er
 			}
 			cascade = ps.m.cascade
 		}
+	}
+
+	if cascade == nil {
+		cascade = ps.m.cascade
+	}
+
+	// Cascade is also applied to itself.
+	if cascade != nil {
 		for m, v := range cascade {
 			if !m.Matches(ps) {
 				continue
@@ -705,32 +713,6 @@ func (ps *pageState) setMetadataPre() error {
 	if true {
 		return nil
 	}
-
-	/*
-		TODO1 rework this
-		var cascade map[page.PageMatcher]maps.Params
-
-		if p.bucket != nil {
-			if parentBucket != nil {
-				// Merge missing keys from parent into this.
-				pm.mergeBucketCascades(p.bucket, parentBucket)
-			}
-			cascade = p.bucket.cascade
-		} else if parentBucket != nil {
-			cascade = parentBucket.cascade
-		}
-
-		for m, v := range cascade {
-			if !m.Matches(p) {
-				continue
-			}
-			for kk, vv := range v {
-				if _, found := frontmatter[kk]; !found {
-					frontmatter[kk] = vv
-				}
-			}
-		}
-	*/
 
 	return nil
 

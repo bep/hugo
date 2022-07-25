@@ -209,16 +209,13 @@ func TestCascade(t *testing.T) {
 }
 
 func TestCascadeEdit(t *testing.T) {
-	p1Content := `---
+
+	p1Content := `
+---
 title: P1
 ---
-`
-
-	indexContentNoCascade := `
----
-title: Home
----
-`
+	`
+	indexContentNoCascade := p1Content
 
 	indexContentCascade := `
 ---
@@ -230,18 +227,33 @@ cascade:
 ---
 `
 
-	layout := `Banner: {{ .Params.banner }}|Layout: {{ .Layout }}|Type: {{ .Type }}|Content: {{ .Content }}`
+	newSite := func(t *testing.T, cascade bool) *IntegrationTestBuilder {
+		files := `
+-- config.toml --
+disableKinds=["home", "taxonomy", "term", "sitemap", "robotsTXT", "RSS"]
+-- 	layouts/_default/single.html --
+Banner: {{ .Params.banner }}|Layout: {{ .Layout }}|Type: {{ .Type }}|Content: {{ .Content }}
+-- 	layouts/_default/list.html --
+Banner: {{ .Params.banner }}|Layout: {{ .Layout }}|Type: {{ .Type }}|Content: {{ .Content }}
+-- content/post/dir/p1.md --
+---
+title: P1
+---
 
-	newSite := func(t *testing.T, cascade bool) *sitesBuilder {
-		b := newTestSitesBuilder(t).Running()
-		b.WithTemplates("_default/single.html", layout)
-		b.WithTemplates("_default/list.html", layout)
+`
 		if cascade {
-			b.WithContent("post/_index.md", indexContentCascade)
+			files += "-- content/post/_index.md --" + indexContentCascade
 		} else {
-			b.WithContent("post/_index.md", indexContentNoCascade)
+			files += "-- content/post/_index.md --" + indexContentNoCascade
 		}
-		b.WithContent("post/dir/p1.md", p1Content)
+
+		b := NewIntegrationTestBuilder(
+			IntegrationTestConfig{
+				T:           t,
+				TxtarString: files,
+				Running:     true,
+			},
+		)
 
 		return b
 	}
@@ -250,7 +262,7 @@ cascade:
 		t.Parallel()
 
 		b := newSite(t, true)
-		b.Build(BuildCfg{})
+		b.Build()
 
 		assert := func() {
 			b.Helper()
@@ -264,7 +276,7 @@ cascade:
 		assert()
 
 		b.EditFiles("content/post/dir/p1.md", p1Content+"\ncontent edit")
-		b.Build(BuildCfg{})
+		b.Build()
 
 		assert()
 		b.AssertFileContent("public/post/dir/p1/index.html",
@@ -277,13 +289,13 @@ Banner: post.jpg`,
 		t.Parallel()
 
 		b := newSite(t, true)
-		b.Build(BuildCfg{})
+		b.Build()
 
 		b.AssertFileContent("public/post/dir/p1/index.html", `Banner: post.jpg|Layout: postlayout|Type: posttype|Content:`)
 
 		b.EditFiles("content/post/_index.md", strings.Replace(indexContentCascade, "post.jpg", "edit.jpg", 1))
 
-		b.Build(BuildCfg{})
+		b.Build()
 
 		b.AssertFileContent("public/post/index.html", `Banner: edit.jpg|Layout: postlayout|Type: posttype|`)
 		b.AssertFileContent("public/post/dir/p1/index.html", `Banner: edit.jpg|Layout: postlayout|Type: posttype|`)
@@ -293,13 +305,13 @@ Banner: post.jpg`,
 		t.Parallel()
 
 		b := newSite(t, true)
-		b.Build(BuildCfg{})
+		b.Build()
 
 		b.AssertFileContent("public/post/dir/p1/index.html", `Banner: post.jpg`)
 
 		b.EditFiles("content/post/_index.md", indexContentCascade)
 
-		b.Build(BuildCfg{})
+		b.Build()
 
 		b.AssertFileContent("public/post/index.html", `Banner: post.jpg|Layout: postlayout|Type: posttype|`)
 		b.AssertFileContent("public/post/dir/p1/index.html", `Banner: post.jpg|Layout: postlayout|`)
@@ -309,13 +321,13 @@ Banner: post.jpg`,
 		t.Parallel()
 
 		b := newSite(t, false)
-		b.Build(BuildCfg{})
+		b.Build()
 
 		b.AssertFileContent("public/post/dir/p1/index.html", `Banner: |Layout: |`)
 
 		b.EditFiles("content/post/_index.md", indexContentNoCascade)
 
-		b.Build(BuildCfg{})
+		b.Build()
 
 		b.AssertFileContent("public/post/index.html", `Banner: |Layout: |Type: post|`)
 		b.AssertFileContent("public/post/dir/p1/index.html", `Banner: |Layout: |`)
@@ -325,27 +337,22 @@ Banner: post.jpg`,
 		t.Parallel()
 
 		b := newSite(t, true)
-		counters := &testCounters{}
-		b.Build(BuildCfg{testCounters: counters})
-		b.Assert(int(counters.pageRenderCounter), qt.Equals, 11)
-		b.Assert(int(counters.contentRenderCounter), qt.Equals, 2)
+		b.Build()
+		b.AssertRenderCountPage(2)
+		b.AssertRenderCountContent(2)
 
 		b.EditFiles("content/post/_index.md", indexContentCascade+"\ncontent edit")
 
-		counters = &testCounters{}
-		b.Build(BuildCfg{testCounters: counters})
-
-		b.Assert(int(counters.pageRenderCounter), qt.Equals, 1)
+		b.Build()
 
 		// As we only changed the content, not the cascade front matter,
 		// only the section page is re-rendered.
-		b.Assert(int(counters.contentRenderCounter), qt.Equals, 1)
+		b.AssertRenderCountContent(1)
 
 		b.AssertFileContent("public/post/index.html", `Banner: post.jpg|Layout: postlayout|Type: posttype|Content: <p>content edit</p>`)
 		b.AssertFileContent("public/post/dir/p1/index.html", `Banner: post.jpg|Layout: postlayout|`)
 	})
 }
-
 func newCascadeTestBuilder(t testing.TB, langs []string) *sitesBuilder {
 	p := func(m map[string]any) string {
 		var yamlStr string

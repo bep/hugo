@@ -74,9 +74,14 @@ func (h *HugoSites) newPage(m *pageMeta) (*pageState, error) {
 		return nil, err
 	}
 
+	// bookmark
 	var dependencyManager identity.Manager = identity.NopManager
 	if m.s.running() {
-		dependencyManager = identity.NewManager(identity.Anonymous)
+		if m.Path() == "/post" {
+			dependencyManager = identity.NewManagerWithDebugEnabled(identity.Anonymous)
+		} else {
+			dependencyManager = identity.NewManager(identity.Anonymous)
+		}
 	}
 
 	ps := &pageState{
