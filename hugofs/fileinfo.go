@@ -15,6 +15,7 @@
 package hugofs
 
 import (
+	"encoding/json"
 	"fmt"
 	"io/fs"
 	"os"
@@ -81,15 +82,17 @@ type FileMeta struct {
 	Lang         string
 	Translations []string
 
-	// TranslationBaseName        string
-	// TranslationBaseNameWithExt string
-
-	Fs           afero.Fs
-	OpenFunc     func() (afero.File, error)
-	JoinStatFunc func(name string) (FileMetaDirEntry, error)
+	Fs           afero.Fs                                    `json:"-"`
+	OpenFunc     func() (afero.File, error)                  `json:"-"`
+	JoinStatFunc func(name string) (FileMetaDirEntry, error) `json:"-"`
 
 	// Include only files or directories that match.
-	InclusionFilter *glob.FilenameFilter
+	InclusionFilter *glob.FilenameFilter `json:"-"`
+}
+
+func (m *FileMeta) String() string {
+	s, _ := json.MarshalIndent(m, "", "  ")
+	return string(s)
 }
 
 func (m *FileMeta) Copy() *FileMeta {

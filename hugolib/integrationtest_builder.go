@@ -82,7 +82,6 @@ type IntegrationTestBuilder struct {
 	renamedFiles []string
 
 	buildCount int
-	counters   *testCounters
 	logBuff    lockingBuffer
 
 	builderInit sync.Once
@@ -172,12 +171,12 @@ func (s *IntegrationTestBuilder) AssertIsFileError(err error) herrors.FileError 
 
 func (s *IntegrationTestBuilder) AssertRenderCountContent(count int) {
 	s.Helper()
-	s.Assert(s.counters.contentRenderCounter, qt.Equals, uint64(count))
+	s.Assert(s.H.buildCounters.contentRender.Load(), qt.Equals, uint64(count))
 }
 
 func (s *IntegrationTestBuilder) AssertRenderCountPage(count int) {
 	s.Helper()
-	s.Assert(s.counters.pageRenderCounter, qt.Equals, uint64(count))
+	s.Assert(s.H.buildCounters.pageRender.Load(), qt.Equals, uint64(count))
 }
 
 func (s *IntegrationTestBuilder) Build() *IntegrationTestBuilder {
@@ -381,8 +380,6 @@ func (s *IntegrationTestBuilder) build(cfg BuildCfg) error {
 
 	changeEvents := s.changeEvents()
 	s.logBuff.Reset()
-	s.counters = &testCounters{}
-	cfg.testCounters = s.counters
 
 	if s.buildCount > 0 && (len(changeEvents) == 0) {
 		return nil

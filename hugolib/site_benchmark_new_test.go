@@ -480,13 +480,11 @@ title: %s
 
 Edited!!`, p.Title()))
 
-	counters := &testCounters{}
-
-	b.Build(BuildCfg{testCounters: counters})
+	b.Build(BuildCfg{})
 
 	// We currently rebuild all the language versions of the same content file.
 	// We could probably optimize that case, but it's not trivial.
-	b.Assert(int(counters.contentRenderCounter), qt.Equals, 4)
+	b.Assert(int(b.H.buildCounters.contentRender.Load()), qt.Equals, 4)
 	b.AssertFileContent("public"+p.RelPermalink()+"index.html", "Edited!!")
 }
 

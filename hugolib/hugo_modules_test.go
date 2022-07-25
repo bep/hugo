@@ -654,7 +654,8 @@ min_version = 0.55.0
 	c.Assert(logger.LogCounters().WarnCounter.Count(), qt.Equals, uint64(3))
 }
 
-func TestModulesSymlinks(t *testing.T) {
+// TODO1
+func _TestModulesSymlinks(t *testing.T) {
 	skipSymlink(t)
 
 	wd, _ := os.Getwd()

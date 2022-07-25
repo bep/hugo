@@ -71,7 +71,6 @@ func CreateTargetPaths(d TargetPathDescriptor) (tp TargetPaths) {
 		pb.Add(d.Type.BaseName)
 		pb.noSubResources = true
 	} else if d.Type == output.HTTPStatusHTMLFormat || d.Type == output.SitemapFormat {
-		pb.Add(d.Kind)
 		pb.noSubResources = true
 	} else if d.Kind != pagekinds.Page && d.URL == "" && len(d.Sections) > 0 {
 		if d.ExpandedPermalink != "" {

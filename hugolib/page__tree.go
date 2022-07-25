@@ -58,22 +58,21 @@ func (pt pageTree) IsDescendant(other any) bool {
 
 // 2 TODO1 create issue: CurrentSection should navigate sideways for all branch nodes.
 func (pt pageTree) CurrentSection() page.Page {
-	if pt.p.isContentNodeBranch() {
+	if pt.p.IsNode() {
 		return pt.p
 	}
+
 	_, n := pt.p.s.pageMap.treePages.LongestPrefix(paths.Dir(pt.p.Path()), func(n contentNodeI) bool { return n.isContentNodeBranch() })
 	if n != nil {
 		return n.(page.Page)
 	}
-
-	printInfoAboutHugoSites(pt.p.s.h)
 
 	panic(fmt.Sprintf("CurrentSection not found for %q in lang %s", pt.p.Path(), pt.p.Lang()))
 }
 
 func (pt pageTree) FirstSection() page.Page {
 	s := pt.p.Path()
-	if !pt.p.isContentNodeBranch() {
+	if !pt.p.IsNode() {
 		s = paths.Dir(s)
 	}
 

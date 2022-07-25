@@ -17,8 +17,11 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"reflect"
 
+	"github.com/gohugoio/hugo/common/maps"
 	"github.com/gohugoio/hugo/common/paths"
+	"github.com/gohugoio/hugo/parser/pageparser"
 
 	"github.com/gohugoio/hugo/source"
 
@@ -85,7 +88,9 @@ func (c *pagesCollector) Collect() (collectErr error) {
 			if id.IsLeafBundle() {
 				collectErr = c.collectDir(id.Path, true, nil)
 			} else if id.IsBranchBundle() {
-				collectErr = c.collectDir(id.Path, true, nil)
+				isCascadingEdit := c.isCascadingEdit(id.Path)
+				// bookmark cascade
+				collectErr = c.collectDir(id.Path, !isCascadingEdit, nil)
 			} else {
 				// We always start from a directory.
 				collectErr = c.collectDir(id.Path, true, func(fim hugofs.FileMetaDirEntry) bool {
@@ -163,17 +168,6 @@ func (c *pagesCollector) collectDirDir(rootDir hugofs.FileMetaDirEntry, dpath st
 
 		return nil
 	}
-
-	/*applyMetaDefaults := func(meta *hugofs.FileMeta) {
-		// Make sure language is set.
-		if meta.Lang == "" {
-			if meta.PathInfo.Lang() != "" {
-				meta.Lang = meta.PathInfo.Lang()
-			} else {
-				meta.Lang = rootDir.Meta().Lang
-			}
-		}
-	}*/
 
 	filter := func(fim hugofs.FileMetaDirEntry) bool {
 		if fim.Meta().SkipDir {
@@ -353,4 +347,52 @@ func (c *pagesCollector) handleFiles(fis ...hugofs.FileMetaDirEntry) error {
 		c.proc.Process(fi, typ)
 	}
 	return nil
+}
+
+// isCascadingEdit returns whether the dir represents a cascading edit.
+// That is, if a front matter cascade section is removed, added or edited.
+// If this is the case we must re-evaluate its descendants.
+func (c *pagesCollector) isCascadingEdit(dir *paths.Path) bool {
+	p := c.h.getPageFirstDimension(dir.Base())
+
+	if p == nil {
+		return false
+	}
+
+	if p.File() == nil {
+		return false
+	}
+
+	f, err := p.File().FileInfo().Meta().Open()
+	if err != nil {
+		// File may have been removed, assume a cascading edit.
+		// Some false positives is not too bad.
+		return true
+	}
+
+	pf, err := pageparser.ParseFrontMatterAndContent(f)
+	f.Close()
+	if err != nil {
+		return true
+	}
+
+	maps.PrepareParams(pf.FrontMatter)
+	cascade1, ok := pf.FrontMatter["cascade"]
+	hasCascade := p.m.cascade != nil
+	if !ok {
+		return hasCascade
+	}
+	if !hasCascade {
+		return true
+	}
+
+	for _, v := range p.m.cascade {
+		isCascade := !reflect.DeepEqual(cascade1, v)
+		if isCascade {
+			return true
+		}
+	}
+
+	return false
+
 }

@@ -14,13 +14,10 @@
 package hugofs
 
 import (
-	"fmt"
 	"io/fs"
 	"os"
 	"syscall"
 	"time"
-
-	"errors"
 
 	"github.com/spf13/afero"
 )
@@ -32,19 +29,13 @@ var (
 	_ afero.File           = (*sliceDir)(nil)
 )
 
-func NewSliceFs(dirs ...FileMetaDirEntry) (afero.Fs, error) {
-	if len(dirs) == 0 {
+func NewSliceFs(fis ...FileMetaDirEntry) (afero.Fs, error) {
+	if len(fis) == 0 {
 		return NoOpFs, nil
 	}
 
-	for _, dir := range dirs {
-		if !dir.IsDir() {
-			return nil, errors.New("this fs supports directories only")
-		}
-	}
-
 	fs := &SliceFs{
-		dirs: dirs,
+		fis: fis,
 	}
 
 	return fs, nil
@@ -52,12 +43,12 @@ func NewSliceFs(dirs ...FileMetaDirEntry) (afero.Fs, error) {
 
 // SliceFs is an ordered composite filesystem.
 type SliceFs struct {
-	dirs []FileMetaDirEntry
+	fis []FileMetaDirEntry
 }
 
 func (fs *SliceFs) UnwrapFilesystems() []afero.Fs {
 	var fss []afero.Fs
-	for _, dir := range fs.dirs {
+	for _, dir := range fs.fis {
 		fss = append(fss, dir.Meta().Fs)
 	}
 	return fss
@@ -85,7 +76,8 @@ func (fs *SliceFs) LstatIfPossible(name string) (os.FileInfo, bool, error) {
 		return decorateFileInfo(fi, fs, fs.getOpener(name), "", "", nil), false, nil
 	}
 
-	return nil, false, fmt.Errorf("lstat: files not supported: %q", name)
+	return fi, false, nil
+
 }
 
 func (fs *SliceFs) Mkdir(n string, p os.FileMode) error {
@@ -107,7 +99,7 @@ func (fs *SliceFs) Open(name string) (afero.File, error) {
 	}
 
 	if !fi.IsDir() {
-		panic("currently only dirs in here")
+		return fi.(MetaProvider).Meta().Open()
 	}
 
 	return &sliceDir{
@@ -118,10 +110,6 @@ func (fs *SliceFs) Open(name string) (afero.File, error) {
 }
 
 func (fs *SliceFs) OpenFile(name string, flag int, perm os.FileMode) (afero.File, error) {
-	panic("not implemented")
-}
-
-func (fs *SliceFs) ReadDir(name string) ([]os.FileInfo, error) {
 	panic("not implemented")
 }
 
@@ -153,7 +141,7 @@ func (fs *SliceFs) getOpener(name string) func() (afero.File, error) {
 }
 
 func (fs *SliceFs) pickFirst(name string) (os.FileInfo, int, error) {
-	for i, mfs := range fs.dirs {
+	for i, mfs := range fs.fis {
 		meta := mfs.Meta()
 		fs := meta.Fs
 		fi, _, err := lstatIfPossible(fs, name)
@@ -192,8 +180,12 @@ func (sfs *SliceFs) readDirs(name string, startIdx, count int) ([]fs.DirEntry, e
 
 	var dirs []fs.DirEntry
 
-	for i := startIdx; i < len(sfs.dirs); i++ {
-		mfs := sfs.dirs[i]
+	for i := startIdx; i < len(sfs.fis); i++ {
+		mfs := sfs.fis[i]
+		if !mfs.IsDir() {
+			dirs = append(dirs, mfs)
+			continue
+		}
 
 		fis, err := collect(mfs.Meta())
 		if err != nil {

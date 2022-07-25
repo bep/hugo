@@ -381,6 +381,11 @@ func (p *pageContentOutput) initRenderHooks() error {
 				if err != nil {
 					panic(err)
 				}
+				if !found && p.po.ps.s.running() {
+					// TODO1 more specific.
+					p.po.dependencyManagerOutput.AddIdentity(identity.NewGlobIdentity("**/_markup/*"))
+
+				}
 				return templ, found
 			}
 

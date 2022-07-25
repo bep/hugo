@@ -300,20 +300,20 @@ func (m *pageMap) getTermsForPageInTaxonomy(path, taxonomy string) page.Pages {
 	return v.(page.Pages)
 }
 
-func (m *pageMap) getResourcesForPage(p *pageState) resource.Resources {
-	key := p.Path() + "/get-resources-for-page"
+func (m *pageMap) getResourcesForPage(ps *pageState) resource.Resources {
+	key := ps.Path() + "/get-resources-for-page"
 	v, err := m.cachePages.GetOrCreate(context.TODO(), key, func() *memcache.Entry {
-		prefix := p.Path()
+		prefix := ps.Path()
 		if prefix != "/" {
 			prefix += "/"
 		}
 		tree := m.treeLeafResources
-		if p.IsNode() {
+		if ps.IsNode() {
 			tree = m.treeBranchResources
 		}
 
-		targetPaths := p.targetPaths()
-		pagePath := p.Path()
+		targetPaths := ps.targetPaths()
+		pagePath := ps.Path()
 
 		var res resource.Resources
 		err := tree.Walk(context.TODO(), doctree.WalkConfig[resource.Resource]{
@@ -324,12 +324,14 @@ func (m *pageMap) getResourcesForPage(p *pageState) resource.Resources {
 					var err error
 					n, err = init.Init(func(p *paths.Path, openContent resource.OpenReadSeekCloser) (resource.Resource, error) {
 						relPath := strings.TrimPrefix(p.Path(), pagePath)
-						var rd resources.ResourceSourceDescriptor
-						rd.OpenReadSeekCloser = openContent
-						rd.Path = p
-						rd.RelPermalink = path.Join(targetPaths.SubResourceBaseLink, relPath)
-						rd.TargetPath = path.Join(targetPaths.SubResourceBaseTarget, relPath)
-						rd.Name = strings.TrimPrefix(relPath, "/")
+						rd := resources.ResourceSourceDescriptor{
+							OpenReadSeekCloser: openContent,
+							Path:               p,
+							RelPermalink:       path.Join(targetPaths.SubResourceBaseLink, relPath),
+							TargetPath:         path.Join(targetPaths.SubResourceBaseTarget, relPath),
+							Name:               strings.TrimPrefix(relPath, "/"),
+							LazyPublish:        !ps.m.buildConfig.PublishResources,
+						}
 
 						return m.s.ResourceSpec.New(rd)
 
@@ -369,8 +371,8 @@ func (m *pageMap) getResourcesForPage(p *pageState) resource.Resources {
 			}
 			sort.SliceStable(res, lessFunc)
 
-			if len(p.m.resourcesMetadata) > 0 {
-				resources.AssignMetadata(p.m.resourcesMetadata, res...)
+			if len(ps.m.resourcesMetadata) > 0 {
+				resources.AssignMetadata(ps.m.resourcesMetadata, res...)
 				sort.SliceStable(res, lessFunc)
 			}
 		}
@@ -944,6 +946,10 @@ func (site *Site) AssemblePages(changeTracker *whatChanged) error {
 		changeTracker: changeTracker,
 	}
 
+	if err := assembler.removeDisabledKinds(); err != nil {
+		return err
+	}
+
 	if err := assembler.addMissingRootSections(); err != nil {
 		return err
 	}
@@ -953,10 +959,6 @@ func (site *Site) AssemblePages(changeTracker *whatChanged) error {
 	}
 
 	if err := assembler.addStandalonePages(); err != nil {
-		return err
-	}
-
-	if err := assembler.removeDisabledKinds(); err != nil {
 		return err
 	}
 

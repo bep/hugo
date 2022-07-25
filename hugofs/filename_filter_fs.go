@@ -155,10 +155,6 @@ func (fs *filenameFilterFs) Chown(n string, uid, gid int) error {
 	return syscall.EPERM
 }
 
-func (fs *filenameFilterFs) ReadDir(name string) ([]os.FileInfo, error) {
-	panic("not implemented")
-}
-
 func (fs *filenameFilterFs) Remove(n string) error {
 	return syscall.EPERM
 }

@@ -234,7 +234,7 @@ func (p *pageMeta) Name() string {
 }
 
 func (p *pageMeta) IsNode() bool {
-	return !p.IsPage()
+	return !(p.IsPage() || p.isStandalone())
 }
 
 func (p *pageMeta) IsPage() bool {

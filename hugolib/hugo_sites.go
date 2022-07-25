@@ -20,10 +20,10 @@ import (
 	"sort"
 	"strings"
 	"sync"
-	"sync/atomic"
+
+	"go.uber.org/atomic"
 
 	"github.com/gohugoio/hugo/cache/memcache"
-	"github.com/gohugoio/hugo/htesting"
 	"github.com/gohugoio/hugo/hugofs/glob"
 	"github.com/gohugoio/hugo/hugolib/doctree"
 	"github.com/gohugoio/hugo/resources/page/pagekinds"
@@ -107,7 +107,7 @@ type HugoSites struct {
 	numWorkers int
 
 	*fatalErrorHandler
-	*testCounters
+	buildCounters *buildCounters
 }
 
 // ShouldSkipFileChangeEvent allows skipping filesystem event early before
@@ -118,24 +118,9 @@ func (h *HugoSites) ShouldSkipFileChangeEvent(ev fsnotify.Event) bool {
 	return h.skipRebuildForFilenames[ev.Name]
 }
 
-// Only used in tests.
-type testCounters struct {
-	contentRenderCounter uint64
-	pageRenderCounter    uint64
-}
-
-func (h *testCounters) IncrContentRender() {
-	if h == nil {
-		return
-	}
-	atomic.AddUint64(&h.contentRenderCounter, 1)
-}
-
-func (h *testCounters) IncrPageRender() {
-	if h == nil {
-		return
-	}
-	atomic.AddUint64(&h.pageRenderCounter, 1)
+type buildCounters struct {
+	contentRender atomic.Uint64
+	pageRender    atomic.Uint64
 }
 
 type fatalErrorHandler struct {
@@ -679,6 +664,16 @@ func (h *HugoSites) withPage(fn func(s string, p *pageState) bool) {
 	})
 }
 
+// getPageFirstDimension returns the first dimension of the page.
+// Use this if you don't really care about the dimension.
+func (h *HugoSites) getPageFirstDimension(s string) *pageState {
+	all := h.Sites[0].pageMap.treePages.GetAll(s)
+	if len(all) == 0 {
+		return nil
+	}
+	return all[0].(*pageState)
+}
+
 func (h *HugoSites) createSitesFromConfig(cfg config.Provider) error {
 	oldLangs, _ := h.Cfg.Get("languagesSorted").(langs.Languages)
 
@@ -753,8 +748,6 @@ type BuildCfg struct {
 
 	// Set when the buildlock is already acquired (e.g. the archetype content builder).
 	NoBuildLock bool
-
-	testCounters *testCounters
 }
 
 // shouldRender is used in the Fast Render Mode to determine if we need to re-render
@@ -1062,14 +1055,10 @@ func (h *HugoSites) resetPageRenderStateForIdentities(ids ...identity.Identity) 
 		return
 	}
 
-	htesting.Println("Reset page render state for", ids)
-
 	h.withPage(func(s string, p *pageState) bool {
 		var mayBeDependent bool
 		for _, id := range ids {
 			if !identity.IsNotDependent(p, id) {
-				htesting.Println("May be dependent", id, p.Path())
-
 				mayBeDependent = true
 				break
 			}

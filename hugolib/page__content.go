@@ -551,7 +551,7 @@ func (c *cachedContent) contentRendered(cp *pageContentOutput) (contentTableOfCo
 			if err != nil {
 				return "", err
 			}
-			cp.po.ps.s.h.IncrContentRender()
+			cp.po.ps.s.h.buildCounters.contentRender.Inc()
 
 			workContent = r.Bytes()
 

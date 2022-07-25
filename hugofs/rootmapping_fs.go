@@ -665,7 +665,7 @@ func (fs *RootMappingFs) statRoot(root RootMapping, name string) (FileMetaDirEnt
 
 	var opener func() (afero.File, error)
 	if fi.IsDir() {
-		// Make sure metadata gets applied in Readdir.
+		// Make sure metadata gets applied in ReadDir.
 		opener = fs.realDirOpener(filename, root.Meta)
 	} else {
 		// Opens the real file directly.

@@ -16,7 +16,6 @@ package hugofs
 import (
 	"fmt"
 	"io/fs"
-	iofs "io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -234,40 +233,14 @@ func (l *baseFileDecoratorFile) ReadDir(n int) ([]fs.DirEntry, error) {
 		if err != nil {
 			return nil, fmt.Errorf("decorate: %w", err)
 		}
+
 		fisp[i] = fid.(fs.DirEntry)
+
 	}
 
 	return fisp, err
 }
 
 func (l *baseFileDecoratorFile) Readdir(c int) (ofi []os.FileInfo, err error) {
-	fis, err := l.File.(iofs.ReadDirFile).ReadDir(c)
-	if err != nil {
-		return nil, err
-	}
-
-	fisp := make([]os.FileInfo, len(fis))
-
-	for i, fi := range fis {
-		filename := fi.Name()
-		if l.Name() != "" && l.Name() != filepathSeparator {
-			filename = filepath.Join(l.Name(), fi.Name())
-		}
-
-		// We need to resolve any symlink info. TODO1 drop this.
-		/*fi, _, err := lstatIfPossible(l.fs.Fs, filename)
-		if err != nil {
-			if os.IsNotExist(err) {
-				continue
-			}
-			return nil, err
-		}*/
-		fid, err := l.fs.decorate(fi, filename)
-		if err != nil {
-			return nil, fmt.Errorf("decorate: %w", err)
-		}
-		fisp[i] = fid.(os.FileInfo)
-	}
-
-	return fisp, err
+	panic("not supported: Use ReadDir")
 }

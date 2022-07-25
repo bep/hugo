@@ -809,6 +809,11 @@ func (t *templateHandler) loadTemplates() error {
 			return nil
 		}
 
+		if !strings.HasSuffix(path, fi.Name()) {
+			// TODO1
+			panic(fmt.Sprintf("loadTemplates: %q vs %q", path, fi.Name()))
+		}
+
 		name := strings.TrimPrefix(filepath.ToSlash(path), "/")
 		filename := filepath.Base(path)
 		outputFormat, found := t.OutputFormatsConfig.FromFilename(filename)

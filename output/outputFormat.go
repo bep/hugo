@@ -199,6 +199,7 @@ var (
 		IsPlainText: true,
 		BaseName:    "sitemap",
 		Ugly:        true,
+		Root:        true,
 		Rel:         "sitemap",
 	}
 )

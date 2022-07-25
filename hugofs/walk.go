@@ -83,6 +83,9 @@ type WalkwayConfig struct {
 func NewWalkway(cfg WalkwayConfig) *Walkway {
 	var fs afero.Fs
 	if cfg.Info != nil {
+		if !cfg.Info.IsDir() {
+			panic(fmt.Sprintf("%q is not a directory", cfg.Info.Name()))
+		}
 		fs = cfg.Info.Meta().Fs
 	} else {
 		fs = cfg.Fs
@@ -159,7 +162,7 @@ func (w *Walkway) Walk() error {
 	}
 
 	if !fi.IsDir() {
-		return w.walkFn(w.root, nil, errors.New("file to walk must be a directory"))
+		panic(fmt.Sprintf("%q is not a directory", fi.Name()))
 	}
 
 	return w.walk(w.root, fi, w.dirEntries, w.walkFn)
@@ -213,7 +216,6 @@ func (w *Walkway) walk(path string, info FileMetaDirEntry, dirEntries []FileMeta
 
 	meta := info.Meta()
 	filename := meta.Filename
-	component := meta.Component
 
 	if dirEntries == nil {
 		f, err := w.fs.Open(path)
@@ -235,7 +237,7 @@ func (w *Walkway) walk(path string, info FileMetaDirEntry, dirEntries []FileMeta
 
 		dirEntries = DirEntriesToFileMetaDirEntries(fis)
 		for _, entry := range dirEntries {
-			entry.Meta().Component = component
+			entry.Meta().Merge(meta)
 		}
 
 		if !meta.IsOrdered {
@@ -278,10 +280,6 @@ func (w *Walkway) walk(path string, info FileMetaDirEntry, dirEntries []FileMeta
 
 		meta := fim.Meta()
 
-		if meta.Component == "" {
-			meta.Component = w.component
-		}
-
 		// Note that we use the original Name even if it's a symlink.
 		name := meta.Name
 		if name == "" {
@@ -292,20 +290,22 @@ func (w *Walkway) walk(path string, info FileMetaDirEntry, dirEntries []FileMeta
 			panic(fmt.Sprintf("[%s] no name set in %v", path, meta))
 		}
 
-		if meta.PathInfo == nil {
-			pathn := filepath.Join(path, name)
+		pathn := filepath.Join(path, name)
 
-			pathMeta := pathn
+		pathMeta := meta.Path
+		if pathMeta == "" {
+			pathMeta = pathn
 			if w.basePath != "" {
 				pathMeta = strings.TrimPrefix(pathn, w.basePath)
 			}
-			meta.Path = normalizeFilename(pathMeta)
-			meta.PathInfo = paths.Parse(meta.Path, paths.ForComponent(meta.Component))
-			meta.PathWalk = pathn
+			pathMeta = normalizeFilename(pathMeta)
+		}
 
-			if meta.Lang == "" {
-				meta.Lang = meta.PathInfo.Lang()
-			}
+		meta.PathInfo = paths.Parse(pathMeta, paths.ForComponent(meta.Component))
+		meta.PathWalk = pathn
+
+		if meta.Lang == "" {
+			meta.Lang = meta.PathInfo.Lang()
 		}
 
 		if fim.IsDir() && w.isSeen(meta.Filename) {

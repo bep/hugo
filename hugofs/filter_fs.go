@@ -127,10 +127,6 @@ func (fs *FilterFs) OpenFile(name string, flag int, perm os.FileMode) (afero.Fil
 	return fs.fs.Open(name)
 }
 
-func (fs *FilterFs) ReadDir(name string) ([]os.FileInfo, error) {
-	panic("not implemented")
-}
-
 func (fs *FilterFs) Remove(n string) error {
 	return syscall.EPERM
 }

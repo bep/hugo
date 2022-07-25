@@ -766,11 +766,7 @@ func (s *sitesBuilder) AssertFileContent(filename string, matches ...string) {
 			if match == "" || strings.HasPrefix(match, "#") {
 				continue
 			}
-			if !strings.Contains(content, match) {
-				fmt.Println(content)
-				s.Fatalf("No match for %q in content for %q", match, filename)
-
-			}
+			s.Assert(strings.Contains(content, match), qt.Equals, true, qt.Commentf("File: %s\nContent: %s\nDoes not contain: %s", filename, content, match))
 		}
 	}
 }
