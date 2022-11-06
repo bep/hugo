@@ -68,12 +68,8 @@ type pageTrees struct {
 	// treeLeafResources with key + "/" to get all of its resources.
 	treePages *doctree.Root[contentNodeI]
 
-	// This tree contains Resoures bundled in regular pages.
-	treeLeafResources *doctree.Root[doctree.NodeGetter[resource.Resource]]
-
-	// This tree contains Resources bundled in branch pages (e.g. sections).
-	// *doctree.LazySlice[*paths.Path, resource.OpenReadSeekCloser, resource.Resource]
-	treeBranchResources *doctree.Root[doctree.NodeGetter[resource.Resource]]
+	// This tree contains Resoures bundled in pages.
+	treeResources *doctree.Root[doctree.NodeGetter[resource.Resource]]
 
 	// This tree contains all taxonomy entries, e.g "/tags/blue/page1"
 	treeTaxonomyEntries *doctree.Root[*weightedContentNode]
@@ -100,16 +96,30 @@ func (t *pageTrees) DeletePage(key string) {
 	defer commit1()
 	commit2 := t.treePages.Lock(true)
 	defer commit2()
-	t.resourceTrees.DeletePrefix(helpers.AddLeadingSlash(key))
+	// TODO1
+	t.resourceTrees.DeletePrefix(helpers.AddTrailingSlash(key))
+
+	/*
+		/section/logo.png
+		/section/page1
+		/section/page1/logo.png
+		/section/page2
+		/section/subsection/page1
+		/section/subsection/logo.png
+
+		Delete: /section/page1 => prefix /section/page1/
+		Delete: /section => exact /section/page1/logo.png
+	*/
+
 	t.treePages.Delete(key)
 }
 
 // Shape shapes all trees in t to the given dimension.
 func (t pageTrees) Shape(d, v int) *pageTrees {
 	t.treePages = t.treePages.Shape(d, v)
-	t.treeLeafResources = t.treeLeafResources.Shape(d, v)
-	t.treeBranchResources = t.treeBranchResources.Shape(d, v)
+	t.treeResources = t.treeResources.Shape(d, v)
 	t.treeTaxonomyEntries = t.treeTaxonomyEntries.Shape(d, v)
+
 	return &t
 }
 
@@ -363,10 +373,9 @@ func (m *pageMap) getResourcesForPage(ps *pageState) resource.Resources {
 		if prefix != "/" {
 			prefix += "/"
 		}
-		tree := m.treeLeafResources // TODO1 we can probably have only one.
+		tree := m.treeResources
 		maxLevel := -1
 		if ps.IsNode() {
-			tree = m.treeBranchResources
 			maxLevel = strings.Count(prefix, "/")
 		}
 

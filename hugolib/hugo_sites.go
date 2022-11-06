@@ -501,10 +501,7 @@ func (l configLoader) applyDeps(cfg deps.DepsCfg, sites ...*Site) error {
 					treePages: doctree.New(
 						pageTreeConfig,
 					),
-					treeLeafResources: doctree.New(
-						resourceTreeConfig,
-					),
-					treeBranchResources: doctree.New(
+					treeResources: doctree.New(
 						resourceTreeConfig,
 					),
 					treeTaxonomyEntries: doctree.New(
@@ -513,8 +510,7 @@ func (l configLoader) applyDeps(cfg deps.DepsCfg, sites ...*Site) error {
 				}
 
 				s.h.pageTrees.resourceTrees = doctree.MutableTrees{
-					s.h.pageTrees.treeLeafResources,
-					s.h.pageTrees.treeBranchResources,
+					s.h.pageTrees.treeResources,
 					s.h.pageTrees.treeTaxonomyEntries,
 				}
 			}

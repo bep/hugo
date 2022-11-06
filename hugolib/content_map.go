@@ -101,12 +101,7 @@ func (m *pageMap) AddFi(fi hugofs.FileMetaDirEntry, isBranch bool) error {
 
 	insertResource := func(pi *paths.Path, fim hugofs.FileMetaDirEntry) {
 		key := pi.Base()
-		var tree *doctree.Root[doctree.NodeGetter[resource.Resource]]
-		if isBranch {
-			tree = m.treeBranchResources
-		} else {
-			tree = m.treeLeafResources
-		}
+		tree := m.treeResources
 
 		commit := tree.Lock(true)
 		defer commit()
