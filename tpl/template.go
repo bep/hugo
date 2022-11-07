@@ -15,6 +15,7 @@ package tpl
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"reflect"
 	"regexp"
@@ -271,4 +272,8 @@ func AddIdentiesToDataContext(ctx context.Context, v any) {
 			})
 		}
 	}
+}
+
+func PrintCallCount() {
+	fmt.Printf("call count: %d\n", texttemplate.CallCounter)
 }

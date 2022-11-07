@@ -13,6 +13,7 @@ import (
 	"reflect"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"unicode"
 	"unicode/utf8"
 )
@@ -353,9 +354,12 @@ func call(fn reflect.Value, args ...reflect.Value) (reflect.Value, error) {
 	return safeCall(fn, argv)
 }
 
+var CallCounter int64
+
 // safeCall runs fun.Call(args), and returns the resulting value and error, if
 // any. If the call panics, the panic value is returned as an error.
 func safeCall(fun reflect.Value, args []reflect.Value) (val reflect.Value, err error) {
+	atomic.AddInt64(&CallCounter, 1)
 	defer func() {
 		if r := recover(); r != nil {
 			if e, ok := r.(error); ok {
@@ -729,7 +733,9 @@ func URLQueryEscaper(args ...any) string {
 }
 
 // evalArgs formats the list of arguments into a string. It is therefore equivalent to
+//
 //	fmt.Sprint(args...)
+//
 // except that each argument is indirected (if a pointer), as required,
 // using the same rules as the default string evaluation during template
 // execution.
