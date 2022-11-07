@@ -19,6 +19,7 @@ import (
 	"testing"
 
 	qt "github.com/frankban/quicktest"
+	"github.com/gohugoio/hugo/tpl"
 )
 
 func TestSmokeContent(t *testing.T) {
@@ -422,6 +423,9 @@ All Translations: {{ len $p1.AllTranslations }}
 
 // This is just a test to verify that BenchmarkBaseline is working as intended.
 func TestBenchmarkBaseline(t *testing.T) {
+	defer func() {
+		tpl.PrintCallCount()
+	}()
 	cfg := IntegrationTestConfig{
 		T:           t,
 		TxtarString: benchmarkBaselineFiles(),
