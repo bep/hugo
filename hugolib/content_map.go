@@ -147,12 +147,6 @@ func (m *pageMap) AddFi(fi hugofs.FileMetaDirEntry, isBranch bool) error {
 			return err
 		}
 
-		if pi.IsHTML() {
-			// This may be a raw HTML template file, and need to trigger a parse of the source to determine that.
-			if _, err := p.content.initContentMap(); err != nil {
-				return err
-			}
-		}
 		m.treePages.InsertWithLock(pi.Base(), p)
 	}
 	return nil

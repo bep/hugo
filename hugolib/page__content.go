@@ -20,7 +20,6 @@ import (
 	"io"
 	"io/ioutil"
 	"strings"
-	"sync"
 	"unicode/utf8"
 
 	"github.com/gohugoio/hugo/cache/memcache"
@@ -161,8 +160,12 @@ func newCachedContent(m *pageMeta) (*cachedContent, error) {
 		enableEmoji:    m.s.siteCfg.enableEmoji,
 	}
 
-	if err := c.parseHeader(); err != nil {
+	source, err := c.getOrReadSource()
+	if err != nil {
+		return nil, err
+	}
 
+	if err := c.parseContentFile(source); err != nil {
 		return nil, err
 	}
 
@@ -207,56 +210,10 @@ type cachedContent struct {
 		fuzzyWordCount int
 		readingTime    int
 	}
-
-	contentMapInit sync.Once
 }
 
 func (c *cachedContent) IsZero() bool {
 	return len(c.items) == 0
-}
-
-func (c *cachedContent) parseHeader() error {
-	if c.openSource == nil {
-		return nil
-	}
-
-	// TODO1 store away the file/content size so we can parse everything right away if it's small enough (remember front matter in parseContent).
-
-	source, err := c.sourceHead()
-	if err != nil {
-		return err
-	}
-
-	items, err := pageparser.ParseBytesIntroOnly(
-		source,
-		pageparser.Config{},
-	)
-
-	if err != nil || (len(items) > 0 && items[len(items)-1].IsDone()) {
-		// Probably too short buffer, fall back to parsing the complete file.
-		_, err := c.initContentMap()
-		return err
-	}
-
-	if err != nil {
-		return err
-	}
-
-	return c.mapHeader(items, source)
-}
-
-func (c *cachedContent) initContentMap() ([]byte, error) {
-	source, err := c.getOrReadSource()
-	if err != nil {
-		return nil, err
-	}
-
-	c.contentMapInit.Do(func() {
-		err = c.parseContentFile(source)
-	})
-
-	return source, err
-
 }
 
 func (c *cachedContent) parseContentFile(source []byte) error {
@@ -560,7 +517,7 @@ func (c *cachedContent) contentRendered(cp *pageContentOutput) (contentTableOfCo
 	key := c.cacheBaseKey + "/content-rendered/" + cp.key
 
 	v, err := c.getOrCreate(key, &cp.version, func(ctx context.Context) (any, error) {
-		source, err := c.initContentMap()
+		source, err := c.getOrReadSource()
 		if err != nil {
 			return "", err
 		}
