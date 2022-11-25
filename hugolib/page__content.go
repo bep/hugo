@@ -22,7 +22,6 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"github.com/gohugoio/hugo/cache/memcache"
 	"github.com/gohugoio/hugo/common/herrors"
 	"github.com/gohugoio/hugo/common/hugio"
 	"github.com/gohugoio/hugo/helpers"
@@ -150,7 +149,7 @@ func newCachedContent(m *pageMeta) (*cachedContent, error) {
 	}
 
 	c := &cachedContent{
-		cache:          m.s.pageMap.cacheContent,
+		pm:             m.s.pageMap,
 		StaleInfo:      m,
 		version:        0,
 		shortcodeState: newShortcodeHandler(filename, m.s),
@@ -174,7 +173,8 @@ func newCachedContent(m *pageMeta) (*cachedContent, error) {
 }
 
 type cachedContent struct {
-	cache        *memcache.Partition[string, *resources.StaleValue[any]]
+	pm *pageMap
+
 	cacheBaseKey string
 
 	// The source bytes.
@@ -474,7 +474,7 @@ func (c *cachedContent) sourceHead() ([]byte, error) {
 func (c *cachedContent) getOrCreate(key string, version *int, fn func(ctx context.Context) (any, error)) (any, error) {
 	ctx := context.TODO()
 	versionv := *version
-	v, err := c.cache.GetOrCreate(ctx, key, func(string) (*resources.StaleValue[any], error) {
+	v, err := c.pm.cacheContent.GetOrCreate(ctx, key, func(string) (*resources.StaleValue[any], error) {
 		v, err := fn(ctx)
 		if err != nil {
 			return nil, err
