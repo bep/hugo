@@ -233,7 +233,7 @@ func (c *cachedContent) parseHeader() error {
 	)
 
 	if err != nil || (len(items) > 0 && items[len(items)-1].IsDone()) {
-		// Probably too short buffer, fall back to parsing the comple file.
+		// Probably too short buffer, fall back to parsing the complete file.
 		_, err := c.initContentMap()
 		return err
 	}
