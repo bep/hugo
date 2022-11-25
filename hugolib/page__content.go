@@ -151,7 +151,6 @@ func newCachedContent(m *pageMeta) (*cachedContent, error) {
 	c := &cachedContent{
 		pm:             m.s.pageMap,
 		StaleInfo:      m,
-		version:        0,
 		shortcodeState: newShortcodeHandler(filename, m.s),
 		pageContentMap: &pageContentMap{},
 		cacheBaseKey:   cacheBaseKey,
@@ -159,7 +158,7 @@ func newCachedContent(m *pageMeta) (*cachedContent, error) {
 		enableEmoji:    m.s.siteCfg.enableEmoji,
 	}
 
-	source, err := c.getOrReadSource()
+	source, err := c.contentSource()
 	if err != nil {
 		return nil, err
 	}
@@ -181,7 +180,6 @@ type cachedContent struct {
 	openSource resource.OpenReadSeekCloser
 
 	resource.StaleInfo
-	version int
 
 	shortcodeState *shortcodeHandler
 	pageContentMap *pageContentMap
@@ -416,24 +414,34 @@ Loop:
 }
 
 func (c *cachedContent) mustSource() []byte {
-	source, err := c.getOrReadSource()
+	source, err := c.contentSource()
 	if err != nil {
 		panic(err)
 	}
 	return source
 }
 
-func (c *cachedContent) getOrReadSource() ([]byte, error) {
+func (c *cachedContent) contentSource() ([]byte, error) {
+	ctx := context.TODO()
 	key := c.cacheBaseKey + "/source"
-	v, err := c.getOrCreate(key, &c.version, func(ctx context.Context) (any, error) {
-		return c.readSourceAll()
+	v, err := c.pm.cacheContentSource.GetOrCreate(ctx, key, func(string) (*resources.StaleValue[[]byte], error) {
+		b, err := c.readSourceAll()
+		if err != nil {
+			return nil, err
+		}
+		return &resources.StaleValue[[]byte]{
+			Value: b,
+			IsStaleFunc: func() bool {
+				return c.IsStale()
+			},
+		}, nil
 	})
 
 	if err != nil {
 		return nil, err
 	}
 
-	return v.([]byte), nil
+	return v.Value, nil
 }
 
 func (c *cachedContent) readSourceAll() ([]byte, error) {
@@ -471,30 +479,6 @@ func (c *cachedContent) sourceHead() ([]byte, error) {
 
 }
 
-func (c *cachedContent) getOrCreate(key string, version *int, fn func(ctx context.Context) (any, error)) (any, error) {
-	ctx := context.TODO()
-	versionv := *version
-	v, err := c.pm.cacheContent.GetOrCreate(ctx, key, func(string) (*resources.StaleValue[any], error) {
-		v, err := fn(ctx)
-		if err != nil {
-			return nil, err
-		}
-		return &resources.StaleValue[any]{
-			Value: v,
-			IsStaleFunc: func() bool {
-				return c.IsStale() || *version != versionv
-			},
-		}, nil
-
-	})
-
-	if err != nil {
-		return nil, err
-	}
-
-	return v.Value, nil
-}
-
 type contentTableOfContents struct {
 	content         template.HTML
 	tableOfContents template.HTML
@@ -515,19 +499,28 @@ type plainPlainWords struct {
 
 func (c *cachedContent) contentRendered(cp *pageContentOutput) (contentTableOfContents, error) {
 	key := c.cacheBaseKey + "/content-rendered/" + cp.key
+	ctx := context.TODO()
 
-	v, err := c.getOrCreate(key, &cp.version, func(ctx context.Context) (any, error) {
-		source, err := c.getOrReadSource()
+	versionv := cp.version
+
+	v, err := c.pm.cacheContentRendered.GetOrCreate(ctx, key, func(string) (*resources.StaleValue[contentTableOfContents], error) {
+		source, err := c.contentSource()
 		if err != nil {
-			return "", err
+			return nil, err
+		}
+
+		rs := &resources.StaleValue[contentTableOfContents]{
+			IsStaleFunc: func() bool {
+				return c.IsStale() || cp.version != versionv
+			},
 		}
 
 		if len(c.items) == 0 {
-			return contentTableOfContents{}, nil
+			return rs, nil
 		}
 
 		if err := cp.initRenderHooks(); err != nil {
-			return "", err
+			return nil, err
 		}
 
 		var (
@@ -538,7 +531,7 @@ func (c *cachedContent) contentRendered(cp *pageContentOutput) (contentTableOfCo
 		f := cp.po.f
 		contentPlaceholders, hasShortcodeVariants, err := c.shortcodeState.renderShortcodesForPage(cp.po.ps, f)
 		if err != nil {
-			return "", err
+			return nil, err
 		}
 
 		if hasShortcodeVariants {
@@ -559,7 +552,7 @@ func (c *cachedContent) contentRendered(cp *pageContentOutput) (contentTableOfCo
 		} else {
 			r, err := cp.RenderContent(contentToRender, true)
 			if err != nil {
-				return "", err
+				return nil, err
 			}
 
 			cp.po.ps.s.h.buildCounters.contentRender.Inc()
@@ -591,14 +584,14 @@ func (c *cachedContent) contentRendered(cp *pageContentOutput) (contentTableOfCo
 		if c.pageContentMap.hasNonMarkdownShortcode || placeholdersEnabled {
 			workContent, err = replaceShortcodeTokens(workContent, contentPlaceholders)
 			if err != nil {
-				return "", err
+				return nil, err
 			}
 		}
 
 		if cp.po.ps.m.summary != "" {
 			b, err := cp.RenderContent([]byte(cp.po.ps.m.summary), false)
 			if err != nil {
-				return "", err
+				return nil, err
 			}
 			result.summary = helpers.BytesToHTML(cp.po.ps.s.ContentSpec.TrimShortHTML(b.Bytes()))
 		} else if c.hasSummaryDivider {
@@ -606,34 +599,42 @@ func (c *cachedContent) contentRendered(cp *pageContentOutput) (contentTableOfCo
 			var err error
 			summary, workContent, err = splitUserDefinedSummaryAndContent(cp.po.ps.m.markup, workContent)
 			if err != nil {
-				return "", err
+				return nil, err
 			}
 			result.summary = helpers.BytesToHTML(summary)
 
 		}
 
 		result.content = helpers.BytesToHTML(workContent)
+		rs.Value = result
 
-		return result, nil
+		return rs, nil
 	})
 
 	if err != nil {
-
 		return contentTableOfContents{}, cp.po.ps.wrapError(err)
 	}
 
-	return v.(contentTableOfContents), nil
+	return v.Value, nil
 }
 
 func (c *cachedContent) contentPlain(cp *pageContentOutput) (plainPlainWords, error) {
 	key := c.cacheBaseKey + "/content-plain" + cp.key
+	ctx := context.TODO()
 
-	v, err := c.getOrCreate(key, &cp.version, func(ctx context.Context) (any, error) {
+	versionv := cp.version
+
+	v, err := c.pm.cacheContentPlain.GetOrCreate(ctx, key, func(string) (*resources.StaleValue[plainPlainWords], error) {
 		var result plainPlainWords
+		rs := &resources.StaleValue[plainPlainWords]{
+			IsStaleFunc: func() bool {
+				return c.IsStale() || cp.version != versionv
+			},
+		}
 
 		rendered, err := c.contentRendered(cp)
 		if err != nil {
-			return result, err
+			return nil, err
 		}
 
 		result.plain = tpl.StripHTML(string(rendered.content))
@@ -680,12 +681,13 @@ func (c *cachedContent) contentPlain(cp *pageContentOutput) (plainPlainWords, er
 			result.summaryTruncated = truncated
 		}
 
-		return result, nil
+		rs.Value = result
+
+		return rs, nil
 	})
 
 	if err != nil {
 		return plainPlainWords{}, err
 	}
-
-	return v.(plainPlainWords), nil
+	return v.Value, nil
 }

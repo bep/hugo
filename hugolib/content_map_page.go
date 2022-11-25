@@ -48,9 +48,11 @@ type pageMap struct {
 	*pageTrees
 	pageReverseIndex *contentTreeReverseIndex
 
-	cachePages     *memcache.Partition[string, page.Pages]
-	cacheResources *memcache.Partition[string, resource.Resources]
-	cacheContent   *memcache.Partition[string, *resources.StaleValue[any]]
+	cachePages           *memcache.Partition[string, page.Pages]
+	cacheResources       *memcache.Partition[string, resource.Resources]
+	cacheContentRendered *memcache.Partition[string, *resources.StaleValue[contentTableOfContents]]
+	cacheContentPlain    *memcache.Partition[string, *resources.StaleValue[plainPlainWords]]
+	cacheContentSource   *memcache.Partition[string, *resources.StaleValue[[]byte]]
 
 	cfg contentMapConfig
 }
@@ -658,10 +660,12 @@ func newPageMap(i int, s *Site) *pageMap {
 	taxonomiesConfig := s.siteCfg.taxonomiesConfig.Values()
 
 	m = &pageMap{
-		pageTrees:      s.h.pageTrees.Shape(0, i),
-		cachePages:     memcache.GetOrCreatePartition[string, page.Pages](s.MemCache, fmt.Sprintf("pages/%d", i), memcache.OptionsPartition{Weight: 10, ClearWhen: memcache.ClearOnRebuild}),
-		cacheResources: memcache.GetOrCreatePartition[string, resource.Resources](s.MemCache, fmt.Sprintf("resources/%d", i), memcache.OptionsPartition{Weight: 60, ClearWhen: memcache.ClearOnRebuild}),
-		cacheContent:   memcache.GetOrCreatePartition[string, *resources.StaleValue[any]](s.MemCache, fmt.Sprintf("content/%d", i), memcache.OptionsPartition{Weight: 70, ClearWhen: memcache.ClearOnChange}),
+		pageTrees:            s.h.pageTrees.Shape(0, i),
+		cachePages:           memcache.GetOrCreatePartition[string, page.Pages](s.MemCache, fmt.Sprintf("pages/%d", i), memcache.OptionsPartition{Weight: 10, ClearWhen: memcache.ClearOnRebuild}),
+		cacheResources:       memcache.GetOrCreatePartition[string, resource.Resources](s.MemCache, fmt.Sprintf("resources/%d", i), memcache.OptionsPartition{Weight: 60, ClearWhen: memcache.ClearOnRebuild}),
+		cacheContentRendered: memcache.GetOrCreatePartition[string, *resources.StaleValue[contentTableOfContents]](s.MemCache, fmt.Sprintf("content-rendered/%d", i), memcache.OptionsPartition{Weight: 70, ClearWhen: memcache.ClearOnChange}),
+		cacheContentPlain:    memcache.GetOrCreatePartition[string, *resources.StaleValue[plainPlainWords]](s.MemCache, fmt.Sprintf("content-plain/%d", i), memcache.OptionsPartition{Weight: 70, ClearWhen: memcache.ClearOnChange}),
+		cacheContentSource:   memcache.GetOrCreatePartition[string, *resources.StaleValue[[]byte]](s.MemCache, fmt.Sprintf("content-source/%d", i), memcache.OptionsPartition{Weight: 70, ClearWhen: memcache.ClearOnChange}),
 
 		// Old
 

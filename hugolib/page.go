@@ -237,7 +237,7 @@ func (p *pageState) Pages() page.Pages {
 // RawContent returns the un-rendered source content without
 // any leading front matter.
 func (p *pageState) RawContent() string {
-	source, err := p.content.getOrReadSource()
+	source, err := p.content.contentSource()
 	if err != nil {
 		panic(err)
 	}
