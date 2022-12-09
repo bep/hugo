@@ -5,7 +5,7 @@ require (
 	github.com/PuerkitoBio/purell v1.1.1
 	github.com/alecthomas/chroma/v2 v2.2.0
 	github.com/armon/go-radix v1.0.0
-	github.com/aws/aws-sdk-go v1.43.5
+	github.com/aws/aws-sdk-go v1.44.156
 	github.com/bep/clock v0.3.0
 	github.com/bep/debounce v1.2.0
 	github.com/bep/gitmap v1.1.2
@@ -56,14 +56,14 @@ require (
 	github.com/spf13/pflag v1.0.5
 	github.com/tdewolff/minify/v2 v2.11.10
 	github.com/tdewolff/parse/v2 v2.6.0
-	github.com/yuin/goldmark v1.4.12
+	github.com/yuin/goldmark v1.4.13
 	go.uber.org/atomic v1.9.0
 	gocloud.dev v0.24.0
 	golang.org/x/image v0.0.0-20211028202545-6944b10bf410
-	golang.org/x/net v0.0.0-20220607020251-c690dde0001d
-	golang.org/x/sync v0.0.0-20210220032951-036812b2e83c
-	golang.org/x/text v0.3.7
-	golang.org/x/tools v0.1.11
+	golang.org/x/net v0.1.0
+	golang.org/x/sync v0.0.0-20220722155255-886fb9371eb4
+	golang.org/x/text v0.4.0
+	golang.org/x/tools v0.1.12
 	google.golang.org/api v0.76.0
 	gopkg.in/yaml.v2 v2.4.0
 )
@@ -115,7 +115,7 @@ require (
 	go.opencensus.io v0.23.0 // indirect
 	golang.org/x/crypto v0.0.0-20211108221036-ceb1ce70b4fa // indirect
 	golang.org/x/oauth2 v0.0.0-20220411215720-9780585627b5 // indirect
-	golang.org/x/sys v0.0.0-20220520151302-bc2c85ada10a // indirect
+	golang.org/x/sys v0.1.0 // indirect
 	golang.org/x/xerrors v0.0.0-20220411194840-2f41105eb62f // indirect
 	google.golang.org/appengine v1.6.7 // indirect
 	google.golang.org/genproto v0.0.0-20220426171045-31bebdecfb46 // indirect
