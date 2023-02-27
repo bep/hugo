@@ -114,11 +114,12 @@ func (t *babelTransformation) Key() internal.ResourceTransformationKey {
 // npm install -g @babel/preset-env
 // Instead of installing globally, you can also install everything as a dev-dependency (--save-dev instead of -g)
 func (t *babelTransformation) Transform(ctx *resources.ResourceTransformationCtx) error {
-	const binaryName = "babel"
+	var binaryName = "babel"
 
 	ex := t.rs.ExecHelper
 
-	if err := ex.Sec().CheckAllowedExec(binaryName); err != nil {
+	var err error
+	if binaryName, err = ex.Sec().CheckAllowedExec(binaryName); err != nil {
 		return err
 	}
 

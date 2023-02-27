@@ -1,13 +1,17 @@
 package deps
 
 import (
+	"errors"
 	"fmt"
+	"path"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
 
+	"github.com/bep/githubreleasedownloader"
 	"github.com/gohugoio/hugo/cache/filecache"
 	"github.com/gohugoio/hugo/common/hexec"
 	"github.com/gohugoio/hugo/common/loggers"
@@ -18,8 +22,10 @@ import (
 	"github.com/gohugoio/hugo/hugofs"
 	"github.com/gohugoio/hugo/langs"
 	"github.com/gohugoio/hugo/media"
+	"github.com/gohugoio/hugo/modules"
 	"github.com/gohugoio/hugo/resources/page"
 	"github.com/gohugoio/hugo/resources/postpub"
+	"github.com/mitchellh/mapstructure"
 
 	"github.com/gohugoio/hugo/metrics"
 	"github.com/gohugoio/hugo/output"
@@ -246,6 +252,67 @@ func New(cfg DepsCfg) (*Deps, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to create security config from configuration: %w", err)
 	}
+
+	if cfg.Cfg.IsSet(("allModules")) {
+		allModules := cfg.Cfg.Get("allModules").(modules.Modules)
+		for _, m := range allModules {
+			mcfg := m.Config()
+			if mcfg.Type != modules.TypeBin {
+				continue
+			}
+			if !securityConfig.Exec.AllowBinFromModules.Accept(m.Path()) {
+				// TODO1
+				return nil, fmt.Errorf("module %q is not allowed to install binaries", m.Path())
+			}
+			fmt.Println("initSites", m.Path())
+
+			binDir, err := helpers.GetBinDir()
+			if err != nil {
+				return nil, err
+			}
+			if binDir == "" {
+				// TODO1 warning/error?
+				continue
+			}
+
+			params := mcfg.Params
+			var (
+				release githubreleasedownloader.Release
+				binName string
+			)
+			if m, ok := params["github_release"]; ok {
+				if err := mapstructure.Decode(m, &release); err != nil {
+					return nil, err
+				}
+			} else {
+				return nil, errors.New("github_release not set")
+			}
+			if m, ok := params["bin"]; ok {
+				binName = m.(string)
+			}
+			if binName == "" {
+				return nil, errors.New("bin not set")
+			}
+
+			// TOODO1 ...
+			goos := "macos"
+			goarch := strings.ToLower(runtime.GOARCH)
+			assetsFiltered := release.Assets.Filter(func(a githubreleasedownloader.Asset) bool {
+				return strings.Contains(a.Name, goos) && strings.Contains(a.Name, goarch)
+			})
+
+			if len(assetsFiltered) != 1 {
+				return nil, errors.New("no asset found")
+			}
+
+			asset := assetsFiltered[0]
+			if err := githubreleasedownloader.DownloadAndExtractAssetToDir(asset, binDir); err != nil {
+				return nil, err
+			}
+			securityConfig.Exec.ExecNameMap[path.Base(binName)] = filepath.Join(binDir, binName)
+		}
+	}
+
 	execHelper := hexec.New(securityConfig)
 
 	var filenameHasPostProcessPrefixMu sync.Mutex

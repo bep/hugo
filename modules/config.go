@@ -27,9 +27,15 @@ import (
 	"github.com/mitchellh/mapstructure"
 )
 
-const WorkspaceDisabled = "off"
+const (
+	WorkspaceDisabled = "off"
+
+	TypeBasic = "basic"
+	TypeBin   = "bin"
+)
 
 var DefaultModuleConfig = Config{
+	Type: TypeBasic,
 
 	// Default to direct, which means "git clone" and similar. We
 	// will investigate proxy settings in more depth later.
@@ -285,6 +291,9 @@ func decodeConfig(cfg config.Provider, pathReplacements map[string]string) (Conf
 type Config struct {
 	Mounts  []Mount
 	Imports []Import
+
+	// The module type, default is "basic"
+	Type string
 
 	// Meta info about this module (license information etc.).
 	Params map[string]any

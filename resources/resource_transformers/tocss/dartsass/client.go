@@ -44,11 +44,16 @@ func New(fs *filesystems.SourceFilesystem, rs *resources.Spec) (*Client, error) 
 		return &Client{dartSassNotAvailable: true}, nil
 	}
 
-	if err := rs.ExecHelper.Sec().CheckAllowedExec(dartSassEmbeddedBinaryName); err != nil {
+	var binaryName string
+	var err error
+	if binaryName, err = rs.ExecHelper.Sec().CheckAllowedExec(dartSassEmbeddedBinaryName); err != nil {
 		return nil, err
 	}
 
+	fmt.Println("binaryName", binaryName)
+
 	transpiler, err := godartsass.Start(godartsass.Options{
+		DartSassEmbeddedFilename: binaryName,
 		LogEventHandler: func(event godartsass.LogEvent) {
 			message := strings.ReplaceAll(event.Message, dartSassStdinPrefix, "")
 			switch event.Type {

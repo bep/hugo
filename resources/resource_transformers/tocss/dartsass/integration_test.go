@@ -14,6 +14,8 @@
 package dartsass_test
 
 import (
+	"fmt"
+	"os"
 	"strings"
 	"testing"
 
@@ -497,4 +499,45 @@ T1: {{ $r.Content }}
 	b.AssertLogMatches(`INFO.*Dart Sass: .*assets.*main.scss:13:0: number`)
 	b.AssertLogMatches(`INFO.*Dart Sass: .*assets.*main.scss:14:0: number`)
 
+}
+
+func TestDartSassBinaryFromModule(t *testing.T) {
+	t.Parallel()
+
+	//binDir := t.TempDir()
+	binDir := "/Users/bep/dev/go/bep/hugobin"
+
+	//defer os.RemoveAll(binDir)
+	fmt.Println("Bin dir:", binDir)
+	os.Setenv("HUGO_BIN", binDir)
+	//existingPath := os.Getenv("PATH")
+	//os.Setenv("PATH", binDir+"/sass_embedded"+string(os.PathListSeparator)+existingPath)
+
+	files := `
+-- hugo.toml --
+disableKinds = ['RSS','sitemap','taxonomy','term','page','section']
+[[module.mounts]]
+source = 'assets'
+target = 'assets'
+[[module.imports]]
+path="github.com/gohugoio/hugo-mod-bin-dartsass"
+-- go.mod --
+module testdartsass
+-- assets/main.scss --
+body {color: blue;}
+-- layouts/index.html --
+{{- $opts := dict "transpiler" "dartsass" }}
+{{- with resources.Get "main.scss" | toCSS $opts }}{{ .Content | safeHTML }}{{ end }}
+
+
+	`
+	b := hugolib.NewIntegrationTestBuilder(
+		hugolib.IntegrationTestConfig{
+			T:           t,
+			TxtarString: files,
+			NeedsOsFS:   true,
+		},
+	).Build()
+
+	b.AssertFileContent("public/index.html", "body {\n  color: blue;\n}")
 }

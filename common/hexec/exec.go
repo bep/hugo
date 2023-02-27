@@ -129,7 +129,8 @@ type Exec struct {
 // New will fail if name is not allowed according to the configured security policy.
 // Else a configured Runner will be returned ready to be Run.
 func (e *Exec) New(name string, arg ...any) (Runner, error) {
-	if err := e.sc.CheckAllowedExec(name); err != nil {
+	var err error
+	if name, err = e.sc.CheckAllowedExec(name); err != nil {
 		return nil, err
 	}
 

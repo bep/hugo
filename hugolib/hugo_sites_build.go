@@ -256,6 +256,8 @@ func (h *HugoSites) assemble(bcfg *BuildCfg) error {
 		return nil
 	}
 
+	{
+	}
 	if err := h.getContentMaps().AssemblePages(); err != nil {
 		return err
 	}

@@ -40,9 +40,14 @@ var DefaultConfig = Config{
 			"^npx$", // used by all Node tools (Babel, PostCSS).
 			"^postcss$",
 		),
+		AllowBinFromModules: NewWhitelist("^github.com/gohugoio/"),
+
 		// These have been tested to work with Hugo's external programs
 		// on Windows, Linux and MacOS.
 		OsEnv: NewWhitelist(`(?i)^((HTTPS?|NO)_PROXY|PATH(EXT)?|APPDATA|TE?MP|TERM|GO\w+)$`),
+
+		// Maps the executable name to an absolute path.
+		ExecNameMap: map[string]string{},
 	},
 	Funcs: Funcs{
 		Getenv: NewWhitelist("^HUGO_", "^CI$"),
@@ -70,8 +75,13 @@ type Config struct {
 
 // Exec holds os/exec policies.
 type Exec struct {
-	Allow Whitelist `json:"allow"`
+	Allow               Whitelist `json:"allow"`
+	AllowBinFromModules Whitelist `json:"allowBinFromModules"`
+
 	OsEnv Whitelist `json:"osEnv"`
+
+	// For internal use.
+	ExecNameMap map[string]string `json:"-"`
 }
 
 // Funcs holds template funcs policies.
@@ -101,15 +111,18 @@ func (c Config) ToTOML() string {
 	return strings.TrimSpace(b.String())
 }
 
-func (c Config) CheckAllowedExec(name string) error {
+func (c Config) CheckAllowedExec(name string) (string, error) {
 	if !c.Exec.Allow.Accept(name) {
-		return &AccessDeniedError{
+		return "", &AccessDeniedError{
 			name:     name,
 			path:     "security.exec.allow",
 			policies: c.ToTOML(),
 		}
 	}
-	return nil
+	if path, found := c.Exec.ExecNameMap[name]; found {
+		return path, nil
+	}
+	return name, nil
 
 }
 

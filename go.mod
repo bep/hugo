@@ -104,6 +104,8 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/ssooidc v1.13.8 // indirect
 	github.com/aws/aws-sdk-go-v2/service/sts v1.17.5 // indirect
 	github.com/aws/smithy-go v1.13.4 // indirect
+	github.com/bep/githubreleasedownloader v0.0.0-20230227104846-7134298d0f32 // indirect
+	github.com/bep/workers v1.1.0 // indirect
 	github.com/cpuguy83/go-md2man/v2 v2.0.2 // indirect
 	github.com/dlclark/regexp2 v1.7.0 // indirect
 	github.com/go-openapi/jsonpointer v0.19.5 // indirect
@@ -141,3 +143,5 @@ require (
 )
 
 go 1.18
+
+replace github.com/bep/githubreleasedownloader => /Users/bep/dev/go/bep/githubreleasedownloader

@@ -414,6 +414,30 @@ func GetCacheDir(fs afero.Fs, cfg config.Provider) (string, error) {
 	return GetTempDir("hugo_cache", fs), nil
 }
 
+// GetBinDir returns the directory where Hugo should store any binaries.
+// Note that it's the user's responsibility to ensure that the directory is
+// exists on the PATH.
+func GetBinDir() (string, error) {
+	binDir := os.Getenv("HUGO_BIN")
+	if binDir == "" {
+		return "", nil
+	}
+
+	binDir = addTrailingFileSeparator(binDir)
+
+	exists, err := DirExists(binDir, hugofs.Os)
+	if err != nil {
+		return "", err
+	}
+
+	if !exists {
+		return "", fmt.Errorf("HUGO_BIN env variable is set to no a directory that doesn't exist: %s", binDir)
+	}
+
+	return binDir, nil
+
+}
+
 func getCacheDir(cfg config.Provider) string {
 	// Always use the cacheDir config if set.
 	cacheDir := cfg.GetString("cacheDir")
