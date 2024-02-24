@@ -281,7 +281,7 @@ func (s *IntegrationTestBuilder) AssertPublishDir(matches ...string) {
 func (s *IntegrationTestBuilder) AssertFs(fs afero.Fs, matches ...string) {
 	s.Helper()
 	var buff bytes.Buffer
-	helpers.PrintFs(fs, "", &buff)
+	s.Assert(helpers.PrintFs(fs, "", &buff), qt.IsNil)
 	printFsLines := strings.Split(buff.String(), "\n")
 	sort.Strings(printFsLines)
 	content := strings.TrimSpace((strings.Join(printFsLines, "\n")))

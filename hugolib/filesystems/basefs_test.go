@@ -543,6 +543,28 @@ files/f2.txt false
 `)
 }
 
+func TestMountIssue12141(t *testing.T) {
+	files := `
+-- hugo.toml --
+disableKinds = ["taxonomy", "term"]
+[module]
+[[module.mounts]]
+source = "myfiles"
+target = "static"
+[[module.mounts]]
+source = "myfiles/f1.txt"
+target = "static/f2.txt"
+-- myfiles/f1.txt --
+f1
+`
+	b := hugolib.Test(t, files)
+	fs := b.H.BaseFs.StaticFs("")
+
+	b.AssertFs(fs, `
+asdf
+`)
+}
+
 func checkFileCount(fs afero.Fs, dirname string, c *qt.C, expected int) {
 	c.Helper()
 	count, names, err := countFilesAndGetFilenames(fs, dirname)

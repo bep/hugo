@@ -18,7 +18,7 @@ require (
 	github.com/bep/lazycache v0.4.0
 	github.com/bep/logg v0.4.0
 	github.com/bep/mclib v1.20400.20402
-	github.com/bep/overlayfs v0.9.1
+	github.com/bep/overlayfs v0.9.2
 	github.com/bep/simplecobra v0.4.0
 	github.com/bep/tmc v0.5.1
 	github.com/clbanning/mxj/v2 v2.7.0
@@ -62,7 +62,7 @@ require (
 	github.com/spf13/afero v1.11.0
 	github.com/spf13/cast v1.6.0
 	github.com/spf13/cobra v1.8.0
-	github.com/spf13/fsync v0.10.0
+	github.com/spf13/fsync v0.10.1
 	github.com/spf13/pflag v1.0.5
 	github.com/tdewolff/minify/v2 v2.20.17
 	github.com/tdewolff/parse/v2 v2.7.12

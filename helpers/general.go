@@ -322,18 +322,27 @@ func IsWhitespace(r rune) bool {
 
 // PrintFs prints the given filesystem to the given writer starting from the given path.
 // This is useful for debugging.
-func PrintFs(fs afero.Fs, path string, w io.Writer) {
+func PrintFs(fs afero.Fs, path string, w io.Writer) error {
 	if fs == nil {
-		return
+		return nil
 	}
 
-	afero.Walk(fs, path, func(path string, info os.FileInfo, err error) error {
+	return afero.Walk(fs, path, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			panic(fmt.Sprintf("error: path %q: %s", path, err))
 		}
 		path = filepath.ToSlash(path)
 		if path == "" {
 			path = "."
+		}
+		if !info.IsDir() {
+			// For tests. Open it and copy the content to io.Discard.
+			f, err := fs.Open(path)
+			if err != nil {
+				return err
+			}
+			defer f.Close()
+			io.Copy(io.Discard, f)
 		}
 		fmt.Fprintln(w, path, info.IsDir())
 		return nil

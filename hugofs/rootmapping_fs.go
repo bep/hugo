@@ -212,6 +212,10 @@ type keyRootMappings struct {
 	roots []RootMapping
 }
 
+func (rm *RootMapping) isDir() bool {
+	return rm.fiSingleFile == nil && rm.fi.IsDir()
+}
+
 func (rm *RootMapping) clean() {
 	rm.From = strings.Trim(filepath.Clean(rm.From), filepathSeparator)
 	rm.To = filepath.Clean(rm.To)
@@ -479,6 +483,7 @@ func (fs *RootMappingFs) getAncestors(prefix string) []keyRootMappings {
 
 func (fs *RootMappingFs) newUnionFile(fis ...FileMetaInfo) (afero.File, error) {
 	if len(fis) == 1 {
+		fmt.Println("HERE???", fis[0].Meta().Filename)
 		return fis[0].Meta().Open()
 	}
 
@@ -551,7 +556,6 @@ func (rfs *RootMappingFs) collectDirEntries(prefix string) ([]iofs.DirEntry, err
 		}
 
 		for _, fi := range direntries {
-
 			meta := fi.(FileMetaInfo).Meta()
 			meta.Merge(rm.Meta)
 
@@ -704,13 +708,13 @@ func (fs *RootMappingFs) doStat(name string) ([]FileMetaInfo, error) {
 	fileCount := 0
 	var wasFiltered bool
 	for _, root := range roots {
+
 		meta := root.fi.Meta()
-		if !meta.InclusionFilter.Match(strings.TrimPrefix(meta.Filename, meta.SourceRoot), root.fi.IsDir()) {
+		if !meta.InclusionFilter.Match(strings.TrimPrefix(meta.Filename, meta.SourceRoot), root.isDir()) {
 			wasFiltered = true
 			continue
 		}
-
-		if !root.fi.IsDir() {
+		if root.fiSingleFile != nil {
 			fileCount++
 		}
 		if fileCount > 1 {
@@ -737,12 +741,13 @@ func (fs *RootMappingFs) doStat(name string) ([]FileMetaInfo, error) {
 func (fs *RootMappingFs) statRoot(root RootMapping, filename string) (FileMetaInfo, error) {
 	dir, name := filepath.Split(filename)
 	if root.Meta.Rename != nil {
-		if n := root.Meta.Rename(name, false); n != name {
+		// TODO1 true vs false.
+		if n := root.Meta.Rename(name, true); n != name {
 			filename = filepath.Join(dir, n)
 		}
 	}
 
-	if !root.Meta.InclusionFilter.Match(root.trimFrom(filename), root.fi.IsDir()) {
+	if !root.Meta.InclusionFilter.Match(root.trimFrom(filename), root.isDir()) {
 		return nil, os.ErrNotExist
 	}
 
