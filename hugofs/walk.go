@@ -155,7 +155,7 @@ func (w *Walkway) walk(path string, info FileMetaInfo, dirEntries []FileMetaInfo
 			if w.checkErr(path, err) {
 				return nil
 			}
-			return fmt.Errorf("walk: Readdir: %w", err)
+			return fmt.Errorf("walk: Readdir: %q: %w", path, err)
 		}
 
 		dirEntries = DirEntriesToFileMetaInfos(fis)

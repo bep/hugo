@@ -455,7 +455,12 @@ target = "content/mydocs"
 Home.
 
 `
-	b := hugolib.Test(t, files)
+	b := hugolib.Test(t, files) //, hugolib.TestOptTrace())
+
+	b.AssertFs(b.H.BaseFs.Content.Fs, `
+. true
+_index.md false
+	`)
 
 	b.AssertFileContent("public/index.html", "Home.")
 
@@ -464,8 +469,9 @@ Home.
 		b.Assert(err, qt.IsNil)
 		b.Assert(ps, qt.HasLen, 1)
 		first := ps[0]
-		fi, err := b.H.BaseFs.Content.Fs.Stat(filepath.FromSlash(first.Path))
-		b.Assert(err, qt.IsNil)
+		filename := filepath.FromSlash(first.Path)
+		fi, err := b.H.BaseFs.Content.Fs.Stat(filename)
+		b.Assert(err, qt.IsNil, qt.Commentf("path: %s", filename))
 		b.Assert(fi, qt.Not(qt.IsNil))
 		return fi.(hugofs.FileMetaInfo)
 	}
@@ -561,7 +567,9 @@ f1
 	fs := b.H.BaseFs.StaticFs("")
 
 	b.AssertFs(fs, `
-asdf
+. true
+f1.txt false
+f2.txt false
 `)
 }
 

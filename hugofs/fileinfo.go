@@ -73,7 +73,7 @@ type FileMeta struct {
 	InclusionFilter *glob.FilenameFilter
 
 	// Rename the name part of the file (not the directory).
-	Rename func(name string, toFrom bool) string
+	Rename func(name string, toFrom bool) string // TODO1 remove me.
 }
 
 func (m *FileMeta) Copy() *FileMeta {

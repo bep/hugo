@@ -237,7 +237,7 @@ type SourceFilesystems struct {
 
 	AssetsWithDuplicatesPreserved *SourceFilesystem
 
-	RootFss []*hugofs.RootMappingFs
+	RootFss []hugofs.MountFs
 
 	// Writable filesystem on top the project's resources directory,
 	// with any sub module's resource fs layered below.
@@ -361,7 +361,7 @@ func (d *SourceFilesystem) MakePathRelative(filename string, checkExists bool) (
 func (d *SourceFilesystem) ReverseLookup(filename string, checkExists bool) ([]hugofs.ComponentPath, error) {
 	var cps []hugofs.ComponentPath
 	hugofs.WalkFilesystems(d.Fs, func(fs afero.Fs) bool {
-		if rfs, ok := fs.(hugofs.ReverseLookupProvder); ok {
+		if rfs, ok := fs.(hugofs.ReverseLookupProvider); ok {
 			if c, err := rfs.ReverseLookupComponent(d.Name, filename, checkExists); err == nil {
 				cps = append(cps, c...)
 			}
@@ -374,7 +374,7 @@ func (d *SourceFilesystem) ReverseLookup(filename string, checkExists bool) ([]h
 func (d *SourceFilesystem) mounts() []hugofs.FileMetaInfo {
 	var m []hugofs.FileMetaInfo
 	hugofs.WalkFilesystems(d.Fs, func(fs afero.Fs) bool {
-		if rfs, ok := fs.(*hugofs.RootMappingFs); ok {
+		if rfs, ok := fs.(hugofs.MountFs); ok {
 			mounts, err := rfs.Mounts(d.Name)
 			if err == nil {
 				m = append(m, mounts...)
@@ -751,20 +751,21 @@ func (b *sourceFilesystemsBuilder) createOverlayFs(
 		}
 
 		// We need to keep the list of directories for watching.
-		collector.addRootFs(rmfs)
-		collector.addRootFs(rmfsContent)
-		collector.addRootFs(rmfsStatic)
+		collector.addRootFs(rmfs...)
+		collector.addRootFs(rmfsContent...)
+		collector.addRootFs(rmfsStatic...)
 
 		if collector.staticPerLanguage != nil {
 			for _, l := range b.p.Cfg.Languages() {
 				lang := l.Lang
-
-				lfs := rmfsStatic.Filter(func(rm hugofs.RootMapping) bool {
-					rlang := rm.Meta.Lang
-					return rlang == "" || rlang == lang
-				})
-				bfs := hugofs.NewBasePathFs(lfs, files.ComponentFolderStatic)
-				collector.staticPerLanguage[lang] = collector.staticPerLanguage[lang].Append(bfs)
+				for _, rmfs := range rmfsStatic {
+					lfs := rmfs.Filter(func(rm hugofs.RootMapping) bool {
+						rlang := rm.Meta.Lang
+						return rlang == "" || rlang == lang
+					})
+					bfs := hugofs.NewBasePathFs(lfs, files.ComponentFolderStatic)
+					collector.staticPerLanguage[lang] = collector.staticPerLanguage[lang].Append(bfs)
+				}
 			}
 		}
 
@@ -776,9 +777,9 @@ func (b *sourceFilesystemsBuilder) createOverlayFs(
 			return filename
 		}
 
-		collector.overlayMounts = collector.overlayMounts.Append(rmfs)
-		collector.overlayMountsContent = collector.overlayMountsContent.Append(rmfsContent)
-		collector.overlayMountsStatic = collector.overlayMountsStatic.Append(rmfsStatic)
+		collector.overlayMounts = collector.overlayMounts.Append(hugofs.FilterMounts(rmfs...)...)
+		collector.overlayMountsContent = collector.overlayMountsContent.Append(hugofs.FilterMounts(rmfsContent...)...)
+		collector.overlayMountsStatic = collector.overlayMountsStatic.Append(hugofs.FilterMounts(rmfsStatic...)...)
 		collector.overlayFull = collector.overlayFull.Append(hugofs.NewBasePathFs(modBase, md.dir))
 		collector.overlayResources = collector.overlayResources.Append(hugofs.NewBasePathFs(modBase, getResourcesDir()))
 
@@ -819,14 +820,14 @@ type filesystemsCollector struct {
 	overlayFull          *overlayfs.OverlayFs
 	overlayResources     *overlayfs.OverlayFs
 
-	rootFss []*hugofs.RootMappingFs
+	rootFss []hugofs.MountFs
 
 	// Set if in multihost mode
 	staticPerLanguage map[string]*overlayfs.OverlayFs
 }
 
-func (c *filesystemsCollector) addRootFs(rfs *hugofs.RootMappingFs) {
-	c.rootFss = append(c.rootFss, rfs)
+func (c *filesystemsCollector) addRootFs(rfs ...hugofs.MountFs) {
+	c.rootFss = append(c.rootFss, rfs...)
 }
 
 type mountsDescriptor struct {
