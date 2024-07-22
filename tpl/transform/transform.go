@@ -21,8 +21,10 @@ import (
 	"html"
 	"html/template"
 	"strings"
+	"sync/atomic"
 
 	"github.com/gohugoio/hugo/cache/dynacache"
+	"github.com/gohugoio/hugo/internal/ext"
 	"github.com/gohugoio/hugo/markup/converter/hooks"
 	"github.com/gohugoio/hugo/markup/highlight"
 	"github.com/gohugoio/hugo/markup/highlight/chromalexers"
@@ -40,8 +42,14 @@ func New(deps *deps.Deps) *Namespace {
 		panic("must provide MemCache")
 	}
 
+	katexDispatcher, err := ext.StartKatex() // TODO1 Close. Also start this on demand.
+	if err != nil {
+		panic(err)
+	}
+
 	return &Namespace{
-		deps: deps,
+		deps:            deps,
+		katexDispatcher: katexDispatcher,
 		cache: dynacache.GetOrCreatePartition[string, *resources.StaleValue[any]](
 			deps.MemCache,
 			"/tmpl/transform",
@@ -52,8 +60,10 @@ func New(deps *deps.Deps) *Namespace {
 
 // Namespace provides template functions for the "transform" namespace.
 type Namespace struct {
-	cache *dynacache.Partition[string, *resources.StaleValue[any]]
-	deps  *deps.Deps
+	cache           *dynacache.Partition[string, *resources.StaleValue[any]]
+	id              atomic.Uint32
+	katexDispatcher ext.Dispatcher[ext.KatexInput, ext.KatexOutput]
+	deps            *deps.Deps
 }
 
 // Emojify returns a copy of s with all emoji codes replaced with actual emojis.
@@ -180,6 +190,29 @@ func (ns *Namespace) Plainify(s any) (string, error) {
 	}
 
 	return tpl.StripHTML(ss), nil
+}
+
+// ToMathML converts a LaTeX string to MathML.
+func (ns *Namespace) ToMathML(ctx context.Context, s any) (string, error) {
+	ss, err := cast.ToStringE(s)
+	if err != nil {
+		return "", err
+	}
+
+	// TODO1 compiler cache.
+	// TODO1 cache.
+	input := ext.KatexInput{
+		ID:          ns.id.Add(1),
+		Expression:  ss,
+		Output:      "mathml",
+		DisplayMode: true,
+	}
+
+	result, err := ns.katexDispatcher.Execute(ctx, input)
+	if err != nil {
+		return "", err
+	}
+	return result.Output, nil
 }
 
 // For internal use.
