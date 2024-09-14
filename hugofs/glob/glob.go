@@ -23,6 +23,7 @@ import (
 
 	"github.com/gobwas/glob"
 	"github.com/gobwas/glob/syntax"
+	"github.com/gohugoio/hugo/common/maps"
 )
 
 const filepathSeparator = string(os.PathSeparator)
@@ -33,6 +34,8 @@ var (
 		isWindows: isWindows,
 		cache:     make(map[string]globErr),
 	}
+
+	simpleGlobCache = maps.NewCache[string, glob.Glob]()
 )
 
 type globErr struct {
@@ -120,6 +123,12 @@ func (g globDecorator) Match(s string) bool {
 	}
 	s = strings.ToLower(s)
 	return g.g.Match(s)
+}
+
+func GetGlobSimple(pattern string) (glob.Glob, error) {
+	return simpleGlobCache.GetOrCreate(pattern, func() (glob.Glob, error) {
+		return glob.Compile(pattern, '/')
+	})
 }
 
 func GetGlob(pattern string) (glob.Glob, error) {

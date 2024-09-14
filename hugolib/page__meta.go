@@ -531,6 +531,9 @@ params:
 		case "keywords":
 			pcfg.Keywords = cast.ToStringSlice(v)
 			params[loki] = pcfg.Keywords
+		case "roles":
+			pcfg.Roles = cast.ToStringSlice(v)
+			params[loki] = pcfg.Roles
 		case "headless":
 			// Legacy setting for leaf bundles.
 			// This is since Hugo 0.63 handled in a more general way for all
@@ -688,7 +691,7 @@ params:
 		return err
 	}
 
-	if err := pcfg.Compile("", false, ext, p.s.Log, p.s.conf.MediaTypes.Config); err != nil {
+	if err := pcfg.Compile("", false, ext, p.s.Log, p.s.Conf); err != nil {
 		return err
 	}
 

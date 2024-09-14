@@ -89,6 +89,33 @@ const (
 	siteStateReady
 )
 
+// TODO1 adjust all methods that uses the embedded siteRole to use the siteRole directly.
+type siteRole struct {
+	rolei int
+
+	pageMap *pageMap
+
+	// Page navigation.
+	*pageFinder
+	taxonomies page.TaxonomyList
+	menus      navigation.Menus
+
+	// Shortcut to the home page. Note that this may be nil if
+	// home page, for some odd reason, is disabled.
+	home *pageState
+
+	// The last modification date of this site.
+	lastmod time.Time
+
+	// Lazily loaded site dependencies
+	init *siteInit
+}
+
+func (s siteRole) cloneForRole(role int) *siteRole {
+	s.rolei = role
+	return &s
+}
+
 type Site struct {
 	state     siteState
 	conf      *allconfig.Config
@@ -100,6 +127,7 @@ type Site struct {
 	h *HugoSites
 
 	*deps.Deps
+	*siteRole
 
 	// Page navigation.
 	*pageFinder
@@ -126,6 +154,11 @@ type Site struct {
 
 	// Lazily loaded site dependencies
 	init *siteInit
+}
+
+func (s Site) cloneForRole(role int) *Site {
+	s.siteRole = s.siteRole.cloneForRole(role)
+	return &s
 }
 
 func (s *Site) Debug() {
@@ -679,6 +712,7 @@ func (init *siteInit) Reset() {
 	init.taxonomies.Reset()
 }
 
+// TODO1
 func (s *Site) prepareInits() {
 	s.init = &siteInit{}
 
@@ -1357,7 +1391,7 @@ func (s *Site) getLanguagePermalinkLang(alwaysInSubDir bool) string {
 	return s.GetLanguagePrefix()
 }
 
-// Prepare site for a new full build.
+// Prepare site for a new full build. // TODO1
 func (s *Site) resetBuildState(sourceChanged bool) {
 	s.relatedDocsHandler = s.relatedDocsHandler.Clone()
 	s.init.Reset()

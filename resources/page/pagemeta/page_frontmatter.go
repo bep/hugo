@@ -27,6 +27,7 @@ import (
 	"github.com/gohugoio/hugo/common/maps"
 	"github.com/gohugoio/hugo/common/paths"
 	"github.com/gohugoio/hugo/hugofs/files"
+	"github.com/gohugoio/hugo/hugolib/roles"
 	"github.com/gohugoio/hugo/markup"
 	"github.com/gohugoio/hugo/media"
 	"github.com/gohugoio/hugo/resources/kinds"
@@ -107,6 +108,8 @@ type PageConfig struct {
 	Build   BuildConfig
 	Menus   []string
 
+	Roles []string
+
 	// User defined params.
 	Params maps.Params
 
@@ -115,8 +118,9 @@ type PageConfig struct {
 
 	// Compiled values.
 	CascadeCompiled      map[page.PageMatcher]maps.Params
-	ContentMediaType     media.Type `mapstructure:"-" json:"-"`
-	IsFromContentAdapter bool       `mapstructure:"-" json:"-"`
+	ContentMediaType     media.Type   `mapstructure:"-" json:"-"`
+	IsFromContentAdapter bool         `mapstructure:"-" json:"-"`
+	RolesCompiled        map[int]bool `mapstructure:"-" json:"-"` // TODO1 consider https://github.com/bits-and-blooms/bitset
 }
 
 var DefaultPageConfig = PageConfig{
@@ -150,7 +154,7 @@ func (p *PageConfig) Validate(pagesFromData bool) error {
 }
 
 // Compile sets up the page configuration after all fields have been set.
-func (p *PageConfig) Compile(basePath string, pagesFromData bool, ext string, logger loggers.Logger, mediaTypes media.Types) error {
+func (p *PageConfig) Compile(basePath string, pagesFromData bool, ext string, logger loggers.Logger, conf config.AllProvider) error {
 	// In content adapters, we always get relative paths.
 	if basePath != "" {
 		p.Path = path.Join(basePath, p.Path)
@@ -160,6 +164,8 @@ func (p *PageConfig) Compile(basePath string, pagesFromData bool, ext string, lo
 		p.Params = make(maps.Params)
 	}
 	maps.PrepareParams(p.Params)
+
+	mediaTypes := conf.GetConfigSection("mediaTypes").(media.Types)
 
 	if p.Content.Markup == "" && p.Content.MediaType == "" {
 		if ext == "" {
@@ -210,6 +216,23 @@ func (p *PageConfig) Compile(basePath string, pagesFromData bool, ext string, lo
 			return fmt.Errorf("failed to decode cascade: %w", err)
 		}
 		p.CascadeCompiled = cascade
+	}
+
+	configuredRoles := conf.GetConfigSection("roles").(roles.Roles)
+	p.RolesCompiled = make(map[int]bool)
+	if p.Roles == nil {
+		p.RolesCompiled[configuredRoles.IndexDefault()] = true
+	} else {
+		for _, pattern := range p.Roles {
+			i, err := configuredRoles.IndexMatch(pattern)
+			if err != nil {
+				return fmt.Errorf("failed to match role %q: %w", pattern, err)
+			}
+			if i == -1 {
+				continue
+			}
+			p.RolesCompiled[i] = true
+		}
 	}
 
 	return nil
