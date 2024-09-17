@@ -89,33 +89,6 @@ const (
 	siteStateReady
 )
 
-// TODO1 adjust all methods that uses the embedded siteRole to use the siteRole directly.
-type siteRole struct {
-	rolei int
-
-	pageMap *pageMap
-
-	// Page navigation.
-	*pageFinder
-	taxonomies page.TaxonomyList
-	menus      navigation.Menus
-
-	// Shortcut to the home page. Note that this may be nil if
-	// home page, for some odd reason, is disabled.
-	home *pageState
-
-	// The last modification date of this site.
-	lastmod time.Time
-
-	// Lazily loaded site dependencies
-	init *siteInit
-}
-
-func (s siteRole) cloneForRole(role int) *siteRole {
-	s.rolei = role
-	return &s
-}
-
 type Site struct {
 	state     siteState
 	conf      *allconfig.Config
@@ -158,6 +131,38 @@ type Site struct {
 
 func (s Site) cloneForRole(role int) *Site {
 	s.siteRole = s.siteRole.cloneForRole(role)
+	return &s
+}
+
+// TODO1 adjust all methods that uses the embedded siteRole to use the siteRole directly.
+type siteRole struct {
+	rolei int
+
+	pageMap *pageMap
+
+	// Page navigation.
+	*pageFinder
+	taxonomies page.TaxonomyList
+	menus      navigation.Menus
+
+	// Shortcut to the home page. Note that this may be nil if
+	// home page, for some odd reason, is disabled.
+	home *pageState
+
+	// The last modification date of this site.
+	lastmod time.Time
+
+	// Lazily loaded site dependencies
+	init *siteInit
+}
+
+func (s siteRole) cloneForRole(role int) *siteRole {
+	s.rolei = role
+	s.home = nil
+	s.lastmod = time.Time{}
+	s.init = nil
+	s.taxonomies = nil
+	s.menus = nil
 	return &s
 }
 
@@ -281,6 +286,7 @@ func NewHugoSites(cfg deps.DepsCfg) (*HugoSites, error) {
 			language:           language,
 			languagei:          i,
 			frontmatterHandler: frontmatterHandler,
+			relatedDocsHandler: page.NewRelatedDocsHandler(conf.Related),
 		}
 
 		if i == 0 {
@@ -294,9 +300,13 @@ func NewHugoSites(cfg deps.DepsCfg) (*HugoSites, error) {
 			s.Deps = d
 		}
 
-		s.pageMap = newPageMap(i, s, memCache, pageTrees)
+		// TODO1 clean up s vs siteRole injected.
+		pm := newPageMap(i, 0, s, memCache, pageTrees)
+		s.siteRole = &siteRole{
+			pageMap:    pm,
+			pageFinder: newPageFinder(pm),
+		}
 
-		s.pageFinder = newPageFinder(s.pageMap)
 		s.siteRefLinker, err = newSiteRefLinker(s)
 		if err != nil {
 			return nil, err
@@ -312,7 +322,6 @@ func NewHugoSites(cfg deps.DepsCfg) (*HugoSites, error) {
 		}
 
 		s.publisher = pub
-		s.relatedDocsHandler = page.NewRelatedDocsHandler(s.conf.Related)
 		// Site deps end.
 
 		s.prepareInits()
@@ -342,8 +351,19 @@ func NewHugoSites(cfg deps.DepsCfg) (*HugoSites, error) {
 		return li.Lang < lj.Lang
 	})
 
+	// The sites slice created above represents role 0, no need to create that.
+	rolesSites := make([][]*Site, len(sites))
+	rolesSites[0] = sites
+	roles := cfg.Configs.Base.Roles.Config.Sorted
+	for i := 1; i < len(roles); i++ {
+		roleSites := make([]*Site, len(sites))
+		for j, s := range sites {
+			roleSites[j] = s.cloneForRole(i)
+		}
+	}
+
 	var err error
-	h, err = newHugoSites(cfg, firstSiteDeps, pageTrees, sites)
+	h, err = newHugoSites(cfg, firstSiteDeps, pageTrees, sites, rolesSites)
 	if err == nil && h == nil {
 		panic("hugo: newHugoSitesNew returned nil error and nil HugoSites")
 	}
@@ -351,7 +371,7 @@ func NewHugoSites(cfg deps.DepsCfg) (*HugoSites, error) {
 	return h, err
 }
 
-func newHugoSites(cfg deps.DepsCfg, d *deps.Deps, pageTrees *pageTrees, sites []*Site) (*HugoSites, error) {
+func newHugoSites(cfg deps.DepsCfg, d *deps.Deps, pageTrees *pageTrees, sites []*Site, rolesSites [][]*Site) (*HugoSites, error) {
 	numWorkers := config.GetNumWorkerMultiplier()
 	numWorkersSite := numWorkers
 	if numWorkersSite > len(sites) {
@@ -361,6 +381,7 @@ func newHugoSites(cfg deps.DepsCfg, d *deps.Deps, pageTrees *pageTrees, sites []
 
 	h := &HugoSites{
 		Sites:           sites,
+		rolesSites:      rolesSites,
 		Deps:            sites[0].Deps,
 		Configs:         cfg.Configs,
 		workersSite:     workersSite,
