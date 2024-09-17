@@ -120,7 +120,8 @@ type PageConfig struct {
 	CascadeCompiled      map[page.PageMatcher]maps.Params
 	ContentMediaType     media.Type   `mapstructure:"-" json:"-"`
 	IsFromContentAdapter bool         `mapstructure:"-" json:"-"`
-	RolesCompiled        map[int]bool `mapstructure:"-" json:"-"` // TODO1 consider https://github.com/bits-and-blooms/bitset
+	RolesCompiled        []int        `mapstructure:"-" json:"-"`
+	RolesCompiledMap     map[int]bool `mapstructure:"-" json:"-"` // TODO1 consider https://github.com/bits-and-blooms/bitset
 }
 
 var DefaultPageConfig = PageConfig{
@@ -147,6 +148,30 @@ func (p *PageConfig) Validate(pagesFromData bool) error {
 	if p.Cascade != nil {
 		if !kinds.IsBranch(p.Kind) {
 			return errors.New("cascade is only supported for branch nodes")
+		}
+	}
+
+	return nil
+}
+
+// CompileEarly compiles early page configuration, before any cascading.
+func (p *PageConfig) CompileEarly(conf config.AllProvider) error {
+	configuredRoles := conf.GetConfigSection("roles").(roles.Roles)
+	p.RolesCompiledMap = make(map[int]bool)
+	if p.Roles == nil {
+		p.RolesCompiled = []int{configuredRoles.IndexDefault()}
+		p.RolesCompiledMap[configuredRoles.IndexDefault()] = true
+	} else {
+		for _, pattern := range p.Roles {
+			i, err := configuredRoles.IndexMatch(pattern)
+			if err != nil {
+				return fmt.Errorf("failed to match role %q: %w", pattern, err)
+			}
+			if i == -1 {
+				continue
+			}
+			p.RolesCompiledMap[i] = true
+			p.RolesCompiled = append(p.RolesCompiled, i)
 		}
 	}
 
@@ -216,23 +241,6 @@ func (p *PageConfig) Compile(basePath string, pagesFromData bool, ext string, lo
 			return fmt.Errorf("failed to decode cascade: %w", err)
 		}
 		p.CascadeCompiled = cascade
-	}
-
-	configuredRoles := conf.GetConfigSection("roles").(roles.Roles)
-	p.RolesCompiled = make(map[int]bool)
-	if p.Roles == nil {
-		p.RolesCompiled[configuredRoles.IndexDefault()] = true
-	} else {
-		for _, pattern := range p.Roles {
-			i, err := configuredRoles.IndexMatch(pattern)
-			if err != nil {
-				return fmt.Errorf("failed to match role %q: %w", pattern, err)
-			}
-			if i == -1 {
-				continue
-			}
-			p.RolesCompiled[i] = true
-		}
 	}
 
 	return nil

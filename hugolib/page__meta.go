@@ -293,7 +293,12 @@ func (p *pageMeta) setMetaPre(pi *contentParseInfo, logger loggers.Logger, conf 
 			pcfg.CascadeCompiled = cascade
 		}
 
-		// Look for path, lang and kind, all of which values we need early on.
+		// Look for roles, path, lang and kind, all of which values we need early on.
+		// TODO1 we need cascade support for these, esp. roles. But I guess only site config cascade.
+		if v, found := frontmatter["roles"]; found {
+			pcfg.Roles = cast.ToStringSlice(v)
+			pcfg.Params["roles"] = pcfg.Roles
+		}
 		if v, found := frontmatter["path"]; found {
 			pcfg.Path = paths.ToSlashPreserveLeading(cast.ToString(v))
 			pcfg.Params["path"] = pcfg.Path
@@ -317,6 +322,10 @@ func (p *pageMeta) setMetaPre(pi *contentParseInfo, logger loggers.Logger, conf 
 		}
 	} else if p.pageMetaParams.pageConfig.Params == nil {
 		p.pageConfig.Params = make(maps.Params)
+	}
+
+	if err := p.pageMetaParams.pageConfig.CompileEarly(conf); err != nil {
+		return err
 	}
 
 	p.pageMetaParams.init(conf.Watching())
@@ -531,9 +540,6 @@ params:
 		case "keywords":
 			pcfg.Keywords = cast.ToStringSlice(v)
 			params[loki] = pcfg.Keywords
-		case "roles":
-			pcfg.Roles = cast.ToStringSlice(v)
-			params[loki] = pcfg.Roles
 		case "headless":
 			// Legacy setting for leaf bundles.
 			// This is since Hugo 0.63 handled in a more general way for all

@@ -94,7 +94,6 @@ type Site struct {
 	conf      *allconfig.Config
 	language  *langs.Language
 	languagei int
-	pageMap   *pageMap
 
 	// The owning container.
 	h *HugoSites
@@ -103,7 +102,7 @@ type Site struct {
 	*siteRole
 
 	// Page navigation.
-	*pageFinder
+	pf         *pageFinder
 	taxonomies page.TaxonomyList
 	menus      navigation.Menus
 
@@ -138,10 +137,10 @@ func (s Site) cloneForRole(role int) *Site {
 type siteRole struct {
 	rolei int
 
-	pageMap *pageMap
+	m *pageMap
 
 	// Page navigation.
-	*pageFinder
+	pf         *pageFinder
 	taxonomies page.TaxonomyList
 	menus      navigation.Menus
 
@@ -174,6 +173,7 @@ func (s *Site) Debug() {
 // NewHugoSites creates HugoSites from the given config.
 func NewHugoSites(cfg deps.DepsCfg) (*HugoSites, error) {
 	conf := cfg.Configs.GetFirstLanguageConfig()
+	roles := cfg.Configs.Base.Roles.Config.Sorted
 
 	var logger loggers.Logger
 	if cfg.TestLogger != nil {
@@ -254,6 +254,9 @@ func NewHugoSites(cfg deps.DepsCfg) (*HugoSites, error) {
 		Shifter: ns,
 	}
 
+	numDimensions := 2
+	dimensionLengths := []int{len(confm.Languages), len(roles)}
+
 	pageTrees := &pageTrees{
 		treePages: doctree.New(
 			treeConfig,
@@ -261,8 +264,8 @@ func NewHugoSites(cfg deps.DepsCfg) (*HugoSites, error) {
 		treeResources: doctree.New(
 			treeConfig,
 		),
-		treeTaxonomyEntries:           doctree.NewTreeShiftTree[*weightedContentNode](doctree.DimensionLanguage.Index(), len(confm.Languages)),
-		treePagesFromTemplateAdapters: doctree.NewTreeShiftTree[*pagesfromdata.PagesFromTemplate](doctree.DimensionLanguage.Index(), len(confm.Languages)),
+		treeTaxonomyEntries:           doctree.NewTreeShiftTree[*weightedContentNode](numDimensions, dimensionLengths),
+		treePagesFromTemplateAdapters: doctree.NewTreeShiftTree[*pagesfromdata.PagesFromTemplate](numDimensions, dimensionLengths),
 	}
 
 	pageTrees.createMutableTrees()
@@ -303,8 +306,8 @@ func NewHugoSites(cfg deps.DepsCfg) (*HugoSites, error) {
 		// TODO1 clean up s vs siteRole injected.
 		pm := newPageMap(i, 0, s, memCache, pageTrees)
 		s.siteRole = &siteRole{
-			pageMap:    pm,
-			pageFinder: newPageFinder(pm),
+			m:  pm,
+			pf: newPageFinder(pm),
 		}
 
 		s.siteRefLinker, err = newSiteRefLinker(s)
@@ -354,7 +357,6 @@ func NewHugoSites(cfg deps.DepsCfg) (*HugoSites, error) {
 	// The sites slice created above represents role 0, no need to create that.
 	rolesSites := make([][]*Site, len(sites))
 	rolesSites[0] = sites
-	roles := cfg.Configs.Base.Roles.Config.Sorted
 	for i := 1; i < len(roles); i++ {
 		roleSites := make([]*Site, len(sites))
 		for j, s := range sites {
@@ -637,7 +639,7 @@ func (s *Site) ForEeachIdentityByName(name string, f func(identity.Identity) boo
 // This is for the current language only.
 func (s *Site) Pages() page.Pages {
 	s.CheckReady()
-	return s.pageMap.getPagesInSection(
+	return s.m.getPagesInSection(
 		pageMapQueryPagesInSection{
 			pageMapQueryPagesBelowPath: pageMapQueryPagesBelowPath{
 				Path:    "",
@@ -654,7 +656,7 @@ func (s *Site) Pages() page.Pages {
 // This is for the current language only.
 func (s *Site) RegularPages() page.Pages {
 	s.CheckReady()
-	return s.pageMap.getPagesInSection(
+	return s.m.getPagesInSection(
 		pageMapQueryPagesInSection{
 			pageMapQueryPagesBelowPath: pageMapQueryPagesBelowPath{
 				Path:    "",
@@ -795,7 +797,7 @@ func (s *Site) prepareInits() {
 			}
 		}
 
-		sections := s.pageMap.getPagesInSection(
+		sections := s.m.getPagesInSection(
 			pageMapQueryPagesInSection{
 				pageMapQueryPagesBelowPath: pageMapQueryPagesBelowPath{
 					Path:    "",
@@ -824,7 +826,7 @@ func (s *Site) prepareInits() {
 	})
 
 	s.init.taxonomies = init.Branch(func(ctx context.Context) (any, error) {
-		if err := s.pageMap.CreateSiteTaxonomies(ctx); err != nil {
+		if err := s.m.CreateSiteTaxonomies(ctx); err != nil {
 			return nil, err
 		}
 		return s.taxonomies, nil
@@ -842,7 +844,7 @@ func (s *Site) initRenderFormats() {
 	formats := output.Formats{}
 
 	w := &doctree.NodeShiftTreeWalker[contentNodeI]{
-		Tree: s.pageMap.treePages,
+		Tree: s.m.treePages,
 		Handle: func(key string, n contentNodeI, match doctree.DimensionFlag) (bool, error) {
 			if p, ok := n.(*pageState); ok {
 				for _, f := range p.m.configuredOutputFormats {
@@ -936,7 +938,7 @@ func (s *siteRefLinker) refLink(ref string, source any, relative bool, outputFor
 
 	if refURL.Path != "" {
 		var err error
-		target, err = s.s.getPageRef(p, refURL.Path)
+		target, err = s.s.pf.getPageRef(p, refURL.Path)
 		var pos text.Position
 		if err != nil || target == nil {
 			if p, ok := source.(text.Positioner); ok {
@@ -1294,7 +1296,7 @@ func (s *Site) assembleMenus() error {
 		for _, me := range menu {
 			if types.IsNil(me.Page) && me.PageRef != "" {
 				// Try to resolve the page.
-				me.Page, _ = s.getPage(nil, me.PageRef)
+				me.Page, _ = s.pf.getPage(nil, me.PageRef)
 			}
 
 			// If page is still nill, we must make sure that we have a URL that considers baseURL etc.
@@ -1309,7 +1311,7 @@ func (s *Site) assembleMenus() error {
 	sectionPagesMenu := s.conf.SectionPagesMenu
 
 	if sectionPagesMenu != "" {
-		if err := s.pageMap.forEachPage(pagePredicates.ShouldListGlobal, func(p *pageState) (bool, error) {
+		if err := s.m.forEachPage(pagePredicates.ShouldListGlobal, func(p *pageState) (bool, error) {
 			if p.Kind() != kinds.KindSection || !p.m.shouldBeCheckedForMenuDefinitions() {
 				return false, nil
 			}
@@ -1341,7 +1343,7 @@ func (s *Site) assembleMenus() error {
 	}
 
 	// Add menu entries provided by pages
-	if err := s.pageMap.forEachPage(pagePredicates.ShouldListGlobal, func(p *pageState) (bool, error) {
+	if err := s.m.forEachPage(pagePredicates.ShouldListGlobal, func(p *pageState) (bool, error) {
 		for name, me := range p.pageMenus.menus() {
 			if _, ok := flat[twoD{name, me.KeyName()}]; ok {
 				err := p.wrapError(fmt.Errorf("duplicate menu entry with identifier %q in menu %q", me.KeyName(), name))
@@ -1438,7 +1440,7 @@ func (s *Site) errorCollator(results <-chan error, errs chan<- error) {
 // i.e. 2 arguments, so we test for that.
 func (s *Site) GetPage(ref ...string) (page.Page, error) {
 	s.CheckReady()
-	p, err := s.s.getPageForRefs(ref...)
+	p, err := s.s.pf.getPageForRefs(ref...)
 
 	if p == nil {
 		// The nil struct has meaning in some situations, mostly to avoid breaking

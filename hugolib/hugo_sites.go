@@ -397,7 +397,7 @@ func (h *HugoSites) withSite(fn func(s *Site) error) error {
 func (h *HugoSites) withPage(fn func(s string, p *pageState) bool) {
 	h.withSite(func(s *Site) error {
 		w := &doctree.NodeShiftTreeWalker[contentNodeI]{
-			Tree:     s.pageMap.treePages,
+			Tree:     s.m.treePages,
 			LockType: doctree.LockTypeRead,
 			Handle: func(s string, n contentNodeI, match doctree.DimensionFlag) (bool, error) {
 				return fn(s, n.(*pageState)), nil
@@ -491,7 +491,7 @@ func (s *Site) preparePagesForRender(isRenderingSite bool, idx int) error {
 		return nil
 	}
 
-	return s.pageMap.forEeachPageIncludingBundledPages(nil,
+	return s.m.forEeachPageIncludingBundledPages(nil,
 		func(p *pageState) (bool, error) {
 			return false, initPage(p)
 		},

@@ -138,7 +138,7 @@ func (h *HugoSites) newPage(m *pageMeta) (*pageState, *paths.Path, error) {
 				m.pageConfig.Kind = kinds.KindHome
 			} else if m.pathInfo.IsBranchBundle() {
 				// A section, taxonomy or term.
-				tc := m.s.pageMap.cfg.getTaxonomyConfig(m.Path())
+				tc := m.s.m.cfg.getTaxonomyConfig(m.Path())
 				if !tc.IsZero() {
 					// Either a taxonomy or a term.
 					if tc.pluralTreeKey == m.Path() {
