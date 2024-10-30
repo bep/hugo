@@ -8,7 +8,7 @@ permissions:
   packages: write
 
 env:
-  REGISTRY_IMAGE: ghcr.io/gohugoio/hugo
+  REGISTRY_IMAGE: ghcr.io/bep/hugo
 
 jobs:
   build:
