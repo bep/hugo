@@ -71,15 +71,11 @@ RUN apk add --no-cache \
     npm
 
 RUN mkdir -p /var/hugo/bin /cache && \
-    addgroup -Sg 1001 hugo && \
-    adduser -Sg hugo -u 1001 -h /var/hugo hugo && \
-    chown -R hugo: /var/hugo /cache /project && \
     # For the Hugo's Git integration to work.
-    runuser -u hugo -- git config --global --add safe.directory /project && \ 
+    git config --global --add safe.directory /project && \ 
     # See https://github.com/gohugoio/hugo/issues/9810
-    runuser -u hugo -- git config --global core.quotepath false
+    git config --global core.quotepath false
 
-USER hugo:hugo
 ENV HUGO_CACHEDIR=/cache
 ENV PATH="/var/hugo/bin:$PATH"
 
