@@ -73,7 +73,7 @@ RUN apk add --no-cache \
 RUN mkdir -p /var/hugo/bin /cache && \
     addgroup -Sg 1000 hugo && \
     adduser -Sg hugo -u 1000 -h /var/hugo hugo && \
-    chown -R hugo: /var/hugo /cache /project \
+    chown -R hugo: /var/hugo /cache /project && \
     # For the Hugo's Git integration to work.
     runuser -u hugo -- git config --global --add safe.directory /project && \ 
     # See https://github.com/gohugoio/hugo/issues/9810
