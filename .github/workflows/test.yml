@@ -21,4 +21,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - name: Test building docs with docker latest
-        run: ls -la $GITHUB_ENV
+        uses: docker://ghcr.io/bep/hugo:latest
+        with:
+          args: build --gc --minify --enableGitInfo
+          context: ./docs
