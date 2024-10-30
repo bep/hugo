@@ -21,4 +21,4 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - name: Test building docs with docker latest
-        run: cat /etc/passwd
+        run: ls -la $GITHUB_ENV
