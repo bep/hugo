@@ -20,6 +20,8 @@ jobs:
         os: [ubuntu-latest] # macos disabled for now because of disk space issues.
     runs-on: ${{ matrix.os }}
     steps:
+      - run: ls -ltr
+      - run: pwd
       - name: Test building docs with docker latest
         uses: docker://ghcr.io/bep/hugo:latest
         with:
