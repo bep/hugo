@@ -20,8 +20,8 @@ jobs:
         os: [ubuntu-latest] # macos disabled for now because of disk space issues.
     runs-on: ${{ matrix.os }}
     steps:
-      - run: ls -ltr
-      - run: pwd
+      - name: Checkout code
+        uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332 # v4.1.7
       - name: Test building docs with docker latest
         uses: docker://ghcr.io/bep/hugo:latest
         with:
