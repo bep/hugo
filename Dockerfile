@@ -59,9 +59,6 @@ FROM gorun AS final
 
 COPY --from=build /usr/bin/hugo /usr/bin/hugo
 
-VOLUME /project
-WORKDIR /project
-
 # libc6-compat  are required for extended libraries (libsass, libwebp).
 RUN apk add --no-cache \
     libc6-compat \
@@ -71,11 +68,17 @@ RUN apk add --no-cache \
     npm
 
 RUN mkdir -p /var/hugo/bin /cache && \
+    addgroup -Sg 1000 hugo && \
+    adduser -Sg hugo -u 1000 -h /var/hugo hugo && \
+    chown -R hugo: /var/hugo /cache && \
     # For the Hugo's Git integration to work.
-    git config --global --add safe.directory /project && \ 
+    runuser -u hugo -- git config --global --add safe.directory /project && \ 
     # See https://github.com/gohugoio/hugo/issues/9810
-    git config --global core.quotepath false
+    runuser -u hugo -- git config --global core.quotepath false
 
+USER hugo:hugo
+VOLUME /project
+WORKDIR /project
 ENV HUGO_CACHEDIR=/cache
 ENV PATH="/var/hugo/bin:$PATH"
 
