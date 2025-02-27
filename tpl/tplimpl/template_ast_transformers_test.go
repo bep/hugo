@@ -39,7 +39,7 @@ func TestTransformRecursiveTemplate(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 	ts := newTestTemplate(templ)
 
-	ctx := newTemplateContext(
+	ctx := newTemplateTransformContext(
 		ts,
 		newTestTemplateLookup(ts),
 	)
@@ -105,7 +105,7 @@ func TestCollectInfo(t *testing.T) {
 			c.Assert(err, qt.IsNil)
 			ts := newTestTemplate(templ)
 			ts.typ = templateShortcode
-			ctx := newTemplateContext(
+			ctx := newTemplateTransformContext(
 				ts,
 				newTestTemplateLookup(ts),
 			)
@@ -146,7 +146,7 @@ func TestPartialReturn(t *testing.T) {
 			templ, err := template.New("foo").Funcs(funcs).Parse(test.tplString)
 			c.Assert(err, qt.IsNil)
 			ts := newTestTemplate(templ)
-			ctx := newTemplateContext(
+			ctx := newTemplateTransformContext(
 				ts,
 				newTestTemplateLookup(ts),
 			)

@@ -387,7 +387,7 @@ func TestCreateSiteOutputFormats(t *testing.T) {
 		c.Assert(outputs[kinds.KindRSS], deepEqualsOutputFormats, output.Formats{output.RSSFormat})
 		c.Assert(outputs[kinds.KindSitemap], deepEqualsOutputFormats, output.Formats{output.SitemapFormat})
 		c.Assert(outputs[kinds.KindRobotsTXT], deepEqualsOutputFormats, output.Formats{output.RobotsTxtFormat})
-		c.Assert(outputs[kinds.KindStatus404], deepEqualsOutputFormats, output.Formats{output.HTMLFormat})
+		c.Assert(outputs["404"], deepEqualsOutputFormats, output.Formats{output.HTMLFormat})
 	})
 
 	// Issue #4528

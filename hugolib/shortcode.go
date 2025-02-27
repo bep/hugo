@@ -1,4 +1,4 @@
-// Copyright 2019 The Hugo Authors. All rights reserved.
+// Copyright 2025 The Hugo Authors. All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -29,6 +29,7 @@ import (
 
 	"github.com/gohugoio/hugo/common/herrors"
 	"github.com/gohugoio/hugo/common/types"
+	"github.com/gohugoio/hugo/tpl/tplimplv2"
 
 	"github.com/gohugoio/hugo/parser/pageparser"
 	"github.com/gohugoio/hugo/resources/page"
@@ -205,8 +206,7 @@ type shortcode struct {
 
 	indentation string // indentation from source.
 
-	info   tpl.Info       // One of the output formats (arbitrary)
-	templs []tpl.Template // All output formats
+	templ *tplimplv2.TemplInfo
 
 	// If set, the rendered shortcode is sent as part of the surrounding content
 	// to Goldmark and similar.
@@ -230,16 +230,15 @@ func (s shortcode) insertPlaceholder() bool {
 }
 
 func (s shortcode) needsInner() bool {
-	return s.info != nil && s.info.ParseInfo().IsInner
+	return s.templ != nil && s.templ.ParseInfo.IsInner
 }
 
 func (s shortcode) configVersion() int {
-	if s.info == nil {
+	if s.templ == nil {
 		// Not set for inline shortcodes.
 		return 2
 	}
-
-	return s.info.ParseInfo().Config.Version
+	return s.templ.ParseInfo.Config.Version
 }
 
 func (s shortcode) innerString() string {
@@ -315,7 +314,7 @@ func prepareShortcode(
 	ctx context.Context,
 	level int,
 	s *Site,
-	tplVariants tpl.TemplateVariants,
+	tplDesc tplimplv2.TemplateDescriptor,
 	sc *shortcode,
 	parent *ShortcodeWithPage,
 	p *pageState,
@@ -333,7 +332,7 @@ func prepareShortcode(
 			// parsed and rendered by Goldmark.
 			ctx = tpl.Context.IsInGoldmark.Set(ctx, true)
 		}
-		r, err := doRenderShortcode(ctx, level, s, tplVariants, sc, parent, p, isRenderString)
+		r, err := doRenderShortcode(ctx, level, s, tplDesc, sc, parent, p, isRenderString)
 		if err != nil {
 			return nil, false, toParseErr(err)
 		}
@@ -352,30 +351,29 @@ func doRenderShortcode(
 	ctx context.Context,
 	level int,
 	s *Site,
-	tplVariants tpl.TemplateVariants,
+	tplDesc tplimplv2.TemplateDescriptor,
 	sc *shortcode,
 	parent *ShortcodeWithPage,
 	p *pageState,
 	isRenderString bool,
 ) (shortcodeRenderer, error) {
-	var tmpl tpl.Template
+	var tmpl *tplimplv2.TemplInfo
 
 	// Tracks whether this shortcode or any of its children has template variations
 	// in other languages or output formats. We are currently only interested in
-	// the output formats, so we may get some false positives -- we
-	// should improve on that.
+	// the output formats.
 	var hasVariants bool
 
 	if sc.isInline {
 		if !p.s.ExecHelper.Sec().EnableInlineShortcodes {
 			return zeroShortcode, nil
 		}
-		templName := path.Join("_inline_shortcode", p.Path(), sc.name)
+		templatePath := path.Join("_inline_shortcode", p.Path(), sc.name)
 		if sc.isClosing {
 			templStr := sc.innerString()
 
 			var err error
-			tmpl, err = s.TextTmpl().Parse(templName, templStr)
+			tmpl, err = s.TemplateStore.TextParse(templatePath, templStr)
 			if err != nil {
 				if isRenderString {
 					return zeroShortcode, p.wrapError(err)
@@ -389,21 +387,25 @@ func doRenderShortcode(
 
 		} else {
 			// Re-use of shortcode defined earlier in the same page.
-			var found bool
-			tmpl, found = s.TextTmpl().Lookup(templName)
-			if !found {
+			tmpl = s.TemplateStore.TextLookup(templatePath)
+			if tmpl == nil {
 				return zeroShortcode, fmt.Errorf("no earlier definition of shortcode %q found", sc.name)
 			}
 		}
-		tmpl = tpl.AddIdentity(tmpl)
 	} else {
-		var found, more bool
-		tmpl, found, more = s.Tmpl().LookupVariant(sc.name, tplVariants)
-		if !found {
+		count := 0
+		include := func(match *tplimplv2.TemplInfo) bool {
+			count++
+			return true
+		}
+		v := s.TemplateStore.LookupShortcode(sc.name, include, tplDesc)
+		if v == nil {
 			s.Log.Errorf("Unable to locate template for shortcode %q in page %q", sc.name, p.File().Path())
 			return zeroShortcode, nil
 		}
-		hasVariants = hasVariants || more
+		// fmt.Printf("v\n%#v\n%#v\n", tplDesc, v.D)
+		tmpl = v
+		hasVariants = hasVariants || (count > 1)
 	}
 
 	data := &ShortcodeWithPage{
@@ -427,7 +429,7 @@ func doRenderShortcode(
 			case string:
 				inner += innerData
 			case *shortcode:
-				s, err := prepareShortcode(ctx, level+1, s, tplVariants, innerData, data, p, isRenderString)
+				s, err := prepareShortcode(ctx, level+1, s, tplDesc, innerData, data, p, isRenderString)
 				if err != nil {
 					return zeroShortcode, err
 				}
@@ -537,9 +539,12 @@ func (s *shortcodeHandler) hasName(name string) bool {
 func (s *shortcodeHandler) prepareShortcodesForPage(ctx context.Context, p *pageState, f output.Format, isRenderString bool) (map[string]shortcodeRenderer, error) {
 	rendered := make(map[string]shortcodeRenderer)
 
-	tplVariants := tpl.TemplateVariants{
-		Language:     p.Language().Lang,
-		OutputFormat: f,
+	// TODO1: Use the same desc base as e.g. render hooks.
+	tplVariants := tplimplv2.TemplateDescriptor{
+		Lang:         p.Language().Lang,
+		OutputFormat: f.Name,
+		MediaType:    f.MediaType.Type,
+		IsPlainText:  f.IsPlainText,
 	}
 
 	for _, v := range s.shortcodes {
@@ -636,7 +641,7 @@ Loop:
 			// we trust the template on this:
 			// if there's no inner, we're done
 			if !sc.isInline {
-				if !sc.info.ParseInfo().IsInner {
+				if !sc.templ.ParseInfo.IsInner {
 					return sc, nil
 				}
 			}
@@ -672,14 +677,15 @@ Loop:
 
 			sc.name = currItem.ValStr(source)
 
+			// TODO1: Use the same desc base as e.g. render hooks.
+			tplVariants := tplimplv2.TemplateDescriptor{}
+
 			// Used to check if the template expects inner content.
-			templs := s.s.Tmpl().LookupVariants(sc.name)
-			if templs == nil {
+			templ := s.s.TemplateStore.LookupShortcode(sc.name, nil, tplVariants)
+			if templ == nil {
 				return nil, fmt.Errorf("%s: template for shortcode %q not found", errorPrefix, sc.name)
 			}
-
-			sc.info = templs[0].(tpl.Info)
-			sc.templs = templs
+			sc.templ = templ
 		case currItem.IsInlineShortcodeName():
 			sc.name = currItem.ValStr(source)
 			sc.isInline = true
@@ -778,7 +784,7 @@ func expandShortcodeTokens(
 	return source, nil
 }
 
-func renderShortcodeWithPage(ctx context.Context, h tpl.TemplateHandler, tmpl tpl.Template, data *ShortcodeWithPage) (string, error) {
+func renderShortcodeWithPage(ctx context.Context, h *tplimplv2.TemplateStore, tmpl *tplimplv2.TemplInfo, data *ShortcodeWithPage) (string, error) {
 	buffer := bp.GetBuffer()
 	defer bp.PutBuffer(buffer)
 

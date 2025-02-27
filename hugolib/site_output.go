@@ -39,10 +39,10 @@ func createDefaultOutputFormats(allFormats output.Formats) map[string]output.For
 		kinds.KindSection:  defaultListTypes,
 		kinds.KindTerm:     defaultListTypes,
 		kinds.KindTaxonomy: defaultListTypes,
-		// Below are for consistency. They are currently not used during rendering.
+		// Below are for consistency. They are currently not used during rendering. TODO1
 		kinds.KindSitemap:   {sitemapOut},
 		kinds.KindRobotsTXT: {robotsOut},
-		kinds.KindStatus404: {htmlOut},
+		// kinds.KindStatus404: {htmlOut},
 	}
 
 	// May be disabled

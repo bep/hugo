@@ -27,7 +27,6 @@ import (
 	"github.com/gohugoio/hugo/common/hcontext"
 	"github.com/gohugoio/hugo/identity"
 	"github.com/gohugoio/hugo/langs"
-	"github.com/gohugoio/hugo/output/layouts"
 
 	"github.com/gohugoio/hugo/output"
 
@@ -44,6 +43,7 @@ type TemplateManager interface {
 
 // TemplateVariants describes the possible variants of a template.
 // All of these may be empty.
+// TODO1 remove me.
 type TemplateVariants struct {
 	Language     string
 	OutputFormat output.Format
@@ -70,11 +70,9 @@ type TemplateExecutor interface {
 	ExecuteWithContext(ctx context.Context, t Template, wr io.Writer, data any) error
 }
 
-// TemplateHandler finds and executes templates.
+// TemplateHandler finds and executes templates. TODO1 remove.
 type TemplateHandler interface {
-	TemplateFinder
 	TemplateExecutor
-	LookupLayout(d layouts.LayoutDescriptor, f output.Format) (Template, bool, error)
 	HasTemplate(name string) bool
 	GetIdentity(name string) (identity.Identity, bool)
 }
@@ -246,7 +244,7 @@ func StripHTML(s string) string {
 type DeferredExecution struct {
 	Mu           sync.Mutex
 	Ctx          context.Context
-	TemplateName string
+	TemplatePath string
 	Data         any
 
 	Executed bool

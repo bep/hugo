@@ -15,7 +15,6 @@ package tplimpl
 
 import (
 	"github.com/gohugoio/hugo/deps"
-	"github.com/gohugoio/hugo/tpl"
 )
 
 // TemplateProvider manages templates.
@@ -37,15 +36,5 @@ func (*TemplateProvider) NewResource(dst *deps.Deps) error {
 
 // Clone clones.
 func (*TemplateProvider) CloneResource(dst, src *deps.Deps) error {
-	t := src.Tmpl().(*templateExec)
-	c := t.Clone(dst)
-	funcMap := make(map[string]any)
-	for k, v := range c.funcs {
-		funcMap[k] = v.Interface()
-	}
-	dst.SetTempl(&tpl.TemplateHandlers{
-		Tmpl:    c,
-		TxtTmpl: newStandaloneTextTemplate(funcMap),
-	})
-	return nil
+	panic("remove me")
 }

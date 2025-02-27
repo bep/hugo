@@ -25,20 +25,22 @@ import (
 	"strings"
 
 	"github.com/gohugoio/hugo/common/loggers"
+	"github.com/gohugoio/hugo/hugolib/doctree"
 	"github.com/gohugoio/hugo/output"
 	"github.com/gohugoio/hugo/publisher"
 	"github.com/gohugoio/hugo/resources/page"
 	"github.com/gohugoio/hugo/tpl"
+	"github.com/gohugoio/hugo/tpl/tplimplv2"
 )
 
 type aliasHandler struct {
-	t         tpl.TemplateHandler
+	ts        *tplimplv2.TemplateStore
 	log       loggers.Logger
 	allowRoot bool
 }
 
-func newAliasHandler(t tpl.TemplateHandler, l loggers.Logger, allowRoot bool) aliasHandler {
-	return aliasHandler{t, l, allowRoot}
+func newAliasHandler(ts *tplimplv2.TemplateStore, l loggers.Logger, allowRoot bool) aliasHandler {
+	return aliasHandler{ts, l, allowRoot}
 }
 
 type aliasPage struct {
@@ -47,16 +49,27 @@ type aliasPage struct {
 }
 
 func (a aliasHandler) renderAlias(permalink string, p page.Page) (io.Reader, error) {
-	var templ tpl.Template
-	var found bool
+	var templateDesc tplimplv2.TemplateDescriptor
+	var dir string = ""
+	if ps, ok := p.(*pageState); ok {
+		dir, templateDesc = ps.getDirAndTemplateDescriptor()
+	}
 
-	templ, found = a.t.Lookup("alias.html")
-	if !found {
-		// TODO(bep) consolidate
-		templ, found = a.t.Lookup("_internal/alias.html")
-		if !found {
-			return nil, errors.New("no alias template found")
-		}
+	// TODO1 double check this, ref. hooks.
+	templateDesc.Layout = ""
+	templateDesc.Kind = ""
+	templateDesc.OutputFormat = output.AliasHTMLFormat.Name
+
+	q := tplimplv2.TemplateQuery{
+		LockType: doctree.LockTypeRead,
+		Dir:      dir,
+		Category: tplimplv2.CategoryLayout,
+		Desc:     templateDesc,
+	}
+
+	t := a.ts.LookupPagesLayout(q)
+	if t == nil {
+		return nil, errors.New("no alias template found")
 	}
 
 	data := aliasPage{
@@ -67,7 +80,7 @@ func (a aliasHandler) renderAlias(permalink string, p page.Page) (io.Reader, err
 	ctx := tpl.Context.Page.Set(context.Background(), p)
 
 	buffer := new(bytes.Buffer)
-	err := a.t.ExecuteWithContext(ctx, templ, buffer, data)
+	err := a.ts.ExecuteWithContext(ctx, t, buffer, data)
 	if err != nil {
 		return nil, err
 	}

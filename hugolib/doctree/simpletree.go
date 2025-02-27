@@ -25,23 +25,41 @@ type Tree[T any] interface {
 	LongestPrefix(s string) (string, T)
 	Insert(s string, v T) T
 	WalkPrefix(lockType LockType, s string, f func(s string, v T) (bool, error)) error
+	WalkPath(lockType LockType, s string, f func(s string, v T) (bool, error)) error
 }
 
 // NewSimpleTree creates a new SimpleTree.
-func NewSimpleTree[T comparable]() *SimpleTree[T] {
-	return &SimpleTree[T]{tree: radix.New()}
+func NewSimpleTree[T any]() *SimpleTree[T] {
+	return &SimpleTree[T]{tree: radix.New(), mu: new(sync.RWMutex)}
 }
 
 // SimpleTree is a thread safe radix tree that holds T.
-type SimpleTree[T comparable] struct {
-	mu   sync.RWMutex
-	tree *radix.Tree
-	zero T
+type SimpleTree[T any] struct {
+	mu     *sync.RWMutex
+	noLock bool
+	tree   *radix.Tree
+	zero   T
+}
+
+func (tree *SimpleTree[T]) readLock() func() {
+	if tree.noLock {
+		return func() {}
+	}
+	tree.mu.RLock()
+	return tree.mu.RUnlock
+}
+
+func (tree *SimpleTree[T]) writeLock() func() {
+	if tree.noLock {
+		return func() {}
+	}
+	tree.mu.Lock()
+	return tree.mu.Unlock
 }
 
 func (tree *SimpleTree[T]) Get(s string) T {
-	tree.mu.RLock()
-	defer tree.mu.RUnlock()
+	unlock := tree.readLock()
+	defer unlock()
 
 	if v, ok := tree.tree.Get(s); ok {
 		return v.(T)
@@ -50,8 +68,8 @@ func (tree *SimpleTree[T]) Get(s string) T {
 }
 
 func (tree *SimpleTree[T]) LongestPrefix(s string) (string, T) {
-	tree.mu.RLock()
-	defer tree.mu.RUnlock()
+	unlock := tree.readLock()
+	defer unlock()
 
 	if s, v, ok := tree.tree.LongestPrefix(s); ok {
 		return s, v.(T)
@@ -60,8 +78,8 @@ func (tree *SimpleTree[T]) LongestPrefix(s string) (string, T) {
 }
 
 func (tree *SimpleTree[T]) Insert(s string, v T) T {
-	tree.mu.Lock()
-	defer tree.mu.Unlock()
+	unlock := tree.writeLock()
+	defer unlock()
 
 	tree.tree.Insert(s, v)
 	return v
@@ -81,11 +99,33 @@ func (tree *SimpleTree[T]) Lock(lockType LockType) func() {
 	return func() {}
 }
 
+func (tree SimpleTree[T]) LockTree(lockType LockType) (Tree[T], func()) {
+	unlock := tree.Lock(lockType)
+	tree.noLock = true
+	return &tree, unlock // create a copy of tree with the noLock flag set to true.
+}
+
 func (tree *SimpleTree[T]) WalkPrefix(lockType LockType, s string, f func(s string, v T) (bool, error)) error {
 	commit := tree.Lock(lockType)
 	defer commit()
 	var err error
 	tree.tree.WalkPrefix(s, func(s string, v any) bool {
+		var b bool
+		b, err = f(s, v.(T))
+		if err != nil {
+			return true
+		}
+		return b
+	})
+
+	return err
+}
+
+func (tree *SimpleTree[T]) WalkPath(lockType LockType, s string, f func(s string, v T) (bool, error)) error {
+	commit := tree.Lock(lockType)
+	defer commit()
+	var err error
+	tree.tree.WalkPath(s, func(s string, v any) bool {
 		var b bool
 		b, err = f(s, v.(T))
 		if err != nil {

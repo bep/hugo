@@ -33,14 +33,14 @@ func TestExtractShortcodes(t *testing.T) {
 	b := newTestSitesBuilder(t).WithSimpleConfigFile()
 
 	b.WithTemplates(
-		"default/single.html", `EMPTY`,
-		"_internal/shortcodes/tag.html", `tag`,
-		"_internal/shortcodes/legacytag.html", `{{ $_hugo_config := "{ \"version\": 1 }" }}tag`,
-		"_internal/shortcodes/sc1.html", `sc1`,
-		"_internal/shortcodes/sc2.html", `sc2`,
-		"_internal/shortcodes/inner.html", `{{with .Inner }}{{ . }}{{ end }}`,
-		"_internal/shortcodes/inner2.html", `{{.Inner}}`,
-		"_internal/shortcodes/inner3.html", `{{.Inner}}`,
+		"pages/single.html", `EMPTY`,
+		"shortcodes/tag.html", `tag`,
+		"shortcodes/legacytag.html", `{{ $_hugo_config := "{ \"version\": 1 }" }}tag`,
+		"shortcodes/sc1.html", `sc1`,
+		"shortcodes/sc2.html", `sc2`,
+		"shortcodes/inner.html", `{{with .Inner }}{{ . }}{{ end }}`,
+		"shortcodes/inner2.html", `{{.Inner}}`,
+		"shortcodes/inner3.html", `{{.Inner}}`,
 	).WithContent("page.md", `---
 title: "Shortcodes Galore!"
 ---
@@ -57,10 +57,9 @@ title: "Shortcodes Galore!"
 		if s == nil {
 			return "<nil>"
 		}
-
 		var version int
-		if s.info != nil {
-			version = s.info.ParseInfo().Config.Version
+		if s.templ != nil {
+			version = s.templ.ParseInfo.Config.Version
 		}
 		return strReplacer.Replace(fmt.Sprintf("%s;inline:%t;closing:%t;inner:%v;params:%v;ordinal:%d;markup:%t;version:%d;pos:%d",
 			s.name, s.isInline, s.isClosing, s.inner, s.params, s.ordinal, s.doMarkup, version, s.pos))
@@ -69,7 +68,7 @@ title: "Shortcodes Galore!"
 	regexpCheck := func(re string) func(c *qt.C, shortcode *shortcode, err error) {
 		return func(c *qt.C, shortcode *shortcode, err error) {
 			c.Assert(err, qt.IsNil)
-			c.Assert(str(shortcode), qt.Matches, ".*"+re+".*")
+			c.Assert(str(shortcode), qt.Matches, ".*"+re+".*", qt.Commentf("%s", shortcode.name))
 		}
 	}
 

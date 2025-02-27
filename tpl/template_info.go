@@ -16,6 +16,8 @@ package tpl
 // Increments on breaking changes.
 const TemplateVersion = 2
 
+// TODO1 consider removing.
+// CHeck usage of this entire package.
 type Info interface {
 	ParseInfo() ParseInfo
 }

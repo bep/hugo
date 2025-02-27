@@ -34,6 +34,8 @@ const (
 
 	// The following are (currently) temporary nodes,
 	// i.e. nodes we create just to render in isolation.
+	// TODO1 get rid of these.
+	KindTemporary    = "temporary"
 	KindRSS          = "rss"
 	KindSitemap      = "sitemap"
 	KindSitemapIndex = "sitemapindex"
@@ -78,7 +80,7 @@ var kindMapTemporary = map[string]string{
 	KindRSS:       KindRSS,
 	KindSitemap:   KindSitemap,
 	KindRobotsTXT: KindRobotsTXT,
-	KindStatus404: KindStatus404,
+	KindStatus404: KindStatus404, // TODO1
 }
 
 // GetKindMain gets the page kind given a string, empty if not found.

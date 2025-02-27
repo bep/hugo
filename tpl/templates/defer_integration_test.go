@@ -71,6 +71,54 @@ AMP.
 
 `
 
+func TestDeferNoBaseof(t *testing.T) {
+	t.Parallel()
+
+	files := `
+-- hugo.toml --
+-- layouts/index.html --
+Home.
+{{ with (templates.Defer (dict "key" "foo")) }}
+ Defer
+{{ end }}
+-- content/_index.md --
+---
+title: "Home"
+---
+
+`
+
+	b := hugolib.Test(t, files)
+
+	b.AssertFileContent("public/index.html", "Home.\n\n Defer")
+}
+
+func TestDeferBaseof(t *testing.T) {
+	t.Parallel()
+
+	files := `
+-- hugo.toml --
+-- layouts/baseof.html --
+{{ with (templates.Defer (dict "key" "foo")) }}
+Defer
+{{ end }}
+Block:{{ block "main" . }}{{ end }}$
+-- layouts/index.html --
+{{ define "main" }}
+Home.
+{{ end }}
+-- content/_index.md --
+---
+title: "Home"
+---
+
+`
+
+	b := hugolib.Test(t, files)
+
+	b.AssertFileContent("public/index.html", "Home.\n\n Defer")
+}
+
 func TestDeferBasic(t *testing.T) {
 	t.Parallel()
 
@@ -124,7 +172,7 @@ func TestDeferErrorRuntime(t *testing.T) {
 
 	b.Assert(err, qt.Not(qt.IsNil))
 	b.Assert(err.Error(), qt.Contains, filepath.FromSlash(`/layouts/index.amp.html:3:57`))
-	b.Assert(err.Error(), qt.Contains, `execute of template failed: template: index.amp.html:3:57: executing at <.page.Titles>: can't evaluate field Titles`)
+	b.Assert(err.Error(), qt.Contains, `execute of template failed: template: pages/index.amp.html:3:57: executing at <.page.Titles>: can't evaluate field Titles`)
 }
 
 func TestDeferEditDeferBlock(t *testing.T) {

@@ -93,7 +93,7 @@ func (ns *Namespace) DoDefer(ctx context.Context, id string, optsv any) string {
 	_, _ = ns.deps.BuildState.DeferredExecutions.Executions.GetOrCreate(id,
 		func() (*tpl.DeferredExecution, error) {
 			return &tpl.DeferredExecution{
-				TemplateName: templateName,
+				TemplatePath: templateName,
 				Ctx:          ctx,
 				Data:         opts.Data,
 				Executed:     false,

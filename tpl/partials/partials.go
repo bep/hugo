@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"html/template"
 	"io"
+	"path"
 	"strings"
 	"time"
 
@@ -28,9 +29,10 @@ import (
 	"github.com/gohugoio/hugo/common/hashing"
 	"github.com/gohugoio/hugo/identity"
 
-	texttemplate "github.com/gohugoio/hugo/tpl/internal/go_templates/texttemplate"
+	"github.com/gohugoio/hugo/tpl/tplimplv2"
 
 	"github.com/gohugoio/hugo/tpl"
+	texttemplate "github.com/gohugoio/hugo/tpl/internal/go_templates/texttemplate"
 
 	bp "github.com/gohugoio/hugo/bufferpool"
 	"github.com/gohugoio/hugo/deps"
@@ -129,6 +131,7 @@ func (ns *Namespace) Include(ctx context.Context, name string, contextList ...an
 }
 
 func (ns *Namespace) includWithTimeout(ctx context.Context, name string, dataList ...any) includeResult {
+	// TODO1 add a warnif statement if name starts with "partials/". That doesn't make sense and stopped working in Hugo 0.146.0
 	// Create a new context with a timeout not connected to the incoming context.
 	timeoutCtx, cancel := context.WithTimeout(context.Background(), ns.deps.Conf.Timeout())
 	defer cancel()
@@ -160,27 +163,27 @@ func (ns *Namespace) include(ctx context.Context, name string, dataList ...any) 
 		data = dataList[0]
 	}
 
-	var n string
-	if strings.HasPrefix(name, "partials/") {
-		n = name
+	name = strings.TrimPrefix(name, "/")
+	ext := path.Ext(name)
+	name = strings.TrimSuffix(name, ext)
+	if ext != "" {
+		ext = ext[1:]
 	} else {
-		n = "partials/" + name
+		ext = "html"
 	}
 
-	templ, found := ns.deps.Tmpl().Lookup(n)
-	if !found {
-		// For legacy reasons.
-		templ, found = ns.deps.Tmpl().Lookup(n + ".html")
+	partialTemplateDescriptor := tplimplv2.TemplateDescriptor{
+		OutputFormat: ext,
+		// TODO1 real format + isplaintext.
 	}
 
-	if !found {
+	v := ns.deps.TemplateStore.LookupPartial(name, partialTemplateDescriptor)
+	if v == nil {
 		return includeResult{err: fmt.Errorf("partial %q not found", name)}
 	}
 
-	var info tpl.ParseInfo
-	if ip, ok := templ.(tpl.Info); ok {
-		info = ip.ParseInfo()
-	}
+	templ := v
+	info := v.ParseInfo
 
 	var w io.Writer
 
@@ -208,14 +211,14 @@ func (ns *Namespace) include(ctx context.Context, name string, dataList ...any) 
 
 	if ctx, ok := data.(*contextWrapper); ok {
 		result = ctx.Result
-	} else if _, ok := templ.(*texttemplate.Template); ok {
+	} else if _, ok := templ.Template.(*texttemplate.Template); ok {
 		result = w.(fmt.Stringer).String()
 	} else {
 		result = template.HTML(w.(fmt.Stringer).String())
 	}
 
 	return includeResult{
-		name:   templ.Name(),
+		name:   templ.Template.Name(),
 		result: result,
 	}
 }

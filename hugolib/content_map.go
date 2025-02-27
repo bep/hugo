@@ -349,8 +349,7 @@ func (m *pageMap) addPagesFromGoTmplFi(fi hugofs.FileMetaInfo, buildConfig *Buil
 				DepsFromSite: func(s page.Site) pagesfromdata.PagesFromTemplateDeps {
 					ss := s.(*Site)
 					return pagesfromdata.PagesFromTemplateDeps{
-						TmplFinder: ss.TextTmpl(),
-						TmplExec:   ss.Tmpl(),
+						TemplateStore: ss.Tmpl(),
 					}
 				},
 				DependencyManager: s.Conf.NewIdentityManager("pagesfromdata"),

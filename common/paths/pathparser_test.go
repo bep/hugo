@@ -18,6 +18,7 @@ import (
 	"testing"
 
 	"github.com/gohugoio/hugo/hugofs/files"
+	"github.com/gohugoio/hugo/resources/kinds"
 
 	qt "github.com/frankban/quicktest"
 )
@@ -26,9 +27,17 @@ var testParser = &PathParser{
 	LanguageIndex: map[string]int{
 		"no": 0,
 		"en": 1,
+		"fr": 2,
 	},
 	IsContentExt: func(ext string) bool {
 		return ext == "md"
+	},
+	IsOutputFormat: func(s string) bool {
+		switch s {
+		case "html", "amp", "csv", "rss":
+			return true
+		}
+		return false
 	},
 }
 
@@ -358,6 +367,86 @@ func TestParse(t *testing.T) {
 	for _, test := range tests {
 		c.Run(test.name, func(c *qt.C) {
 			test.assert(c, testParser.Parse(files.ComponentFolderContent, test.path))
+		})
+	}
+}
+
+func TestParseLayouts(t *testing.T) {
+	c := qt.New(t)
+
+	tests := []struct {
+		name   string
+		path   string
+		assert func(c *qt.C, p *Path)
+	}{
+		{
+			"Basic",
+			"/_default/list.html",
+			func(c *qt.C, p *Path) {
+				c.Assert(p.Base(), qt.Equals, "/_default/list.html")
+			},
+		},
+		{
+			"Lang",
+			"/_default/list.no.html",
+			func(c *qt.C, p *Path) {
+				c.Assert(p.Base(), qt.Equals, "/_default/list.html")
+				c.Assert(p.Lang(), qt.Equals, "no")
+			},
+		},
+		{
+			"Lang and output format",
+			"/_default/list.no.amp.not.html",
+			func(c *qt.C, p *Path) {
+				c.Assert(p.Identifiers(), qt.DeepEquals, []string{"html", "amp", "no"})
+				c.Assert(p.OutputFormat(), qt.Equals, "amp")
+				c.Assert(p.Ext(), qt.Equals, "html")
+				c.Assert(p.Lang(), qt.Equals, "no")
+				c.Assert(p.Base(), qt.Equals, "/_default/list.html")
+			},
+		},
+		{
+			"Term",
+			"/_default/term.html",
+			func(c *qt.C, p *Path) {
+				c.Assert(p.Identifiers(), qt.DeepEquals, []string{"html", "term"})
+				c.Assert(p.Lang(), qt.Equals, "")
+				c.Assert(p.Kind(), qt.Equals, "term")
+				c.Assert(p.OutputFormat(), qt.Equals, "html")
+				c.Assert(p.Base(), qt.Equals, "/_default.html") // TODO1
+			},
+		},
+		{
+			"Sub dir",
+			"/pages/home.html",
+			func(c *qt.C, p *Path) {
+				c.Assert(p.Identifiers(), qt.DeepEquals, []string{"html", "home"})
+				c.Assert(p.Lang(), qt.Equals, "")
+				c.Assert(p.Kind(), qt.Equals, "home")
+				c.Assert(p.OutputFormat(), qt.Equals, "html")
+				c.Assert(p.Dir(), qt.Equals, "/pages")
+			},
+		},
+		{
+			"Baseof",
+			"/pages/baseof.section.fr.amp.html",
+			func(c *qt.C, p *Path) {
+				c.Assert(p.Identifiers(), qt.DeepEquals, []string{"html", "amp", "fr", "section"})
+				c.Assert(p.Kind(), qt.Equals, kinds.KindSection)
+				c.Assert(p.Lang(), qt.Equals, "fr")
+				c.Assert(p.OutputFormat(), qt.Equals, "amp")
+				c.Assert(p.Dir(), qt.Equals, "/pages")
+				c.Assert(p.NameNoIdentifier(), qt.Equals, "baseof")
+			},
+		},
+	}
+
+	for _, test := range tests {
+		if test.name != "Baseof" {
+			// continue
+		}
+		c.Run(test.name, func(c *qt.C) {
+			test.assert(c, testParser.Parse(files.ComponentFolderLayouts, test.path))
 		})
 	}
 }

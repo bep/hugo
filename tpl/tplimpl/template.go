@@ -742,7 +742,7 @@ func (t *templateHandler) applyBaseTemplate(overlay, base templateInfo) (tpl.Tem
 	return templ, err
 }
 
-func (t *templateHandler) applyTemplateTransformers(ns *templateNamespace, ts *templateState) (*templateContext, error) {
+func (t *templateHandler) applyTemplateTransformers(ns *templateNamespace, ts *templateState) (*templateTransformContext, error) {
 	c, err := applyTemplateTransformers(ts, ns.newTemplateLookup(ts))
 	if err != nil {
 		return nil, err

@@ -23,6 +23,7 @@ import (
 	"github.com/gohugoio/hugo/common/types"
 	"github.com/gohugoio/hugo/hugofs/files"
 	"github.com/gohugoio/hugo/identity"
+	"github.com/gohugoio/hugo/resources/kinds"
 )
 
 // PathParser parses a path into a Path.
@@ -32,6 +33,9 @@ type PathParser struct {
 
 	// Reports whether the given language is disabled.
 	IsLangDisabled func(string) bool
+
+	// Reports whether the given string represetns a know output format.
+	IsOutputFormat func(string) bool
 
 	// Reports whether the given ext is a content file.
 	IsContentExt func(string) bool
@@ -83,13 +87,10 @@ func (pp *PathParser) Parse(c, s string) *Path {
 }
 
 func (pp *PathParser) newPath(component string) *Path {
-	return &Path{
-		component:             component,
-		posContainerLow:       -1,
-		posContainerHigh:      -1,
-		posSectionHigh:        -1,
-		posIdentifierLanguage: -1,
-	}
+	p := &Path{}
+	p.reset()
+	p.component = component
+	return p
 }
 
 func (pp *PathParser) parse(component, s string) (*Path, error) {
@@ -114,10 +115,72 @@ func (pp *PathParser) parse(component, s string) (*Path, error) {
 	return p, nil
 }
 
-func (pp *PathParser) doParse(component, s string, p *Path) (*Path, error) {
-	hasLang := pp.LanguageIndex != nil
-	hasLang = hasLang && (component == files.ComponentFolderContent || component == files.ComponentFolderLayouts)
+func (pp *PathParser) parseIdentifier(component, s string, p *Path, i, lastDot int) bool {
+	if p.posContainerHigh != -1 {
+		return false
+	}
+	mayHaveLang := pp.LanguageIndex != nil
+	mayHaveLang = mayHaveLang && (component == files.ComponentFolderContent || component == files.ComponentFolderLayouts)
+	mayHaveOutputFormat := component == files.ComponentFolderLayouts
+	mayHaveKind := mayHaveOutputFormat
 
+	var found bool
+	var high int
+	if len(p.identifiers) > 0 {
+		high = lastDot
+	} else {
+		high = len(p.s)
+	}
+	id := types.LowHigh[string]{Low: i + 1, High: high}
+	if len(p.identifiers) == 0 {
+		// The first is always the extension.
+		p.identifiers = append(p.identifiers, id)
+		found = true
+	} else {
+		s := p.s[id.Low:id.High]
+
+		var langFound bool
+
+		if mayHaveLang {
+			var disabled bool
+			_, langFound = pp.LanguageIndex[s]
+			if !langFound {
+				disabled = pp.IsLangDisabled != nil && pp.IsLangDisabled(s)
+				if disabled {
+					p.disabled = true
+					langFound = true
+				}
+			}
+			found = langFound
+			if langFound {
+				p.identifiers = append(p.identifiers, id)
+				p.posIdentifierLanguage = len(p.identifiers) - 1
+
+			}
+		}
+
+		if !found && mayHaveOutputFormat {
+			if pp.IsOutputFormat(s) {
+				found = true
+				p.identifiers = append(p.identifiers, id)
+				p.posIdentifierOutputFormat = len(p.identifiers) - 1
+			}
+		}
+
+		if !found && mayHaveKind {
+			if kinds.GetKindMain(s) != "" {
+				found = true
+				p.identifiers = append(p.identifiers, id)
+				p.posIdentifierKind = len(p.identifiers) - 1
+			}
+		}
+
+	}
+
+	return found
+}
+
+func (pp *PathParser) doParse(component, s string, p *Path) (*Path, error) {
 	if runtime.GOOS == "windows" {
 		s = path.Clean(filepath.ToSlash(s))
 		if s == "." {
@@ -140,46 +203,21 @@ func (pp *PathParser) doParse(component, s string, p *Path) (*Path, error) {
 
 	p.s = s
 	slashCount := 0
+	lastDot := 0
 
 	for i := len(s) - 1; i >= 0; i-- {
 		c := s[i]
 
 		switch c {
 		case '.':
-			if p.posContainerHigh == -1 {
-				var high int
-				if len(p.identifiers) > 0 {
-					high = p.identifiers[len(p.identifiers)-1].Low - 1
-				} else {
-					high = len(p.s)
-				}
-				id := types.LowHigh[string]{Low: i + 1, High: high}
-				if len(p.identifiers) == 0 {
-					p.identifiers = append(p.identifiers, id)
-				} else if len(p.identifiers) == 1 {
-					// Check for a valid language.
-					s := p.s[id.Low:id.High]
-
-					if hasLang {
-						var disabled bool
-						_, langFound := pp.LanguageIndex[s]
-						if !langFound {
-							disabled = pp.IsLangDisabled != nil && pp.IsLangDisabled(s)
-							if disabled {
-								p.disabled = true
-								langFound = true
-							}
-						}
-						if langFound {
-							p.posIdentifierLanguage = 1
-							p.identifiers = append(p.identifiers, id)
-						}
-					}
-				}
-			}
+			pp.parseIdentifier(component, s, p, i, lastDot)
+			lastDot = i
 		case '/':
 			slashCount++
 			if p.posContainerHigh == -1 {
+				if lastDot > 0 {
+					pp.parseIdentifier(component, s, p, i, lastDot)
+				}
 				p.posContainerHigh = i + 1
 			} else if p.posContainerLow == -1 {
 				p.posContainerLow = i + 1
@@ -194,22 +232,30 @@ func (pp *PathParser) doParse(component, s string, p *Path) (*Path, error) {
 		isContentComponent := p.component == files.ComponentFolderContent || p.component == files.ComponentFolderArchetypes
 		isContent := isContentComponent && pp.IsContentExt(p.Ext())
 		id := p.identifiers[len(p.identifiers)-1]
-		b := p.s[p.posContainerHigh : id.Low-1]
-		if isContent {
-			switch b {
-			case "index":
-				p.bundleType = PathTypeLeaf
-			case "_index":
-				p.bundleType = PathTypeBranch
-			default:
-				p.bundleType = PathTypeContentSingle
-			}
+		if id.Low > p.posContainerHigh {
+			b := p.s[p.posContainerHigh : id.Low-1]
+			if isContent {
+				switch b {
+				case "index":
+					p.bundleType = PathTypeLeaf
+				case "_index":
+					p.bundleType = PathTypeBranch
+				default:
+					p.bundleType = PathTypeContentSingle
+				}
 
-			if slashCount == 2 && p.IsLeafBundle() {
-				p.posSectionHigh = 0
+				if slashCount == 2 && p.IsLeafBundle() {
+					p.posSectionHigh = 0
+				}
+			} else if b == files.NameContentData && files.IsContentDataExt(p.Ext()) {
+				p.bundleType = PathTypeContentData
 			}
-		} else if b == files.NameContentData && files.IsContentDataExt(p.Ext()) {
-			p.bundleType = PathTypeContentData
+		}
+
+		if component == files.ComponentFolderLayouts && p.OutputFormat() == "" {
+			if pp.IsOutputFormat(p.Ext()) {
+				p.posIdentifierOutputFormat = 0
+			}
 		}
 	}
 
@@ -262,8 +308,10 @@ type Path struct {
 
 	identifiers []types.LowHigh[string]
 
-	posIdentifierLanguage int
-	disabled              bool
+	posIdentifierLanguage     int
+	posIdentifierOutputFormat int
+	posIdentifierKind         int
+	disabled                  bool
 
 	trimLeadingSlash bool
 
@@ -296,6 +344,8 @@ func (p *Path) reset() {
 	p.bundleType = 0
 	p.identifiers = p.identifiers[:0]
 	p.posIdentifierLanguage = -1
+	p.posIdentifierOutputFormat = -1
+	p.posIdentifierKind = -1
 	p.disabled = false
 	p.trimLeadingSlash = false
 	p.unnormalized = nil
@@ -330,6 +380,13 @@ func (p *Path) Container() string {
 		return ""
 	}
 	return p.norm(p.s[p.posContainerLow : p.posContainerHigh-1])
+}
+
+func (p *Path) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return p.Path()
 }
 
 // ContainerDir returns the container directory for this path.
@@ -399,6 +456,11 @@ func (p *Path) BaseNameNoIdentifier() string {
 // NameNoIdentifier returns the last element of path without any identifier (e.g. no extension).
 func (p *Path) NameNoIdentifier() string {
 	if len(p.identifiers) > 0 {
+		lastID := p.identifiers[len(p.identifiers)-1]
+		if p.posContainerHigh == lastID.Low {
+			// The last identifier is the name.
+			return p.s[lastID.Low:lastID.High]
+		}
 		return p.s[p.posContainerHigh : p.identifiers[len(p.identifiers)-1].Low-1]
 	}
 	return p.s[p.posContainerHigh:]
@@ -416,9 +478,31 @@ func (p *Path) Dir() (d string) {
 	return
 }
 
+// Used in template lookups.
+// For pages with Type set, we treat that as the section.
+func (p *Path) DirReTyped(typ string) (d string) {
+	if typ == "" || p.Section() == typ {
+		return p.Dir()
+	}
+	if p.posSectionHigh <= 0 {
+		return ""
+	}
+	d = "/" + typ
+	if p.posContainerHigh > 0 {
+		d += p.s[p.posContainerHigh-1:]
+	}
+	d = p.norm(d)
+	return
+}
+
 // Path returns the full path.
 func (p *Path) Path() (d string) {
 	return p.norm(p.s)
+}
+
+// PathNoLeadingSlash returns the full path without the leading slash.
+func (p *Path) PathNoLeadingSlash() string {
+	return p.Path()[1:]
 }
 
 // Unnormalized returns the Path with the original case preserved.
@@ -463,6 +547,7 @@ func (p *Path) Base() string {
 }
 
 // BaseNoLeadingSlash returns the base path without the leading slash.
+// TODO1 fix/test this vs /pages/rss.xml etc.
 func (p *Path) BaseNoLeadingSlash() string {
 	return p.Base()[1:]
 }
@@ -502,8 +587,16 @@ func (p *Path) Ext() string {
 	return p.identifierAsString(0)
 }
 
+func (p *Path) OutputFormat() string {
+	return p.identifierAsString(p.posIdentifierOutputFormat)
+}
+
+func (p *Path) Kind() string {
+	return p.identifierAsString(p.posIdentifierKind)
+}
+
 func (p *Path) Lang() string {
-	return p.identifierAsString(1)
+	return p.identifierAsString(p.posIdentifierLanguage)
 }
 
 func (p *Path) Identifier(i int) string {

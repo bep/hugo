@@ -122,7 +122,7 @@ Try printf: {{ (try (printf "hello %s" "world")).Value }}
 
 	b.AssertFileContent("public/index.html",
 		"Value1: Hello Hugo|",
-		"Err2: template: index.html:",
+		"Err2: template: pages/index.html:",
 		"Try upper: HELLO",
 		"Try printf: hello world",
 	)

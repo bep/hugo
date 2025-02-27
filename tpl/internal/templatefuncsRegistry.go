@@ -24,14 +24,17 @@ import (
 	"go/parser"
 	"go/token"
 	"log"
+	"maps"
 	"os"
 	"path/filepath"
 	"reflect"
 	"runtime"
 	"strings"
 	"sync"
+	"text/template"
 
 	"github.com/gohugoio/hugo/deps"
+	// TODO1 blanc import all the template funcs packages somewhere.
 )
 
 // TemplateFuncsNamespaceRegistry describes a registry of functions that provide
@@ -322,4 +325,48 @@ func getGetTplPackagesGoDoc() map[string]map[string]methodGoDocInfo {
 	})
 
 	return tplPackagesGoDoc
+}
+
+// CreateFuncMap creates a map of template functions. TODO1 remove.
+func CreateFuncMap(d *deps.Deps) map[string]any {
+	funcMap := template.FuncMap{}
+
+	nsMap := make(map[string]any)
+	var onCreated []func(namespaces map[string]any)
+
+	// Merge the namespace funcs
+	for _, nsf := range TemplateFuncsNamespaceRegistry {
+		ns := nsf(d)
+		if _, exists := funcMap[ns.Name]; exists {
+			panic(ns.Name + " is a duplicate template func")
+		}
+		funcMap[ns.Name] = ns.Context
+		contextV, err := ns.Context(context.Background())
+		if err != nil {
+			panic(err)
+		}
+		nsMap[ns.Name] = contextV
+		for _, mm := range ns.MethodMappings {
+			for _, alias := range mm.Aliases {
+				if _, exists := funcMap[alias]; exists {
+					panic(alias + " is a duplicate template func")
+				}
+				funcMap[alias] = mm.Method
+			}
+		}
+
+		if ns.OnCreated != nil {
+			onCreated = append(onCreated, ns.OnCreated)
+		}
+	}
+
+	for _, f := range onCreated {
+		f(nsMap)
+	}
+
+	if d.OverloadedTemplateFuncs != nil {
+		maps.Copy(funcMap, d.OverloadedTemplateFuncs)
+	}
+
+	return funcMap
 }

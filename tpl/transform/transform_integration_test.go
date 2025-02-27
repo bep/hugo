@@ -194,7 +194,7 @@ disableKinds = ['page','rss','section','sitemap','taxonomy','term']
 		b, err := hugolib.TestE(t, files, hugolib.TestOptWarn())
 
 		b.Assert(err, qt.IsNil)
-		b.AssertLogContains("WARN  error: template: index.html:1:22: executing \"index.html\" at <transform.ToMath>: error calling ToMath: KaTeX parse error: Undefined control sequence: \\foo at position 5: c = \\̲f̲o̲o̲{a^2 + b^2}")
+		b.AssertLogContains("WARN  error: template: pages/index.html:1:22: executing \"pages/index.html\" at <transform.ToMath>: error calling ToMath: KaTeX parse error: Undefined control sequence: \\foo at position 5: c = \\̲f̲o̲o̲{a^2 + b^2}")
 	})
 
 	// See issue 13239.

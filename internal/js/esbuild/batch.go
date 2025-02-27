@@ -43,7 +43,7 @@ import (
 	"github.com/gohugoio/hugo/resources"
 	"github.com/gohugoio/hugo/resources/resource"
 	"github.com/gohugoio/hugo/resources/resource_factories/create"
-	"github.com/gohugoio/hugo/tpl"
+	"github.com/gohugoio/hugo/tpl/tplimplv2"
 	"github.com/mitchellh/mapstructure"
 	"github.com/spf13/cast"
 )
@@ -192,7 +192,7 @@ type BatcherClient struct {
 	d *deps.Deps
 
 	once           sync.Once
-	runnerTemplate tpl.Template
+	runnerTemplate *tplimplv2.TemplInfo
 
 	createClient *create.Client
 	buildClient  *BuildClient
@@ -208,7 +208,7 @@ func (c *BatcherClient) New(id string) (js.Batcher, error) {
 	c.once.Do(func() {
 		// We should fix the initialization order here (or use the Go template package directly), but we need to wait
 		// for the Hugo templates to be ready.
-		tmpl, err := c.d.TextTmpl().Parse("batch-esm-runner", runnerTemplateStr)
+		tmpl, err := c.d.TemplateStore.TextParse("batch-esm-runner", runnerTemplateStr)
 		if err != nil {
 			initErr = err
 			return

@@ -1311,7 +1311,7 @@ func (h *HugoSites) resolveAndResetDependententPageOutputs(ctx context.Context, 
 
 		po.renderState = 0
 		po.p.resourcesPublishInit = &sync.Once{}
-		if r == identity.FinderFoundOneOfMany || po.f.Name == output.HTTPStatusHTMLFormat.Name {
+		if r == identity.FinderFoundOneOfMany || po.f.Name == output.HTTPStatus404HTMLFormat.Name {
 			// Will force a re-render even in fast render mode.
 			po.renderOnce = false
 		}
@@ -1323,7 +1323,7 @@ func (h *HugoSites) resolveAndResetDependententPageOutputs(ctx context.Context, 
 	}
 
 	// This can be a relativeley expensive operations, so we do it in parallel.
-	g := rungroup.Run[*pageState](ctx, rungroup.Config[*pageState]{
+	g := rungroup.Run(ctx, rungroup.Config[*pageState]{
 		NumWorkers: h.numWorkers,
 		Handle: func(ctx context.Context, p *pageState) error {
 			if !p.isRenderedAny() {
@@ -1954,7 +1954,7 @@ func (sa *sitePagesAssembler) addStandalonePages() error {
 		tree.InsertIntoValuesDimension(key, p)
 	}
 
-	addStandalone("/404", kinds.KindStatus404, output.HTTPStatusHTMLFormat)
+	addStandalone("/404", kinds.KindStatus404, output.HTTPStatus404HTMLFormat)
 
 	if s.conf.EnableRobotsTXT {
 		if m.i == 0 || s.Conf.IsMultihost() {

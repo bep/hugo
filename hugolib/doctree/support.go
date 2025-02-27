@@ -17,8 +17,6 @@ import (
 	"fmt"
 	"strings"
 	"sync"
-
-	radix "github.com/armon/go-radix"
 )
 
 var _ MutableTrees = MutableTrees{}
@@ -62,9 +60,7 @@ func (ctx *WalkContext[T]) AddPostHook(handler func() error) {
 
 func (ctx *WalkContext[T]) Data() *SimpleTree[any] {
 	ctx.dataInit.Do(func() {
-		ctx.data = &SimpleTree[any]{
-			tree: radix.New(),
-		}
+		ctx.data = NewSimpleTree[any]()
 	})
 	return ctx.data
 }

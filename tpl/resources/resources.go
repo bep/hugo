@@ -57,7 +57,7 @@ func New(deps *deps.Deps) (*Namespace, error) {
 		bundlerClient:   bundler.New(deps.ResourceSpec),
 		integrityClient: integrity.New(deps.ResourceSpec),
 		minifyClient:    minifyClient,
-		templatesClient: templates.New(deps.ResourceSpec, deps),
+		// TODO1 templatesClient: templates.New(deps.ResourceSpec, deps),
 	}, nil
 }
 

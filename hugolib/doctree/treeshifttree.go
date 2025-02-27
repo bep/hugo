@@ -91,6 +91,10 @@ func (t *TreeShiftTree[T]) WalkPrefixRaw(lockType LockType, s string, f func(s s
 	return nil
 }
 
+func (t *TreeShiftTree[T]) WalkPath(lockType LockType, s string, f func(s string, v T) (bool, error)) error {
+	return t.trees[t.v].WalkPath(lockType, s, f)
+}
+
 func (t *TreeShiftTree[T]) LenRaw() int {
 	var count int
 	for _, tt := range t.trees {

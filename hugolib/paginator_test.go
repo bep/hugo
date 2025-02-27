@@ -183,5 +183,5 @@ Home Filename: {{ site.Home.File.Filename }}
 `
 	b, err := TestE(t, files)
 	b.Assert(err, qt.IsNotNil)
-	b.Assert(err.Error(), qt.Contains, `_default/single.html:1:22: executing "_default/single.html" – File is nil; wrap it in if or with: {{ with site.Home.File }}{{ .Filename }}{{ end }}`)
+	b.Assert(err.Error(), qt.Contains, `single.html:1:22: executing "pages/single.html" – File is nil; wrap it in if or with: {{ with site.Home.File }}{{ .Filename }}{{ end }}`)
 }

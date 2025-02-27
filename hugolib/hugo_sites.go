@@ -557,7 +557,6 @@ func (h *HugoSites) handleDataFile(r *source.File) error {
 	higherPrecedentData := current[r.BaseFileName()]
 
 	switch data.(type) {
-	case nil:
 	case map[string]any:
 
 		switch higherPrecedentData.(type) {

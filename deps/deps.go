@@ -29,6 +29,7 @@ import (
 	"github.com/gohugoio/hugo/media"
 	"github.com/gohugoio/hugo/resources/page"
 	"github.com/gohugoio/hugo/resources/postpub"
+	"github.com/gohugoio/hugo/tpl/tplimplv2"
 
 	"github.com/gohugoio/hugo/metrics"
 	"github.com/gohugoio/hugo/resources"
@@ -50,7 +51,7 @@ type Deps struct {
 	tmplHandlers *tpl.TemplateHandlers
 
 	// The template funcs.
-	TmplFuncMap map[string]any
+	TmplFuncMap map[string]any // TODO1 check usage.
 
 	// The file systems to use.
 	Fs *hugofs.Fs `json:"-"`
@@ -79,7 +80,9 @@ type Deps struct {
 	// The site building.
 	Site page.Site
 
-	TemplateProvider ResourceProvider
+	TemplateStore *tplimplv2.TemplateStore
+
+	TemplateProvider ResourceProvider // TODO1 remove me.
 	// Used in tests
 	OverloadedTemplateFuncs map[string]any
 
@@ -263,21 +266,22 @@ func (d *Deps) Init() error {
 	return nil
 }
 
+// TODO1
 func (d *Deps) Compile(prototype *Deps) error {
 	var err error
 	if prototype == nil {
-		if err = d.TemplateProvider.NewResource(d); err != nil {
+		/*if err = d.TemplateProvider.NewResource(d); err != nil {
 			return err
-		}
+		}*/
 		if err = d.TranslationProvider.NewResource(d); err != nil {
 			return err
 		}
 		return nil
 	}
 
-	if err = d.TemplateProvider.CloneResource(d, prototype); err != nil {
+	/*if err = d.TemplateProvider.CloneResource(d, prototype); err != nil {
 		return err
-	}
+	}*/
 
 	if err = d.TranslationProvider.CloneResource(d, prototype); err != nil {
 		return err
@@ -378,12 +382,13 @@ type ResourceProvider interface {
 	CloneResource(dst, src *Deps) error
 }
 
-func (d *Deps) Tmpl() tpl.TemplateHandler {
-	return d.tmplHandlers.Tmpl
+// TODO1
+func (d *Deps) Tmpl() *tplimplv2.TemplateStore {
+	return d.TemplateStore
 }
 
 func (d *Deps) TextTmpl() tpl.TemplateParseFinder {
-	return d.tmplHandlers.TxtTmpl
+	return d.TemplateStore.TxtTmpl // TODO1
 }
 
 func (d *Deps) Close() error {

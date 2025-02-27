@@ -99,15 +99,17 @@ My Other Text: {{ $r.Content }}|{{ $r.Permalink }}|
 `
 
 func TestRebuildEditLeafBundleHeaderOnly(t *testing.T) {
-	b := TestRunning(t, rebuildFilesSimple)
-	b.AssertFileContent("public/mysection/mysectionbundle/index.html",
-		"My Section Bundle Content Content.")
-
-	b.EditFileReplaceAll("content/mysection/mysectionbundle/index.md", "My Section Bundle Content.", "My Section Bundle Content Edited.").Build()
-	b.AssertFileContent("public/mysection/mysectionbundle/index.html",
-		"My Section Bundle Content Edited.")
-	b.AssertRenderCountPage(2) // home (rss) + bundle.
-	b.AssertRenderCountContent(1)
+	t.Parallel()
+	for i := 0; i < 3; i++ {
+		b := TestRunning(t, rebuildFilesSimple)
+		b.AssertFileContent("public/mysection/mysectionbundle/index.html",
+			"My Section Bundle Content Content.")
+		b.EditFileReplaceAll("content/mysection/mysectionbundle/index.md", "My Section Bundle Content.", "My Section Bundle Content Edited.").Build()
+		b.AssertFileContent("public/mysection/mysectionbundle/index.html",
+			"My Section Bundle Content Edited.")
+		b.AssertRenderCountPage(2) // home (rss) + bundle.
+		b.AssertRenderCountContent(1)
+	}
 }
 
 func TestRebuildEditTextFileInLeafBundle(t *testing.T) {
@@ -484,7 +486,7 @@ Home: {{ .Title }}|{{ .Content }}|
 	})
 }
 
-func TestRebuildSingleWithBaseof(t *testing.T) {
+func TestRebuildSingle(t *testing.T) {
 	t.Parallel()
 
 	files := `
@@ -498,9 +500,46 @@ disableLiveReload = true
 title: "P1"
 ---
 P1 Content.
+-- layouts/pages/index.html --
+Home.
+-- layouts/pages/single.html --
+Single: {{ .Title }}|{{ .Content }}|
+{{ with (templates.Defer (dict "key" "global")) }}
+Defer.
+{{ end }}
+
+`
+	b := Test(t, files, TestOptRunning())
+	b.AssertFileContent("public/p1/index.html", "Single: P1|", "Defer.")
+	b.EditFileReplaceFunc("layouts/pages/single.html", func(s string) string {
+		s = strings.Replace(s, "Single", "Single Edited", 1)
+		s = strings.Replace(s, "Defer.", "Defer Edited.", 1)
+		return s
+	}).Build()
+	b.AssertFileContent("public/p1/index.html", "Single Edited: P1|", "Defer Edited.")
+}
+
+func TestRebuildSingleWithBaseofEditSingle(t *testing.T) {
+	t.Parallel()
+
+	files := `
+-- hugo.toml --
+title = "Hugo Site"
+baseURL = "https://example.com"
+disableKinds = ["term", "taxonomy"]
+disableLiveReload = true
+-- content/p1.md --
+---
+title: "P1"
+---
+P1 Content.
+[foo](/foo)
 -- layouts/_default/baseof.html --
 Baseof: {{ .Title }}|
 {{ block "main" . }}default{{ end }}
+{{ with (templates.Defer (dict "foo" "bar")) }}
+Defer.
+{{ end }}
 -- layouts/index.html --
 Home.
 -- layouts/_default/single.html --
@@ -509,11 +548,81 @@ Single: {{ .Title }}|{{ .Content }}|
 {{ end }}
 `
 	b := Test(t, files, TestOptRunning())
-	b.AssertFileContent("public/p1/index.html", "Baseof: P1|\n\nSingle: P1|<p>P1 Content.</p>\n|")
+	b.AssertFileContent("public/p1/index.html", "Single: P1|")
 	b.EditFileReplaceFunc("layouts/_default/single.html", func(s string) string {
 		return strings.Replace(s, "Single", "Single Edited", 1)
 	}).Build()
-	b.AssertFileContent("public/p1/index.html", "Baseof: P1|\n\nSingle Edited: P1|<p>P1 Content.</p>\n|")
+	b.AssertFileContent("public/p1/index.html", "Single Edited")
+}
+
+func TestRebuildSingleWithBaseofEditBaseof(t *testing.T) {
+	t.Parallel()
+
+	files := `
+-- hugo.toml --
+title = "Hugo Site"
+baseURL = "https://example.com"
+disableKinds = ["term", "taxonomy"]
+disableLiveReload = true
+-- content/p1.md --
+---
+title: "P1"
+---
+P1 Content.
+[foo](/foo)
+-- layouts/_default/baseof.html --
+Baseof: {{ .Title }}|
+{{ block "main" . }}default{{ end }}
+{{ with (templates.Defer (dict "foo" "bar")) }}
+Defer.
+{{ end }}
+-- layouts/index.html --
+Home.
+-- layouts/_default/single.html --
+{{ define "main" }}
+Single: {{ .Title }}|{{ .Content }}|
+{{ end }}
+`
+	b := Test(t, files, TestOptRunning())
+	b.AssertFileContent("public/p1/index.html", "Single: P1|")
+	fmt.Println("===============")
+	b.EditFileReplaceAll("layouts/_default/baseof.html", "Baseof", "Baseof Edited").Build()
+	b.AssertFileContent("public/p1/index.html", "Baseof Edited")
+}
+
+func TestRebuildWithDeferEditRenderHook(t *testing.T) {
+	t.Parallel()
+
+	files := `
+-- hugo.toml --
+title = "Hugo Site"
+baseURL = "https://example.com"
+disableKinds = ["term", "taxonomy"]
+disableLiveReload = true
+-- content/p1.md --
+---
+title: "P1"
+---
+P1 Content.
+[foo](/foo)
+-- layouts/_default/baseof.html --
+Baseof: {{ .Title }}|
+{{ block "main" . }}default{{ end }}
+ {{ with (templates.Defer (dict "foo" "bar")) }}
+Defer.
+{{ end }}
+-- layouts/pages/single.html --
+{{ define "main" }}
+Single: {{ .Title }}|{{ .Content }}|
+{{ end }}
+-- layouts/_default/_markup/render-link.html --
+Render Link.
+`
+	b := Test(t, files, TestOptRunning())
+	// Edit render hook.
+	b.EditFileReplaceAll("layouts/_default/_markup/render-link.html", "Render Link", "Render Link Edited").Build()
+
+	b.AssertFileContent("public/p1/index.html", "Render Link Edited")
 }
 
 func TestRebuildFromString(t *testing.T) {

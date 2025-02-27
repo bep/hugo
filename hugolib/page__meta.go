@@ -72,8 +72,9 @@ type pageMeta struct {
 
 // Prepare for a rebuild of the data passed in from front matter.
 func (m *pageMeta) setMetaPostPrepareRebuild() {
-	params := xmaps.Clone[map[string]any](m.paramsOriginal)
+	params := xmaps.Clone(m.paramsOriginal)
 	m.pageMetaParams.pageConfig = &pagemeta.PageConfig{
+		Kind:   m.pageConfig.Kind, // TODO1, improve or complete this, as in: preserve the values that may not be set again on rebuild.
 		Params: params,
 	}
 	m.pageMetaFrontMatter = pageMetaFrontMatter{}
@@ -767,7 +768,8 @@ func (p *pageMeta) applyDefaultValues() error {
 			} else {
 				p.pageConfig.Title = strings.Replace(p.pathInfo.Unnormalized().BaseNameNoIdentifier(), "-", " ", -1)
 			}
-		case kinds.KindStatus404:
+		default:
+			// TODO1
 			p.pageConfig.Title = "404 Page not found"
 		}
 	}

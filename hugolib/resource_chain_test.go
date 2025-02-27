@@ -114,7 +114,7 @@ SUNSET REMOTE: /sunset_%[1]s.jpg|/sunset_%[1]s.a9bf1d944e19c0f382e0d8f51de690f7d
 FIT REMOTE: /sunset_%[1]s.jpg|/sunset_%[1]s_hu_f2aae87288f3c13b.jpg|200
 REMOTE NOT FOUND: OK
 LOCAL NOT FOUND: OK
-PRINT PROTOCOL ERROR DETAILS: Err: template: index.html:22:36: executing "index.html" at <resources.GetRemote>: error calling GetRemote: Get "gopher://example.org": unsupported protocol scheme "gopher"|
+PRINT PROTOCOL ERROR DETAILS: Err: template: pages/index.html:22:36: executing "pages/index.html" at <resources.GetRemote>: error calling GetRemote: Get "gopher://example.org": unsupported protocol scheme "gopher"|
 FAILED REMOTE ERROR DETAILS CONTENT: failed to fetch remote resource from &#39;%[2]s/fail.jpg&#39;: Not Implemented|Body: { msg: failed }
 |StatusCode: 501|ContentLength: 16|ContentType: text/plain; charset=utf-8|
 
