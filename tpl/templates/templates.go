@@ -102,3 +102,19 @@ func (ns *Namespace) DoDefer(ctx context.Context, id string, optsv any) string {
 
 	return id
 }
+
+type contextSetGetKey struct {
+	key any
+}
+
+func (ns *Namespace) ContextSet(ctx context.Context, key, val any) context.Context {
+	return context.WithValue(ctx, contextSetGetKey{key}, val)
+}
+
+func (ns *Namespace) ContextGet(ctx context.Context, key any) any {
+	v := ctx.Value(contextSetGetKey{key})
+	if v == nil {
+		return nil
+	}
+	return v
+}

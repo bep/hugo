@@ -186,7 +186,17 @@ func (s *state) evalField(dot reflect.Value, fieldName string, node parse.Node, 
 
 	if method.IsValid() {
 		if first != zero {
-			return s.evalCall(dot, method, false, node, fieldName, args, final, first)
+			v := s.evalCall(dot, method, false, node, fieldName, args, final, first)
+			// Added for Hugo.
+			// A template function that returns a context.Context.
+			if hreflect.IsContextType(v.Type()) {
+				// Replace the context in the state with the new one and return an empty string.
+				s.ctx = v.Interface().(context.Context)
+				return reflect.ValueOf("")
+
+			}
+
+			return v
 		}
 
 		return s.evalCall(dot, method, false, node, fieldName, args, final)

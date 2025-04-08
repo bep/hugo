@@ -127,3 +127,21 @@ Try printf: {{ (try (printf "hello %s" "world")).Value }}
 		"Try printf: hello world",
 	)
 }
+
+func TestContextSetGet(t *testing.T) {
+	t.Parallel()
+
+	files := `
+-- hugo.toml --
+baseURL = 'http://example.com/'
+-- layouts/index.html --
+{{ templates.ContextSet "foo" "bar" }}
+{{ templates.ContextSet "bar" "baz" }}
+foo: {{ templates.ContextGet "foo" }}
+bar: {{ templates.ContextGet "bar" }}
+`
+
+	b := hugolib.Test(t, files)
+
+	b.AssertFileContent("public/index.html", "foo: bar\nbar: baz")
+}
