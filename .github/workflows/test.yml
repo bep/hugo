@@ -16,12 +16,12 @@ jobs:
   test:
     strategy:
       matrix:
-        go-version: [1.23.x]
+        go-version: [1.24.x, 1.25.x]
         os: [ubuntu-latest] # macos disabled for now because of disk space issues.
     runs-on: ${{ matrix.os }}
     steps:
       - name: Checkout code
-        uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332 # v4.1.7
+        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
       - name: Test building docs with docker latest
         uses: docker://ghcr.io/bep/hugo:latest
         with:
